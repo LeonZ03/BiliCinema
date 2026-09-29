@@ -51,6 +51,18 @@ public sealed class CentralTestRunnerCancellationComponentTests
     }
 
     [Fact]
+    public async Task OwnedScopeStartupHonorsCallerCancellation()
+    {
+        using var cancellation = new CancellationTokenSource();
+        await cancellation.CancelAsync();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(
+            () => OwnedProcessScope.StartAsync(
+                CreateFixtureStartInfo("fixture-hold"),
+                cancellation.Token)).ConfigureAwait(true);
+    }
+
+    [Fact]
     public async Task RelationshipSnapshotCommandSuccessReturnsAParentMap()
     {
         var parentIds = await ProcessTreeSnapshot.ReadParentIdsAsync(
@@ -310,7 +322,7 @@ public sealed class CentralTestRunnerCancellationComponentTests
     {
         var scope = await OwnedProcessScope.StartAsync(
             startInfo ?? CreateFixtureStartInfo("fixture-hold"),
-            TestTimeout).ConfigureAwait(false);
+            TestContext.Current.CancellationToken).ConfigureAwait(false);
         try
         {
             var readyLine = await scope.Host.StandardOutput.ReadLineAsync()
