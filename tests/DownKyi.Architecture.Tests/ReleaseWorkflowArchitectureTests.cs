@@ -600,7 +600,7 @@ public sealed class ReleaseWorkflowArchitectureTests
     }
 
     [Fact]
-    public void MacBuildKeepsCredentialFreePackagingAndLaunchValidation()
+    public void MacBuildKeepsCredentialFreePackageValidation()
     {
         var workflow = File.ReadAllText(
             Path.Combine(RepositoryRoot, ".github", "workflows", "build.yml"));
