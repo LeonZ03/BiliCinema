@@ -192,9 +192,7 @@ public sealed class FfmpegProcessorMergeTests : IDisposable
             Path.Combine(_directory, "concurrency-first.mp4"),
             overwriteDestination: false,
             cancellationToken: TestContext.Current.CancellationToken);
-        await runner.ValidationStarted.Task.WaitAsync(
-            TimeSpan.FromSeconds(5),
-            TestContext.Current.CancellationToken);
+        await runner.ValidationStarted.Task.WaitAsync(TestContext.Current.CancellationToken);
         var second = processor.MergeMediaAsync(
             _settings.Current.Video,
             secondAudio,
@@ -203,9 +201,8 @@ public sealed class FfmpegProcessorMergeTests : IDisposable
             overwriteDestination: false,
             cancellationToken: TestContext.Current.CancellationToken);
 
-        await Task.WhenAny(
-            runner.ConcurrentCallObserved.Task,
-            Task.Delay(TimeSpan.FromMilliseconds(250), TestContext.Current.CancellationToken));
+        Assert.False(second.IsCompleted);
+        Assert.False(runner.ConcurrentCallObserved.Task.IsCompleted);
         runner.ReleaseValidation.TrySetResult();
         await Task.WhenAll(first, second);
 
