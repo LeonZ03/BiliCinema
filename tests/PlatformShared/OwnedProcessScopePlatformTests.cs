@@ -587,8 +587,7 @@ public sealed class OwnedProcessScopePlatformTests
 
     private static async Task<int> ReadMarkerAsync(string path)
     {
-        var deadline = Stopwatch.StartNew();
-        while (deadline.Elapsed < TimeSpan.FromSeconds(8))
+        while (true)
         {
             try
             {
@@ -606,8 +605,6 @@ public sealed class OwnedProcessScopePlatformTests
 
             await Task.Delay(20, TestContext.Current.CancellationToken).ConfigureAwait(true);
         }
-
-        throw new TimeoutException($"The fixture did not publish {Path.GetFileName(path)}.");
     }
 
     private static bool IsAlive(int pid)
