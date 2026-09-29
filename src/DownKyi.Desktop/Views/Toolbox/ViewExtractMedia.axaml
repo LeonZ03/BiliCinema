@@ -20,13 +20,16 @@
                         Text="{DynamicResource ExtractMedia}" />
                 </StackPanel>
 
-                <StackPanel
+                <Grid
                     Margin="0,20,0,0"
                     VerticalAlignment="Center"
-                    Orientation="Horizontal">
-                    <TextBlock VerticalAlignment="Center" Text="{DynamicResource VideoFilePath}" />
+                    ColumnDefinitions="Auto,*,Auto">
+                    <TextBlock
+                        Grid.Column="0"
+                        VerticalAlignment="Center"
+                        Text="{DynamicResource VideoFilePath}" />
                     <TextBox
-                        Width="600"
+                        Grid.Column="1"
                         Height="65"
                         Margin="0,10,10,10"
                         VerticalContentAlignment="Top"
@@ -34,12 +37,14 @@
                         Text="{Binding VideoPathsStr, Mode=TwoWay}" />
 
                     <Button
-                        Margin="30,0,0,0"
+                        Name="NameSelectVideoButton"
+                        Grid.Column="2"
+                        Margin="20,0,0,0"
                         VerticalAlignment="Center"
                         Command="{Binding SelectVideoCommand}"
                         Content="{DynamicResource SelectVideo}"
                         Theme="{StaticResource BtnBorderStyle}" />
-                </StackPanel>
+                </Grid>
                 <Grid Margin="0,20,0,0" ColumnDefinitions="200,200">
 
                     <Button
