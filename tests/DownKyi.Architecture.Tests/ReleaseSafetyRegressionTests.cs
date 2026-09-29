@@ -687,10 +687,12 @@ public sealed class ReleaseSafetyRegressionTests
                 ],
                 root);
             Assert.NotEqual(0, wrongStub.ExitCode);
-            Assert.Contains(
-                "AppImage runtime launch smoke exited before the application initialization marker",
-                NormalizeDiagnostic(wrongStub),
-                StringComparison.Ordinal);
+            var wrongStubDiagnostic = NormalizeDiagnostic(wrongStub);
+            Assert.True(
+                wrongStubDiagnostic.Contains(
+                    "AppImage runtime launch smoke exited before the application initialization marker",
+                    StringComparison.Ordinal),
+                wrongStubDiagnostic);
 
             var mutatedFixture = CreateLinuxAppImageFixture(
                 Path.Combine(root, "missing"),
