@@ -185,16 +185,7 @@ public sealed class LegacyCaReportTests
         Assert.NotNull(process);
         var standardOutput = process.StandardOutput.ReadToEndAsync();
         var standardError = process.StandardError.ReadToEndAsync();
-        try
-        {
-            await process.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(30)).ConfigureAwait(true);
-        }
-        catch (TimeoutException)
-        {
-            process.Kill(entireProcessTree: true);
-            await process.WaitForExitAsync().ConfigureAwait(true);
-            throw;
-        }
+        await process.WaitForExitAsync(TestContext.Current.CancellationToken).ConfigureAwait(true);
 
         return new ProcessResult(
             process.ExitCode,
