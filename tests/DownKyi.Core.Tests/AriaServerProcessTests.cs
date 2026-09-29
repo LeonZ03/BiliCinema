@@ -101,7 +101,7 @@ public sealed class AriaServerProcessTests
     }
 
     [Fact]
-    public async Task KillTrackedServerTerminatesAndReleasesTrackedProcess()
+    public void KillTrackedServerTerminatesAndReleasesTrackedProcess()
     {
         var server = new AriaServer(NullLoggerFactory.Instance);
         using var process = StartLongRunningProcess();
@@ -110,10 +110,6 @@ public sealed class AriaServerProcessTests
         try
         {
             Assert.True(server.KillTrackedServer("test cleanup"));
-            await process
-                .WaitForExitAsync(TestContext.Current.CancellationToken)
-                .WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken).ConfigureAwait(true);
-
             Assert.True(process.HasExited);
             Assert.False(server.HasTrackedServerForTests());
         }
