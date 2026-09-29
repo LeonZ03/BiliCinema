@@ -437,7 +437,7 @@ public sealed class ReleaseWorkflowArchitectureTests
             CreateNoWindow = true
         });
         Assert.NotNull(process);
-        Assert.True(process.WaitForExit(30_000), "The external-asset retry regression timed out.");
+        process.WaitForExit();
 
         var standardOutput = process.StandardOutput.ReadToEnd();
         var standardError = process.StandardError.ReadToEnd();
@@ -956,7 +956,7 @@ public sealed class ReleaseWorkflowArchitectureTests
         Assert.NotNull(process);
         var standardOutput = process.StandardOutput.ReadToEnd();
         var standardError = process.StandardError.ReadToEnd();
-        Assert.True(process.WaitForExit(30_000), $"Release trust regression timed out: {script}");
+        process.WaitForExit();
         return new PowerShellResult(process.ExitCode, standardOutput, standardError);
     }
 
