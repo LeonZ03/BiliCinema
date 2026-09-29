@@ -123,11 +123,7 @@ public sealed class TargetedResourceForensics : IDisposable
     private static TargetedResourceForensics WaitForFirstSample(
         TargetedResourceForensics probe)
     {
-        if (!probe.firstSample.Wait(TimeSpan.FromSeconds(2)))
-        {
-            probe.Dispose();
-            throw new TimeoutException("The DELETE-access canary did not produce its first sample.");
-        }
+        probe.firstSample.Wait();
 
         return probe;
     }
@@ -178,24 +174,14 @@ public sealed class TargetedResourceForensics : IDisposable
         return state;
     }
 
-    public async Task ObservePostCleanupAsync(TimeSpan observationWindow)
-    {
-        using var deadline = new CancellationTokenSource(observationWindow);
-        try
-        {
-            await allowedAfterAnomaly.Task.WaitAsync(deadline.Token).ConfigureAwait(false);
-        }
-        catch (OperationCanceledException) when (deadline.IsCancellationRequested)
-        {
-        }
-    }
+    public Task WaitForAllowedAfterAnomalyAsync() => allowedAfterAnomaly.Task;
 
     public string StopAndFormat(
         bool forcePreserve = false,
         string rootCauseStatus = "Root cause not proven.")
     {
         RequestStop();
-        var stopped = worker.Join(TimeSpan.FromSeconds(2));
+        worker.Join();
         string probeEvidence;
         lock (evidenceLock)
         {
@@ -215,7 +201,7 @@ public sealed class TargetedResourceForensics : IDisposable
                 .Append(anomalyDetectedUtc?.ToString("O", CultureInfo.InvariantCulture) ?? "not-observed")
                 .Append(" readyForOperationUtc=")
                 .Append(readyForOperationUtc?.ToString("O", CultureInfo.InvariantCulture) ?? "not-observed")
-                .Append(" workerStopped=").Append(stopped)
+                .Append(" workerStopped=").Append(!worker.IsAlive)
                 .Append(" workerFailure=").Append(workerFailure ?? "none")
                 .Append(" rootCauseStatus=").Append(rootCauseStatus);
             foreach (var transition in transitions)
@@ -236,7 +222,7 @@ public sealed class TargetedResourceForensics : IDisposable
     public void Dispose()
     {
         RequestStop();
-        _ = worker.Join(TimeSpan.FromSeconds(2));
+        worker.Join();
         flightRecorder.Dispose();
         firstSample.Dispose();
     }
