@@ -14,13 +14,6 @@
             <Setter Property="VerticalAlignment" Value="Center" />
             <Setter Property="Foreground" Value="{DynamicResource ColorTextDark}" />
         </ControlTheme>
-        <ControlTheme x:Key="VideoChoiceCellTheme"
-                      TargetType="DataGridCell"
-                      BasedOn="{StaticResource {x:Type DataGridCell}}">
-            <Style Selector="^:focus /template/ Grid#FocusVisual">
-                <Setter Property="IsVisible" Value="False" />
-            </Style>
-        </ControlTheme>
     </UserControl.Resources>
 
     <Grid RowDefinitions="Auto,5,*">
@@ -87,6 +80,10 @@
                 <Style Selector="DataGridRow:selected /template/ Rectangle#BackgroundRectangle">
                     <Setter Property="IsVisible" Value="True" />
                     <Setter Property="Opacity" Value="1" />
+                </Style>
+
+                <Style Selector="DataGridCell:focus-within:not(:focus) /template/ Grid#FocusVisual">
+                    <Setter Property="IsVisible" Value="False" />
                 </Style>
             </DataGrid.Styles>
             <DataGrid.ColumnHeaderTheme>
@@ -201,7 +198,6 @@
                     Header="{DynamicResource Duration}" />
                 <DataGridTemplateColumn
                     Width="120"
-                    CellTheme="{StaticResource VideoChoiceCellTheme}"
                     Header="{DynamicResource AudioQuality}">
                     <DataGridTemplateColumn.CellTemplate>
                         <DataTemplate DataType="vmp:VideoPage">
@@ -215,7 +211,6 @@
                 </DataGridTemplateColumn>
                 <DataGridTemplateColumn
                     Width="120"
-                    CellTheme="{StaticResource VideoChoiceCellTheme}"
                     Header="{DynamicResource VideoQuality}">
                     <DataGridTemplateColumn.CellTemplate>
                         <DataTemplate DataType="vmp:VideoPage">
@@ -238,7 +233,6 @@
                 </DataGridTemplateColumn>
                 <DataGridTemplateColumn
                     Width="120"
-                    CellTheme="{StaticResource VideoChoiceCellTheme}"
                     Header="{DynamicResource VideoCodec}">
                     <DataGridTemplateColumn.CellTemplate>
                         <DataTemplate DataType="vmp:VideoPage">

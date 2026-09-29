@@ -13,7 +13,7 @@ namespace DownKyi.Desktop.Tests;
 public sealed class VideoDetailSelectionVisualStateTests
 {
     [AvaloniaFact]
-    public Task ChoiceCellsUseComboBoxFocusInsteadOfCellFocusAdorner()
+    public Task ChoiceCellsKeepCellCueUntilComboBoxOwnsFocus()
     {
         return AvaloniaTestDispatcher.RunAsync(() =>
         {
@@ -88,12 +88,17 @@ public sealed class VideoDetailSelectionVisualStateTests
                     {
                         Assert.True(choiceCell.Focus());
                         window.UpdateLayout();
-                        Assert.False(FindCellFocusVisual(choiceCell).IsVisible);
+                        Assert.True(choiceCell.IsFocused);
+                        Assert.True(FindCellFocusVisual(choiceCell).IsVisible);
 
                         var comboBox = Assert.Single(
                             choiceCell.GetVisualDescendants().OfType<ComboBox>());
                         Assert.True(comboBox.Focus());
+                        window.UpdateLayout();
+                        Assert.False(choiceCell.IsFocused);
+                        Assert.True(choiceCell.IsKeyboardFocusWithin);
                         Assert.True(comboBox.IsKeyboardFocusWithin);
+                        Assert.False(FindCellFocusVisual(choiceCell).IsVisible);
                     }
                 }
             }
