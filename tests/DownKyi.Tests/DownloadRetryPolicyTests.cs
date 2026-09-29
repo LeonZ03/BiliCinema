@@ -674,7 +674,6 @@ public sealed class DownloadRetryPolicyTests
             static _ => Task.FromResult<IReadOnlyList<string>>([]),
             cancellation.Token);
         await backend.FirstAttempt.WaitAsync(
-            TimeSpan.FromSeconds(5),
             TestContext.Current.CancellationToken);
         await cancellation.CancelAsync();
 
