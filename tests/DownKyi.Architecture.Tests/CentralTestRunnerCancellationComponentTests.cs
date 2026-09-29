@@ -325,8 +325,8 @@ public sealed class CentralTestRunnerCancellationComponentTests
             TestContext.Current.CancellationToken).ConfigureAwait(false);
         try
         {
-            var readyLine = await scope.Host.StandardOutput.ReadLineAsync()
-                .WaitAsync(TestTimeout, TestContext.Current.CancellationToken)
+            var readyLine = await scope.Host.StandardOutput
+                .ReadLineAsync(TestContext.Current.CancellationToken)
                 .ConfigureAwait(false);
             Assert.StartsWith("fixture-ready pid=", readyLine, StringComparison.Ordinal);
             return scope;
@@ -344,8 +344,8 @@ public sealed class CentralTestRunnerCancellationComponentTests
         process.Start();
         try
         {
-            var readyLine = await process.StandardOutput.ReadLineAsync()
-                .WaitAsync(TestTimeout, TestContext.Current.CancellationToken)
+            var readyLine = await process.StandardOutput
+                .ReadLineAsync(TestContext.Current.CancellationToken)
                 .ConfigureAwait(false);
             Assert.StartsWith("fixture-ready pid=", readyLine, StringComparison.Ordinal);
             return process;
@@ -394,7 +394,7 @@ public sealed class CentralTestRunnerCancellationComponentTests
                 process.Kill(entireProcessTree: true);
             }
 
-            await process.WaitForExitAsync().WaitAsync(TestTimeout).ConfigureAwait(false);
+            await process.WaitForExitAsync(TestContext.Current.CancellationToken).ConfigureAwait(false);
         }
     }
 
