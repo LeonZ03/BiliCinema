@@ -11,8 +11,6 @@ param(
     [switch]$NoBuild,
     [string]$ResultsDirectory,
     [string]$TrxName,
-    [ValidateRange(1, 3600)]
-    [int]$ExecutionTimeoutSeconds = 300,
     [string]$EvidenceDirectory
 )
 
@@ -37,7 +35,6 @@ $result = Invoke-DownKyiTestProject `
     -TrxName $TrxName `
     -ClassNames $ClassName `
     -Filter $Filter `
-    -ExecutionTimeoutSeconds $ExecutionTimeoutSeconds `
     -EvidenceDirectory $EvidenceDirectory
 $result
 exit $result.ExitCode

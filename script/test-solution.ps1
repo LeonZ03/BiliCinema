@@ -5,8 +5,6 @@ param(
     [switch]$NoRestore,
     [switch]$NoBuild,
     [string]$ResultsDirectory,
-    [ValidateRange(1, 3600)]
-    [int]$ExecutionTimeoutSeconds = 300,
     [string]$EvidenceDirectory
 )
 
@@ -20,6 +18,5 @@ $result = Invoke-DownKyiTestSolution `
     -NoRestore:$NoRestore `
     -NoBuild:$NoBuild `
     -ResultsDirectory $ResultsDirectory `
-    -ExecutionTimeoutSeconds $ExecutionTimeoutSeconds `
     -EvidenceDirectory $EvidenceDirectory
 exit $result.ExitCode
