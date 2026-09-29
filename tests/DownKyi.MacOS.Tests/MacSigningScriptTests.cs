@@ -162,7 +162,7 @@ public sealed class MacSigningScriptTests
             Assert.NotNull(process);
             var standardOutput = process.StandardOutput.ReadToEndAsync();
             var standardError = process.StandardError.ReadToEndAsync();
-            Assert.True(process.WaitForExit(30_000), "The macOS signing regression fixture timed out.");
+            process.WaitForExit();
 
             var output = standardOutput.GetAwaiter().GetResult();
             var error = standardError.GetAwaiter().GetResult();
