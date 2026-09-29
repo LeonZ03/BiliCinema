@@ -14,6 +14,13 @@
             <Setter Property="VerticalAlignment" Value="Center" />
             <Setter Property="Foreground" Value="{DynamicResource ColorTextDark}" />
         </ControlTheme>
+        <ControlTheme x:Key="VideoChoiceCellTheme"
+                      TargetType="DataGridCell"
+                      BasedOn="{StaticResource {x:Type DataGridCell}}">
+            <Style Selector="^:focus /template/ Grid#FocusVisual">
+                <Setter Property="IsVisible" Value="False" />
+            </Style>
+        </ControlTheme>
     </UserControl.Resources>
 
     <Grid RowDefinitions="Auto,5,*">
@@ -194,6 +201,7 @@
                     Header="{DynamicResource Duration}" />
                 <DataGridTemplateColumn
                     Width="120"
+                    CellTheme="{StaticResource VideoChoiceCellTheme}"
                     Header="{DynamicResource AudioQuality}">
                     <DataGridTemplateColumn.CellTemplate>
                         <DataTemplate DataType="vmp:VideoPage">
@@ -207,6 +215,7 @@
                 </DataGridTemplateColumn>
                 <DataGridTemplateColumn
                     Width="120"
+                    CellTheme="{StaticResource VideoChoiceCellTheme}"
                     Header="{DynamicResource VideoQuality}">
                     <DataGridTemplateColumn.CellTemplate>
                         <DataTemplate DataType="vmp:VideoPage">
@@ -229,6 +238,7 @@
                 </DataGridTemplateColumn>
                 <DataGridTemplateColumn
                     Width="120"
+                    CellTheme="{StaticResource VideoChoiceCellTheme}"
                     Header="{DynamicResource VideoCodec}">
                     <DataGridTemplateColumn.CellTemplate>
                         <DataTemplate DataType="vmp:VideoPage">
