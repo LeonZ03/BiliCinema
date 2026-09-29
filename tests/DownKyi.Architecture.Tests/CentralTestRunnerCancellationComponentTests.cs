@@ -128,8 +128,7 @@ public sealed class CentralTestRunnerCancellationComponentTests
                     () => BuildProcessRunner.CleanupAfterCancellationAsync(
                         scope,
                         TimeSpan.FromSeconds(2),
-                        (_, _) => snapshot.Task)
-                        .WaitAsync(TestTimeout, TestContext.Current.CancellationToken))
+                        (_, _) => snapshot.Task))
                     .ConfigureAwait(true);
 
                 Assert.NotNull(failure);
