@@ -9,6 +9,13 @@
              xmlns:asyncImageLoader="clr-namespace:DownKyi.CustomControl.AsyncImageLoader"
              x:DataType="vm:ViewIndexViewModel"
              x:Class="DownKyi.Views.ViewIndex">
+    <UserControl.Styles>
+        <Style Selector="TextBox.index-search-input /template/ Border#PART_BorderElement">
+            <Setter Property="Background" Value="{x:Null}" />
+            <Setter Property="BorderBrush" Value="{x:Null}" />
+            <Setter Property="BorderThickness" Value="0" />
+        </Style>
+    </UserControl.Styles>
     <Grid RowDefinitions="60,200,100,230,*,50">
 
         <Grid Grid.Row="0" ColumnDefinitions="*,*,20">
@@ -68,6 +75,7 @@
         </ContentControl>
         <Grid Grid.Row="2" ColumnDefinitions="150*,600*,150*">
             <Border
+                x:Name="IndexSearchBorder"
                 Grid.Column="1"
                 Height="40"
                 BorderBrush="{DynamicResource BrushPrimary}"
@@ -75,6 +83,7 @@
                 CornerRadius="20">
                 <TextBox
                     x:Name="NameInputUrl"
+                    Classes="index-search-input"
                     Height="35"
                     Margin="20,0,40,0"
                     VerticalContentAlignment="Center"
