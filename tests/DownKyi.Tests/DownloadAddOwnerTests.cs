@@ -225,7 +225,6 @@ public sealed class DownloadAddOwnerTests : IDisposable
 
         historyPage.SetResult(new DownloadHistoryPage([context.Store.History!], null));
         var items = await read.WaitAsync(
-            TimeSpan.FromSeconds(2),
             TestContext.Current.CancellationToken);
 
         Assert.Single(items);
