@@ -77,7 +77,7 @@ public sealed partial class AriaServerWindowsTests
     {
         var startInfo = new ProcessStartInfo(
             "powershell.exe",
-            "-NoLogo -NoProfile -NonInteractive -Command Start-Sleep -Seconds 30")
+            "-NoLogo -NoProfile -NonInteractive -Command Wait-Event")
         {
             UseShellExecute = false,
             CreateNoWindow = true

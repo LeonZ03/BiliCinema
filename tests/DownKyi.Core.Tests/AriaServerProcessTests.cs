@@ -128,8 +128,11 @@ public sealed class AriaServerProcessTests
         var startInfo = OperatingSystem.IsWindows()
             ? new ProcessStartInfo(
                 "powershell.exe",
-                "-NoLogo -NoProfile -NonInteractive -Command Start-Sleep -Seconds 30")
-            : new ProcessStartInfo("/bin/sh", "-c \"exec sleep 30\"");
+                "-NoLogo -NoProfile -NonInteractive -Command Wait-Event")
+            : new ProcessStartInfo("/bin/cat")
+            {
+                RedirectStandardInput = true
+            };
         startInfo.UseShellExecute = false;
         startInfo.CreateNoWindow = true;
 
