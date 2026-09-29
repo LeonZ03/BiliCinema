@@ -173,8 +173,15 @@ function Assert-LaunchInitializes {
         }
     }
     finally {
-        if (-not $process.HasExited) {
-            $process.Kill($true)
+        try {
+            if (-not $process.HasExited) {
+                $process.Kill($true)
+            }
+        }
+        catch [InvalidOperationException] {
+            if (-not $process.HasExited) {
+                throw
+            }
         }
 
         $process.WaitForExit()
