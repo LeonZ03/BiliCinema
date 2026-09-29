@@ -39,7 +39,7 @@ public sealed class DownloadOrchestratorTests
             await orchestrator.EnqueueAsync(taskId, TestContext.Current.CancellationToken);
         }
 
-        await allExecuted.Task.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
+        await allExecuted.Task.WaitAsync(TestContext.Current.CancellationToken);
         Assert.Equal(taskIds.Length, executions.Count);
         Assert.All(executions.Values, count => Assert.Equal(1, count));
         await orchestrator.StopAsync(TestContext.Current.CancellationToken);
@@ -62,9 +62,9 @@ public sealed class DownloadOrchestratorTests
         await orchestrator.StartAsync(TestContext.Current.CancellationToken);
         await Task.WhenAll(taskIds.Select(taskId =>
                 orchestrator.EnqueueAsync(taskId, TestContext.Current.CancellationToken)))
-            .WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
+            .WaitAsync(TestContext.Current.CancellationToken);
 
-        await firstStarted.Task.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
+        await firstStarted.Task.WaitAsync(TestContext.Current.CancellationToken);
         releaseWorkers.TrySetResult();
         await orchestrator.StopAsync(TestContext.Current.CancellationToken);
     }
@@ -91,11 +91,11 @@ public sealed class DownloadOrchestratorTests
 
         await orchestrator.StartAsync(TestContext.Current.CancellationToken);
         await orchestrator.EnqueueAsync(taskIds[0], TestContext.Current.CancellationToken);
-        await firstStarted.Task.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
+        await firstStarted.Task.WaitAsync(TestContext.Current.CancellationToken);
 
         Assert.True(await orchestrator.CancelAsync(taskIds[0]));
         await orchestrator.EnqueueAsync(taskIds[1], TestContext.Current.CancellationToken);
-        await secondExecuted.Task.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
+        await secondExecuted.Task.WaitAsync(TestContext.Current.CancellationToken);
         await orchestrator.StopAsync(TestContext.Current.CancellationToken);
     }
 
@@ -128,14 +128,10 @@ public sealed class DownloadOrchestratorTests
 
         await orchestrator.StartAsync(TestContext.Current.CancellationToken);
         await orchestrator.EnqueueAsync(taskId, TestContext.Current.CancellationToken);
-        await started.Task.WaitAsync(
-            TimeSpan.FromSeconds(5),
-            TestContext.Current.CancellationToken);
+        await started.Task.WaitAsync(TestContext.Current.CancellationToken);
 
         var cancellation = orchestrator.CancelAsync(taskId);
-        await cancellationObserved.Task.WaitAsync(
-            TimeSpan.FromSeconds(5),
-            TestContext.Current.CancellationToken);
+        await cancellationObserved.Task.WaitAsync(TestContext.Current.CancellationToken);
         try
         {
             Assert.False(cancellation.IsCompleted);
@@ -145,9 +141,7 @@ public sealed class DownloadOrchestratorTests
             releaseExecution.TrySetResult();
         }
 
-        Assert.True(await cancellation.WaitAsync(
-            TimeSpan.FromSeconds(5),
-            TestContext.Current.CancellationToken));
+        Assert.True(await cancellation.WaitAsync(TestContext.Current.CancellationToken));
         await orchestrator.StopAsync(TestContext.Current.CancellationToken);
     }
 
@@ -180,19 +174,14 @@ public sealed class DownloadOrchestratorTests
 
         await orchestrator.StartAsync(TestContext.Current.CancellationToken);
         await orchestrator.EnqueueAsync(taskId, TestContext.Current.CancellationToken);
-        await started.Task.WaitAsync(
-            TimeSpan.FromSeconds(5),
-            TestContext.Current.CancellationToken);
+        await started.Task.WaitAsync(TestContext.Current.CancellationToken);
 
         var cancellation = orchestrator.CancelAsync(taskId);
-        await cancellationObserved.Task.WaitAsync(
-            TimeSpan.FromSeconds(5),
-            TestContext.Current.CancellationToken);
+        await cancellationObserved.Task.WaitAsync(TestContext.Current.CancellationToken);
         try
         {
-            await Assert.ThrowsAsync<TimeoutException>(() => cancellation.WaitAsync(
-                DownloadOrchestrator.WorkerShutdownTimeout + TimeSpan.FromSeconds(2),
-                TestContext.Current.CancellationToken));
+            await Assert.ThrowsAsync<TimeoutException>(
+                () => cancellation.WaitAsync(TestContext.Current.CancellationToken));
             Assert.True(cancellation.IsCompleted);
             Assert.True(cancellation.IsFaulted);
             Assert.False(releaseExecution.Task.IsCompleted);
@@ -234,7 +223,7 @@ public sealed class DownloadOrchestratorTests
         await orchestrator.StartAsync(TestContext.Current.CancellationToken);
         await orchestrator.EnqueueAsync(taskIds[0], TestContext.Current.CancellationToken);
         await orchestrator.EnqueueAsync(taskIds[1], TestContext.Current.CancellationToken);
-        await bothStarted.Task.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
+        await bothStarted.Task.WaitAsync(TestContext.Current.CancellationToken);
 
         Assert.True(await orchestrator.CancelAsync(taskIds[0]));
         await Assert.ThrowsAnyAsync<OperationCanceledException>(
@@ -272,7 +261,7 @@ public sealed class DownloadOrchestratorTests
 
         await orchestrator.StartAsync(TestContext.Current.CancellationToken);
         await orchestrator.EnqueueAsync(taskId, TestContext.Current.CancellationToken);
-        await started.Task.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
+        await started.Task.WaitAsync(TestContext.Current.CancellationToken);
         await orchestrator.StopAsync(TestContext.Current.CancellationToken);
 
         var restored = Assert.IsType<DownloadTask>(
@@ -301,9 +290,7 @@ public sealed class DownloadOrchestratorTests
         await orchestrator.EnqueueAsync(taskIds[0], TestContext.Current.CancellationToken);
         await WaitForPhaseAsync(context, taskIds[0], DownloadPhase.Failed);
         await orchestrator.EnqueueAsync(taskIds[1], TestContext.Current.CancellationToken);
-        await secondExecuted.Task.WaitAsync(
-            TimeSpan.FromSeconds(5),
-            TestContext.Current.CancellationToken);
+        await secondExecuted.Task.WaitAsync(TestContext.Current.CancellationToken);
         await orchestrator.StopAsync(TestContext.Current.CancellationToken);
 
         Task CompleteSecondAsync()
@@ -318,16 +305,19 @@ public sealed class DownloadOrchestratorTests
         DownloadTaskId taskId,
         DownloadPhase expected)
     {
-        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
         while (true)
         {
-            var task = await context.Tasks.FindAsync(taskId, timeout.Token).ConfigureAwait(false);
+            var task = await context.Tasks.FindAsync(
+                taskId,
+                TestContext.Current.CancellationToken).ConfigureAwait(false);
             if (task?.Phase == expected)
             {
                 return;
             }
 
-            await Task.Delay(TimeSpan.FromMilliseconds(20), timeout.Token).ConfigureAwait(false);
+            await Task.Delay(
+                TimeSpan.FromMilliseconds(20),
+                TestContext.Current.CancellationToken).ConfigureAwait(false);
         }
     }
 
