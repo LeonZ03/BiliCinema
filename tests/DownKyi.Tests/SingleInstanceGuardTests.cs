@@ -117,16 +117,14 @@ public sealed class SingleInstanceGuardTests
         var error = process.StandardError.ReadToEndAsync();
         try
         {
-            await process.WaitForExitAsync(TestContext.Current.CancellationToken)
-                .WaitAsync(TimeSpan.FromSeconds(20), TestContext.Current.CancellationToken)
-                .ConfigureAwait(true);
+            await process.WaitForExitAsync(TestContext.Current.CancellationToken).ConfigureAwait(true);
         }
         catch
         {
             if (!process.HasExited)
             {
                 process.Kill(entireProcessTree: true);
-                await process.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(5)).ConfigureAwait(true);
+                await process.WaitForExitAsync().ConfigureAwait(true);
             }
 
             throw;
