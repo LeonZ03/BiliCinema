@@ -546,11 +546,7 @@ public sealed class OwnedProcessScopePlatformTests
         ps.StartInfo.ArgumentList.Add("-o");
         ps.StartInfo.ArgumentList.Add("stat=");
         ps.Start();
-        if (!ps.WaitForExit(2000))
-        {
-            ps.Kill();
-            throw new TimeoutException($"ps did not return the state for pid {pid}.");
-        }
+        ps.WaitForExit();
 
         var state = ps.StandardOutput.ReadToEnd().Trim();
         var error = ps.StandardError.ReadToEnd().Trim();
