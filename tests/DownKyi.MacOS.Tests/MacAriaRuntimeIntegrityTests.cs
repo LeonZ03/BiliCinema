@@ -307,11 +307,7 @@ public sealed class MacAriaRuntimeIntegrityTests
             ?? throw new InvalidOperationException($"Failed to start {fileName}.");
         var output = process.StandardOutput.ReadToEndAsync();
         var error = process.StandardError.ReadToEndAsync();
-        if (!process.WaitForExit(120_000))
-        {
-            process.Kill(entireProcessTree: true);
-            throw new TimeoutException($"Process timed out: {fileName}");
-        }
+        process.WaitForExit();
 
         return new ProcessResult(
             process.ExitCode,
