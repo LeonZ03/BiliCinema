@@ -113,7 +113,7 @@ configuration.createsNewApplicationInstance = true
 configuration.promptsUserIfNeeded = false
 configuration.environment = ["DOWNKYI_DATA_DIR": dataURL.path]
 
-let openResult = OpenResult()
+private let openResult = OpenResult()
 NSWorkspace.shared.openApplication(at: appURL, configuration: configuration) { application, error in
     openResult.complete(application: application, error: error)
 }
@@ -126,7 +126,7 @@ guard let application = openedApplication else {
     fail("macOS reported no running application for app bundle \(appURL.path).")
 }
 
-let lifecycle = ApplicationLifecycleState()
+private let lifecycle = ApplicationLifecycleState()
 let launchObservation = application.observe(\.isFinishedLaunching, options: [.initial, .new]) {
     runningApplication, _ in
     lifecycle.update(from: runningApplication)
