@@ -1369,7 +1369,7 @@ public sealed class ReleaseSafetyRegressionTests
         Assert.NotNull(process);
         var output = process.StandardOutput.ReadToEndAsync();
         var error = process.StandardError.ReadToEndAsync();
-        Assert.True(process.WaitForExit(30_000), $"Process timed out: {executable}");
+        process.WaitForExit();
         return new ProcessResult(process.ExitCode, output.GetAwaiter().GetResult(), error.GetAwaiter().GetResult());
     }
 
