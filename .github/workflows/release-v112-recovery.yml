@@ -337,6 +337,7 @@ jobs:
     name: Recover macOS ${{ matrix.cpu }} DMG
     needs: authority
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
     env:
       HAS_MACOS_SIGNING: ${{ needs.authority.outputs.has_macos_signing }}
     strategy:
