@@ -295,7 +295,7 @@ public sealed class TargetedResourceForensicsWindowsTests
             controlledOwner.Kill(entireProcessTree: true);
             await controlledOwner.WaitForExitAsync(TestContext.Current.CancellationToken)
                 .ConfigureAwait(true);
-            await forensics.ObservePostCleanupAsync(TimeSpan.FromMilliseconds(500))
+            await forensics.WaitForAllowedAfterAnomalyAsync()
                 .ConfigureAwait(true);
             Assert.Equal(
                 DeleteAccessState.Allowed,
