@@ -667,7 +667,10 @@ public sealed class ReleaseSafetyRegressionTests
                 ],
                 root);
             Assert.NotEqual(0, brokenAppRun.ExitCode);
-            Assert.Contains("AppRun launch smoke exited", NormalizeDiagnostic(brokenAppRun), StringComparison.Ordinal);
+            Assert.Contains(
+                "AppRun launch smoke exited before the application initialization marker",
+                NormalizeDiagnostic(brokenAppRun),
+                StringComparison.Ordinal);
 
             var wrongStubFixture = CreateLinuxAppImageFixture(
                 Path.Combine(root, "wrong-stub"),
@@ -684,7 +687,15 @@ public sealed class ReleaseSafetyRegressionTests
                 ],
                 root);
             Assert.NotEqual(0, wrongStub.ExitCode);
-            Assert.Contains("AppImage runtime launch smoke exited", NormalizeDiagnostic(wrongStub), StringComparison.Ordinal);
+            var wrongStubDiagnostic = NormalizeDiagnostic(wrongStub);
+            Assert.Contains(
+                "AppImage runtime launch smoke exited before the application",
+                wrongStubDiagnostic,
+                StringComparison.Ordinal);
+            Assert.Contains(
+                "initialization marker (exit code 0)",
+                wrongStubDiagnostic,
+                StringComparison.Ordinal);
 
             var mutatedFixture = CreateLinuxAppImageFixture(
                 Path.Combine(root, "missing"),
@@ -1117,7 +1128,35 @@ public sealed class ReleaseSafetyRegressionTests
         var downKyiSource = Path.Combine(root, "downkyi-fixture.c");
         File.WriteAllText(
             downKyiSource,
-            "#include <unistd.h>\nint main(void) { sleep(30); return 0; }\n");
+            """
+            #include <stdio.h>
+            #include <stdlib.h>
+            #include <sys/stat.h>
+            #include <unistd.h>
+
+            static int signal_initialized(void) {
+                const char *root = getenv("DOWNKYI_DATA_DIR");
+                char logs[4096];
+                char day[4096];
+                char marker[4096];
+                if (root == NULL ||
+                    snprintf(logs, sizeof(logs), "%s/Logs", root) >= (int)sizeof(logs) ||
+                    snprintf(day, sizeof(day), "%s/fixture", logs) >= (int)sizeof(day) ||
+                    snprintf(marker, sizeof(marker), "%s/events.jsonl", day) >= (int)sizeof(marker)) return 2;
+                mkdir(root, 0755);
+                mkdir(logs, 0755);
+                mkdir(day, 0755);
+                FILE *file = fopen(marker, "w");
+                if (file == NULL) return 3;
+                fputs("{\"message\":\"Application initialized. Fixture\"}\n", file);
+                return fclose(file) == 0 ? 0 : 4;
+            }
+
+            int main(void) {
+                if (signal_initialized() != 0) return 5;
+                for (;;) pause();
+            }
+            """);
         RunRequired("gcc", ["-O2", "-o", Path.Combine(runtime, "DownKyi"), downKyiSource], root);
         var aria = Path.Combine(runtime, "aria2", "aria2c");
         File.Copy("/bin/true", aria);
@@ -1166,13 +1205,33 @@ public sealed class ReleaseSafetyRegressionTests
         }
 
         var escapedAppRoot = appRoot.Replace("\\", "\\\\", StringComparison.Ordinal).Replace("\"", "\\\"", StringComparison.Ordinal);
-        var outerBehavior = outerRuntimeStaysRunning ? "sleep(30); return 0;" : "return 0;";
+        var outerBehavior = outerRuntimeStaysRunning
+            ? "if (signal_initialized() != 0) return 5; for (;;) pause();"
+            : "return 0;";
         var runtimeSource = """
             #include <stdio.h>
             #include <stdlib.h>
             #include <string.h>
             #include <sys/stat.h>
             #include <unistd.h>
+
+            static int signal_initialized(void) {
+                const char *root = getenv("DOWNKYI_DATA_DIR");
+                char logs[4096];
+                char day[4096];
+                char marker[4096];
+                if (root == NULL ||
+                    snprintf(logs, sizeof(logs), "%s/Logs", root) >= (int)sizeof(logs) ||
+                    snprintf(day, sizeof(day), "%s/fixture", logs) >= (int)sizeof(day) ||
+                    snprintf(marker, sizeof(marker), "%s/events.jsonl", day) >= (int)sizeof(marker)) return 2;
+                mkdir(root, 0755);
+                mkdir(logs, 0755);
+                mkdir(day, 0755);
+                FILE *file = fopen(marker, "w");
+                if (file == NULL) return 3;
+                fputs("{\"message\":\"Application initialized. Fixture\"}\n", file);
+                return fclose(file) == 0 ? 0 : 4;
+            }
 
             int main(int argc, char **argv) {
                 if (argc > 1 && strcmp(argv[1], "--appimage-extract") == 0) {
