@@ -392,7 +392,7 @@ public sealed class TargetedResourceForensicsWindowsTests
     {
         var scope = await OwnedProcessScope.StartAsync(
             CreateDirectoryOwnerStartInfo(workingDirectory),
-            TimeSpan.FromSeconds(5)).ConfigureAwait(false);
+            TestContext.Current.CancellationToken).ConfigureAwait(false);
         Process? root = null;
         try
         {

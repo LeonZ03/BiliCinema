@@ -51,7 +51,7 @@ public sealed class OwnedProcessScopePlatformTests
             startInfo.ArgumentList.Add(directory);
 
             using var scope = await OwnedProcessScope.StartAsync(
-                startInfo, TimeSpan.FromSeconds(5)).ConfigureAwait(true);
+                startInfo, TestContext.Current.CancellationToken).ConfigureAwait(true);
             childPid = await ReadMarkerAsync(Path.Combine(directory, "child.pid")).ConfigureAwait(true);
             grandchildPid = await ReadMarkerAsync(Path.Combine(directory, "grandchild.pid")).ConfigureAwait(true);
             var job = Assert.IsType<SafeFileHandle>(scope.WindowsJobHandle);
@@ -316,7 +316,7 @@ public sealed class OwnedProcessScopePlatformTests
             startInfo.ArgumentList.Add(runtimeConfig);
             startInfo.ArgumentList.Add(directory);
             scope = await OwnedProcessScope.StartAsync(
-                startInfo, TimeSpan.FromSeconds(5)).ConfigureAwait(true);
+                startInfo, TestContext.Current.CancellationToken).ConfigureAwait(true);
             childPid = await ReadMarkerAsync(Path.Combine(directory, "child.pid")).ConfigureAwait(true);
             grandchildPid = await ReadMarkerAsync(Path.Combine(directory, "grandchild.pid")).ConfigureAwait(true);
 
@@ -368,7 +368,7 @@ public sealed class OwnedProcessScopePlatformTests
             startInfo.ArgumentList.Add(runtimeConfig);
             startInfo.ArgumentList.Add(directory);
             scope = await OwnedProcessScope.StartAsync(
-                startInfo, TimeSpan.FromSeconds(5)).ConfigureAwait(true);
+                startInfo, TestContext.Current.CancellationToken).ConfigureAwait(true);
             childPid = await ReadMarkerAsync(Path.Combine(directory, "child.pid")).ConfigureAwait(true);
             grandchildPid = await ReadMarkerAsync(Path.Combine(directory, "grandchild.pid")).ConfigureAwait(true);
 
