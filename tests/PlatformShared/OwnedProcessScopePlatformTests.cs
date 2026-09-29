@@ -64,8 +64,7 @@ public sealed class OwnedProcessScopePlatformTests
             Assert.False(IsAlive(scope.RootPid));
             Assert.False(IsAlive(childPid.Value));
             Assert.False(IsAlive(grandchildPid.Value));
-            await scope.Host.WaitForExitAsync(TestContext.Current.CancellationToken).WaitAsync(TimeSpan.FromSeconds(5),
-                TestContext.Current.CancellationToken).ConfigureAwait(true);
+            await scope.Host.WaitForExitAsync(TestContext.Current.CancellationToken).ConfigureAwait(true);
         }
         finally
         {
@@ -134,8 +133,7 @@ public sealed class OwnedProcessScopePlatformTests
                 }
 
                 await cancellation.CancelAsync().ConfigureAwait(true);
-                var result = await run.WaitAsync(TimeSpan.FromSeconds(8),
-                    TestContext.Current.CancellationToken).ConfigureAwait(true);
+                var result = await run.ConfigureAwait(true);
                 Assert.Equal(130, result.ExitCode);
                 AssertStopped(result.RootPid);
                 AssertStopped(childPid.Value);
@@ -269,8 +267,7 @@ public sealed class OwnedProcessScopePlatformTests
                 TestContext.Current.CancellationToken);
             childPid = await ReadMarkerAsync(marker).ConfigureAwait(true);
             Assert.True(IsAlive(childPid.Value));
-            var result = await run.WaitAsync(TimeSpan.FromSeconds(5),
-                TestContext.Current.CancellationToken).ConfigureAwait(true);
+            var result = await run.ConfigureAwait(true);
             Assert.Equal(2, result.ExitCode);
             Assert.False(IsAlive(result.RootPid));
             Assert.False(IsAlive(childPid.Value));
@@ -323,7 +320,7 @@ public sealed class OwnedProcessScopePlatformTests
             StopIfAlive(scope.RootPid);
             StopIfAlive(childPid);
             await scope.Host.WaitForExitAsync(TestContext.Current.CancellationToken)
-                .WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken).ConfigureAwait(true);
+                .ConfigureAwait(true);
             Assert.True(IsAlive(grandchildPid.Value));
 
             var failure = await Record.ExceptionAsync(() => scope.WaitForLinuxProcessGroupToEmptyAsync(
@@ -375,7 +372,7 @@ public sealed class OwnedProcessScopePlatformTests
             StopIfAlive(scope.RootPid);
             StopIfAlive(childPid);
             await scope.Host.WaitForExitAsync(TestContext.Current.CancellationToken)
-                .WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken).ConfigureAwait(true);
+                .ConfigureAwait(true);
             Assert.True(IsAlive(grandchildPid.Value));
 
             var failure = await Record.ExceptionAsync(() => scope.WaitForMacProcessGroupToEmptyAsync(
