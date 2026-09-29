@@ -551,6 +551,9 @@ public sealed class ReleaseWorkflowArchitectureTests
 
         Assert.Contains("codesign --verify --deep --strict --verbose=2", verifyAppScript, StringComparison.Ordinal);
         Assert.Contains("spctl --assess --type execute", verifyAppScript, StringComparison.Ordinal);
+        Assert.Contains("DOWNKYI_DATA_DIR", verifyAppLaunchScript, StringComparison.Ordinal);
+        Assert.Contains("Application initialized.", verifyAppLaunchScript, StringComparison.Ordinal);
+        Assert.DoesNotContain("MACOS_LAUNCH_SECONDS", verifyAppLaunchScript, StringComparison.Ordinal);
         Assert.Contains("kill -TERM \"$PID\"", verifyAppLaunchScript, StringComparison.Ordinal);
         Assert.Contains("kill -KILL \"$PID\"", verifyAppLaunchScript, StringComparison.Ordinal);
         Assert.Contains("codesign --verify --verbose=2", verifyDmgScript, StringComparison.Ordinal);

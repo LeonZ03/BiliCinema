@@ -151,8 +151,7 @@ public sealed class MacBundleLayoutTests
                 RepositoryRoot,
                 new Dictionary<string, string?>
                 {
-                    ["MACOS_EXECUTABLE_NAME"] = "TestApp",
-                    ["MACOS_LAUNCH_SECONDS"] = "1"
+                    ["MACOS_EXECUTABLE_NAME"] = "TestApp"
                 },
                 Path.Combine(RepositoryRoot, "script", "macos", "verify-app-launch.sh"),
                 appPath);
@@ -183,7 +182,7 @@ public sealed class MacBundleLayoutTests
         {
             File.WriteAllText(
                 executablePath,
-                "#!/bin/bash\nprintf '%s' \"$$\" > \"$DOWNKYI_PID_MARKER\"\ntrap '' TERM\nwhile true; do sleep 1; done\n",
+                "#!/bin/bash\nprintf '%s' \"$$\" > \"$DOWNKYI_PID_MARKER\"\nmkdir -p \"$DOWNKYI_DATA_DIR/Logs/fixture\"\nprintf '%s\\n' '{\"message\":\"Application initialized. Fixture\"}' > \"$DOWNKYI_DATA_DIR/Logs/fixture/events.jsonl\"\nmkfifo \"$DOWNKYI_DATA_DIR/hold\"\ntrap '' TERM\nread -r _ < \"$DOWNKYI_DATA_DIR/hold\"\n",
                 new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
             AssertSuccess(Run("/bin/chmod", fixtureRoot, "+x", executablePath));
 
@@ -193,7 +192,6 @@ public sealed class MacBundleLayoutTests
                 new Dictionary<string, string?>
                 {
                     ["MACOS_EXECUTABLE_NAME"] = "TestApp",
-                    ["MACOS_LAUNCH_SECONDS"] = "1",
                     ["DOWNKYI_PID_MARKER"] = pidMarker
                 },
                 Path.Combine(RepositoryRoot, "script", "macos", "verify-app-launch.sh"),
