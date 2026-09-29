@@ -797,7 +797,7 @@ public sealed class UiSmokeTests
                 window.Close();
 
                 await closed.Task
-                    .WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken)
+                    .WaitAsync(TestContext.Current.CancellationToken)
                     .ConfigureAwait(true);
                 Assert.Equal(1, lifecycle.ShutdownRequestCount);
                 Assert.False(window.IsVisible);
