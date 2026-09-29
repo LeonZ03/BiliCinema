@@ -1,6 +1,8 @@
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Headless;
 using Avalonia.Headless.XUnit;
+using Avalonia.Input;
 using Avalonia.Media;
 using Avalonia.Styling;
 using Avalonia.Themes.Fluent;
@@ -100,7 +102,7 @@ public sealed class SectionNavigationVisualStateTests
             Assert.Equal(new Thickness(8, 2), selected.Margin);
             Assert.Equal(44, selected.MinHeight);
             Assert.Equal(new CornerRadius(8), selectedBackground.CornerRadius);
-            Assert.Null(unselectedBackground.Background);
+            Assert.Equal(Colors.Transparent, SolidColor(unselectedBackground.Background));
             Assert.Equal(
                 ResourceColor(application, "BrushPrimaryTranslucent3", theme),
                 SolidColor(selectedBackground.Background));
@@ -109,6 +111,16 @@ public sealed class SectionNavigationVisualStateTests
             Assert.Equal(
                 ResourceColor(application, "BrushPrimary", theme),
                 SolidColor(selectedIndicator.Background));
+
+            var clickPoint = unselected.TranslatePoint(
+                new Point(unselected.Bounds.Width - 4, unselected.Bounds.Height / 2),
+                window);
+            Assert.NotNull(clickPoint);
+            window.MouseMove(clickPoint.Value);
+            window.MouseDown(clickPoint.Value, MouseButton.Left);
+            window.MouseUp(clickPoint.Value, MouseButton.Left);
+            window.UpdateLayout();
+            Assert.Equal(0, navigation.SelectedIndex);
         }
         finally
         {

@@ -15,7 +15,7 @@
                     <Border
                         x:Name="SelectionBackground"
                         MinHeight="44"
-                        Background="{x:Null}"
+                        Background="Transparent"
                         BorderBrush="Transparent"
                         BorderThickness="1"
                         CornerRadius="{DynamicResource DownKyiRadiusMedium}"
