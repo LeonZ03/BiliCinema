@@ -481,13 +481,13 @@ internal sealed class TrustedRootScope : IAsyncDisposable
             var installedPath = Path.Combine(
                 "/usr/local/share/ca-certificates",
                 $"downkyi-aria2-{root.Thumbprint}.crt");
-            await RunBoundedProcessAsync(
+            await RunProcessAsync(
                 "sudo",
                 ["-n", "install", "-m", "0644", "--", rootPemPath, installedPath],
                 cancellationToken).ConfigureAwait(false);
             try
             {
-                await RunBoundedProcessAsync(
+                await RunProcessAsync(
                     "sudo",
                     ["-n", "update-ca-certificates"],
                     cancellationToken).ConfigureAwait(false);
@@ -498,13 +498,13 @@ internal sealed class TrustedRootScope : IAsyncDisposable
                 failures.Capture("linux-trust-store-update", error);
                 await failures.RunAsync(
                     "linux-certificate-removal",
-                    () => RunBoundedProcessAsync(
+                    () => RunProcessAsync(
                         "sudo",
                         ["-n", "rm", "-f", "--", installedPath],
                         CancellationToken.None)).ConfigureAwait(false);
                 await failures.RunAsync(
                     "linux-trust-store-refresh",
-                    () => RunBoundedProcessAsync(
+                    () => RunProcessAsync(
                         "sudo",
                         ["-n", "update-ca-certificates"],
                         CancellationToken.None)).ConfigureAwait(false);
@@ -526,7 +526,7 @@ internal sealed class TrustedRootScope : IAsyncDisposable
         }
 
         var commonName = root.GetNameInfo(X509NameType.SimpleName, forIssuer: false);
-        await RunBoundedProcessAsync(
+        await RunProcessAsync(
             "sudo",
             [
                 "-n",
@@ -545,7 +545,7 @@ internal sealed class TrustedRootScope : IAsyncDisposable
             macCommonName: commonName);
     }
 
-    private static async Task RunBoundedProcessAsync(
+    private static async Task RunProcessAsync(
         string fileName,
         IReadOnlyList<string> arguments,
         CancellationToken cancellationToken)
@@ -563,26 +563,18 @@ internal sealed class TrustedRootScope : IAsyncDisposable
             startInfo.ArgumentList.Add(argument);
         }
 
-        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        timeout.CancelAfter(TimeSpan.FromSeconds(15));
         using var process = Process.Start(startInfo)
             ?? throw new InvalidOperationException("The certificate trust tool did not start.");
         var standardError = process.StandardError.ReadToEndAsync(CancellationToken.None);
         var standardOutput = process.StandardOutput.ReadToEndAsync(CancellationToken.None);
         try
         {
-            await process.WaitForExitAsync(timeout.Token).ConfigureAwait(false);
+            await process.WaitForExitAsync(cancellationToken).ConfigureAwait(false);
         }
-        catch (OperationCanceledException error) when (timeout.IsCancellationRequested)
+        catch (OperationCanceledException error) when (cancellationToken.IsCancellationRequested)
         {
             var failures = new FailurePreservingTestCollector();
-            failures.Capture(
-                "certificate-trust-command",
-                cancellationToken.IsCancellationRequested
-                    ? error
-                    : new TimeoutException(
-                        "The certificate trust tool did not finish in time.",
-                        error));
+            failures.Capture("certificate-trust-command", error);
             failures.Run(
                 "certificate-trust-command-termination",
                 () =>
@@ -618,13 +610,13 @@ internal sealed class TrustedRootScope : IAsyncDisposable
         {
             await failures.RunAsync(
                 "linux-certificate-removal",
-                () => RunBoundedProcessAsync(
+                () => RunProcessAsync(
                     "sudo",
                     ["-n", "rm", "-f", "--", _linuxCertificatePath],
                     CancellationToken.None)).ConfigureAwait(false);
             await failures.RunAsync(
                 "linux-trust-store-refresh",
-                () => RunBoundedProcessAsync(
+                () => RunProcessAsync(
                     "sudo",
                     ["-n", "update-ca-certificates"],
                     CancellationToken.None)).ConfigureAwait(false);
@@ -639,7 +631,7 @@ internal sealed class TrustedRootScope : IAsyncDisposable
         {
             await failures.RunAsync(
                 "macos-certificate-removal",
-                () => RunBoundedProcessAsync(
+                () => RunProcessAsync(
                     "sudo",
                     [
                         "-n",
