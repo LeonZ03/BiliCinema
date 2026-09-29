@@ -107,6 +107,50 @@ public sealed class FfmpegSeekabilityIntegrationTests : IDisposable
         Assert.True(File.Exists(validVideo));
     }
 
+    [Fact]
+    [Trait("Category", "FfmpegIntegration")]
+    public async Task RequiredStreamValidationDecodesOnlyTheRequestedRealStreams()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var processRunner = new FfmpegProcessRunner();
+        if (!await IsToolAvailableAsync(
+                processRunner,
+                FfmpegExecutableLocator.Ffmpeg,
+                cancellationToken).ConfigureAwait(true))
+        {
+            Assert.Skip("ffmpeg is required for the required-stream integration test.");
+        }
+
+        var validator = new FfmpegMediaValidator(processRunner);
+        var videoOnly = Path.Combine(_testDirectory, "video-only.mp4");
+        await CreateSegmentAsync(
+            processRunner,
+            videoOnly,
+            "green",
+            cancellationToken).ConfigureAwait(true);
+        Assert.True(await validator.ValidateRequiredStreamsAsync(
+            videoOnly,
+            requireAudio: false,
+            requireVideo: true,
+            cancellationToken).ConfigureAwait(true));
+        Assert.False(await validator.ValidateRequiredStreamsAsync(
+            videoOnly,
+            requireAudio: true,
+            requireVideo: true,
+            cancellationToken).ConfigureAwait(true));
+
+        var audioVideo = Path.Combine(_testDirectory, "audio-video.mp4");
+        await CreateAudioVideoAsync(
+            processRunner,
+            audioVideo,
+            cancellationToken).ConfigureAwait(true);
+        Assert.True(await validator.ValidateRequiredStreamsAsync(
+            audioVideo,
+            requireAudio: true,
+            requireVideo: true,
+            cancellationToken).ConfigureAwait(true));
+    }
+
     public void Dispose()
     {
         Directory.Delete(_testDirectory, recursive: true);
@@ -145,6 +189,35 @@ public sealed class FfmpegSeekabilityIntegrationTests : IDisposable
                     output
                 ],
                 "create-test-segment"),
+            ProcessTimeout,
+            cancellationToken).ConfigureAwait(false);
+
+        Assert.True(result.Succeeded, result.StandardError);
+    }
+
+    private static async Task CreateAudioVideoAsync(
+        FfmpegProcessRunner processRunner,
+        string output,
+        CancellationToken cancellationToken)
+    {
+        var result = await processRunner.RunAsync(
+            new FfmpegCommand(
+                FfmpegExecutableLocator.Ffmpeg,
+                [
+                    "-hide_banner",
+                    "-nostdin",
+                    "-y",
+                    "-f", "lavfi",
+                    "-i", "color=c=blue:s=320x240:r=30:d=1",
+                    "-f", "lavfi",
+                    "-i", "sine=frequency=1000:duration=1",
+                    "-shortest",
+                    "-c:v", "libx264",
+                    "-pix_fmt", "yuv420p",
+                    "-c:a", "aac",
+                    output
+                ],
+                "create-audio-video-fixture"),
             ProcessTimeout,
             cancellationToken).ConfigureAwait(false);
 

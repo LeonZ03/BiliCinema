@@ -88,7 +88,7 @@ internal sealed class FfmpegMediaValidator : IFfmpegMediaValidator
         return new FfmpegMediaValidationResult(true, duration, null);
     }
 
-    public async Task<bool> HasRequiredStreamsAsync(
+    public async Task<bool> ValidateRequiredStreamsAsync(
         string mediaFile,
         bool requireAudio,
         bool requireVideo,
@@ -100,11 +100,18 @@ internal sealed class FfmpegMediaValidator : IFfmpegMediaValidator
             return false;
         }
 
-        var (document, probeFailure) = await ProbeAsync(mediaFile, cancellationToken)
-            .ConfigureAwait(false);
-        return probeFailure == null &&
-               (!requireAudio || HasStream(document, "audio")) &&
-               (!requireVideo || HasStream(document, "video"));
+        if (requireAudio && !await CanDecodeRequiredStreamAsync(
+                mediaFile,
+                FfmpegMediaStreamKind.Audio,
+                cancellationToken).ConfigureAwait(false))
+        {
+            return false;
+        }
+
+        return !requireVideo || await CanDecodeRequiredStreamAsync(
+                mediaFile,
+                FfmpegMediaStreamKind.Video,
+                cancellationToken).ConfigureAwait(false);
     }
 
     internal static IReadOnlyList<TimeSpan> GetSeekPositions(TimeSpan expectedDuration)
@@ -123,6 +130,39 @@ internal sealed class FfmpegMediaValidator : IFfmpegMediaValidator
             if (line.StartsWith("frame=", StringComparison.Ordinal) &&
                 int.TryParse(line.AsSpan("frame=".Length), NumberStyles.Integer, CultureInfo.InvariantCulture, out var frames) &&
                 frames > 0)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private async Task<bool> CanDecodeRequiredStreamAsync(
+        string mediaFile,
+        FfmpegMediaStreamKind streamKind,
+        CancellationToken cancellationToken)
+    {
+        var decode = await _processRunner
+            .RunAsync(
+                FfmpegCommandFactory.BuildRequiredStreamDecode(mediaFile, streamKind),
+                ProcessTimeout,
+                cancellationToken)
+            .ConfigureAwait(false);
+        return decode.Succeeded && DecodedPositiveDuration(decode.StandardOutput);
+    }
+
+    private static bool DecodedPositiveDuration(string progressOutput)
+    {
+        foreach (var line in progressOutput.Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries))
+        {
+            if (line.StartsWith("out_time_us=", StringComparison.Ordinal) &&
+                long.TryParse(
+                    line.AsSpan("out_time_us=".Length),
+                    NumberStyles.Integer,
+                    CultureInfo.InvariantCulture,
+                    out var microseconds) &&
+                microseconds > 0)
             {
                 return true;
             }

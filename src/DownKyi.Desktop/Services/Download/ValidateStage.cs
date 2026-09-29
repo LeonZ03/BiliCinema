@@ -4,6 +4,7 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using DownKyi.Core.FFmpeg;
+using DownKyi.Domain.Downloads;
 using DownKyi.Domain.Results;
 
 namespace DownKyi.Services.Download;
@@ -42,15 +43,17 @@ internal sealed class ValidateStage : IDownloadPipelineStage
                     "The finalized media file is missing or invalid.");
             }
 
-            if (!await _mediaStreamValidator.HasRequiredStreamsAsync(
+            var requireVideoDecode = context.NeedsVideo && !HasDurlConcatVideoEvidence(context);
+            if ((context.NeedsAudio || requireVideoDecode) &&
+                !await _mediaStreamValidator.ValidateRequiredStreamsAsync(
                     mediaFile!,
                     context.NeedsAudio,
-                    context.NeedsVideo,
+                    requireVideoDecode,
                     cancellationToken).ConfigureAwait(true))
             {
                 return DownloadStageResult.Failure(
                     "download.validate.media",
-                    "The finalized media file is missing a required audio or video stream.");
+                    "The finalized media file has a missing or undecodable required audio or video stream.");
             }
         }
 
@@ -93,4 +96,7 @@ internal sealed class ValidateStage : IDownloadPipelineStage
 
         return DownloadStageResult.Success(Name);
     }
+
+    private static bool HasDurlConcatVideoEvidence(DownloadExecutionContext context) =>
+        context.MediaKind == DownloadMediaKind.Durl && context.DurlDownloads.Count > 1;
 }

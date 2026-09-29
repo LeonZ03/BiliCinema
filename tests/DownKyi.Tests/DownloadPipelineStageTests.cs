@@ -149,7 +149,7 @@ public sealed class DownloadPipelineStageTests
         bool requestAudio,
         bool requestVideo,
         string extension,
-        bool hasRequiredStreams,
+        bool canDecodeRequiredStreams,
         bool expectedSuccess)
     {
         var directory = Path.Combine(
@@ -173,7 +173,7 @@ public sealed class DownloadPipelineStageTests
                 [1, 2, 3],
                 TestContext.Current.CancellationToken);
             Assert.True(context.TryReuseStagedMedia());
-            var validator = new StubFfmpegMediaStreamValidator(hasRequiredStreams);
+            var validator = new StubFfmpegMediaStreamValidator(canDecodeRequiredStreams);
 
             var result = await new ValidateStage(validator).ExecuteAsync(
                 context,
@@ -193,6 +193,172 @@ public sealed class DownloadPipelineStageTests
         finally
         {
             Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task ValidateStageDoesNotRepeatMultiSegmentDurlVideoDecode()
+    {
+        var mediaFile = Path.Combine(
+            Path.GetTempPath(),
+            $"downkyi-validated-durl-{Guid.NewGuid():N}.mp4");
+        try
+        {
+            await File.WriteAllBytesAsync(
+                mediaFile,
+                [1, 2, 3],
+                TestContext.Current.CancellationToken);
+            using var settings = new TestSettingsStore();
+            var context = CreateContext(
+                settings.Store.Current,
+                DownloadContentSelection.None with
+                {
+                    Video = true,
+                    MediaKind = DownloadMediaKind.Durl
+                });
+            context.MediaKind = DownloadMediaKind.Durl;
+            context.OutputMedia = mediaFile;
+            context.MediaSucceeded = true;
+            context.DurlDownloads =
+            [
+                new DurlDownloadResult(new PlayUrlDurl { Order = 1 }, "segment-1", "key-1"),
+                new DurlDownloadResult(new PlayUrlDurl { Order = 2 }, "segment-2", "key-2")
+            ];
+            var validator = new StubFfmpegMediaStreamValidator(result: false);
+
+            var result = await new ValidateStage(validator).ExecuteAsync(
+                context,
+                TestContext.Current.CancellationToken);
+
+            Assert.True(result.IsSuccess);
+            Assert.Empty(validator.Calls);
+        }
+        finally
+        {
+            File.Delete(mediaFile);
+        }
+    }
+
+    [Fact]
+    public async Task ValidateStageOnlyDecodesAudioAfterMultiSegmentDurlVideoValidation()
+    {
+        var mediaFile = Path.Combine(
+            Path.GetTempPath(),
+            $"downkyi-validated-durl-audio-{Guid.NewGuid():N}.mp4");
+        try
+        {
+            await File.WriteAllBytesAsync(
+                mediaFile,
+                [1, 2, 3],
+                TestContext.Current.CancellationToken);
+            using var settings = new TestSettingsStore();
+            var context = CreateContext(
+                settings.Store.Current,
+                DownloadContentSelection.None with
+                {
+                    Audio = true,
+                    Video = true,
+                    MediaKind = DownloadMediaKind.Durl
+                });
+            context.MediaKind = DownloadMediaKind.Durl;
+            context.OutputMedia = mediaFile;
+            context.MediaSucceeded = true;
+            context.DurlDownloads =
+            [
+                new DurlDownloadResult(new PlayUrlDurl { Order = 1 }, "segment-1", "key-1"),
+                new DurlDownloadResult(new PlayUrlDurl { Order = 2 }, "segment-2", "key-2")
+            ];
+            var validator = new StubFfmpegMediaStreamValidator();
+
+            var result = await new ValidateStage(validator).ExecuteAsync(
+                context,
+                TestContext.Current.CancellationToken);
+
+            Assert.True(result.IsSuccess);
+            var call = Assert.Single(validator.Calls);
+            Assert.True(call.RequireAudio);
+            Assert.False(call.RequireVideo);
+        }
+        finally
+        {
+            File.Delete(mediaFile);
+        }
+    }
+
+    [Fact]
+    public async Task ValidateStageRequiresDecodeEvidenceForReusedDurlMedia()
+    {
+        var directory = Path.Combine(
+            Path.GetTempPath(),
+            $"downkyi-reused-durl-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(directory);
+        try
+        {
+            using var settings = new TestSettingsStore();
+            var context = CreateContext(
+                settings.Store.Current,
+                DownloadContentSelection.None with
+                {
+                    Video = true,
+                    MediaKind = DownloadMediaKind.Durl
+                });
+            context.MediaKind = DownloadMediaKind.Durl;
+            context.StagingDirectory = directory;
+            var stagedMedia = context.WorkingBasePath + ".mp4";
+            await File.WriteAllBytesAsync(
+                stagedMedia,
+                [1, 2, 3],
+                TestContext.Current.CancellationToken);
+            Assert.True(context.TryReuseStagedMedia());
+            var validator = new StubFfmpegMediaStreamValidator(result: false);
+
+            var result = await new ValidateStage(validator).ExecuteAsync(
+                context,
+                TestContext.Current.CancellationToken);
+
+            Assert.False(result.IsSuccess);
+            var call = Assert.Single(validator.Calls);
+            Assert.False(call.RequireAudio);
+            Assert.True(call.RequireVideo);
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task ValidateStageRequiresDecodeEvidenceForPublishedMedia()
+    {
+        var mediaFile = Path.Combine(
+            Path.GetTempPath(),
+            $"downkyi-published-media-{Guid.NewGuid():N}.mp3");
+        try
+        {
+            await File.WriteAllBytesAsync(
+                mediaFile,
+                [1, 2, 3],
+                TestContext.Current.CancellationToken);
+            using var settings = new TestSettingsStore();
+            var context = CreateContext(
+                settings.Store.Current,
+                DownloadContentSelection.None with { Audio = true });
+            context.PublishedArtifacts["media"] = mediaFile;
+            var validator = new StubFfmpegMediaStreamValidator(result: false);
+
+            var result = await new ValidateStage(validator).ExecuteAsync(
+                context,
+                TestContext.Current.CancellationToken);
+
+            Assert.False(result.IsSuccess);
+            var call = Assert.Single(validator.Calls);
+            Assert.Equal(mediaFile, call.MediaFile);
+            Assert.True(call.RequireAudio);
+            Assert.False(call.RequireVideo);
+        }
+        finally
+        {
+            File.Delete(mediaFile);
         }
     }
 

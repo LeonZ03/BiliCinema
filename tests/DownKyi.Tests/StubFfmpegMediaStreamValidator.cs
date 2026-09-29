@@ -7,7 +7,7 @@ internal sealed class StubFfmpegMediaStreamValidator(bool result = true)
 {
     public List<ValidationCall> Calls { get; } = [];
 
-    public Task<bool> HasRequiredStreamsAsync(
+    public Task<bool> ValidateRequiredStreamsAsync(
         string mediaFile,
         bool requireAudio,
         bool requireVideo,

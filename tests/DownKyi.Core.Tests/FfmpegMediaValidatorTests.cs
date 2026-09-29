@@ -92,36 +92,32 @@ public sealed class FfmpegMediaValidatorTests : IDisposable
     public async Task RequiredStreamValidationMatchesRequestedShape(
         bool requireAudio,
         bool requireVideo,
-        bool hasAudio,
-        bool hasVideo,
+        bool canDecodeAudio,
+        bool canDecodeVideo,
         bool expected)
     {
-        var probeJson = (hasAudio, hasVideo) switch
-        {
-            (true, true) => """
-                {"streams":[{"codec_type":"audio"},{"codec_type":"video"}],"format":{"duration":"20.0"}}
-                """,
-            (true, false) => """
-                {"streams":[{"codec_type":"audio"}],"format":{"duration":"20.0"}}
-                """,
-            (false, true) => """
-                {"streams":[{"codec_type":"video"}],"format":{"duration":"20.0"}}
-                """,
-            _ => """
-                {"streams":[],"format":{"duration":"20.0"}}
-                """
-        };
-        var runner = new ProbeProcessRunner(probeJson);
+        var runner = new RequiredStreamProcessRunner(canDecodeAudio, canDecodeVideo);
         var validator = new FfmpegMediaValidator(runner);
 
-        var result = await validator.HasRequiredStreamsAsync(
+        var result = await validator.ValidateRequiredStreamsAsync(
             _mediaFile,
             requireAudio,
             requireVideo,
             TestContext.Current.CancellationToken);
 
         Assert.Equal(expected, result);
-        Assert.Empty(runner.SeekPositions);
+        var expectedOperations = new List<string>();
+        if (requireAudio)
+        {
+            expectedOperations.Add("decode-required-audio");
+        }
+
+        if (requireVideo && (!requireAudio || canDecodeAudio))
+        {
+            expectedOperations.Add("decode-required-video");
+        }
+
+        Assert.Equal(expectedOperations, runner.Operations);
     }
 
     public void Dispose()
@@ -172,6 +168,34 @@ public sealed class FfmpegMediaValidatorTests : IDisposable
                 true,
                 0,
                 $"frame={decodedFrames}",
+                string.Empty,
+                false));
+        }
+    }
+
+    private sealed class RequiredStreamProcessRunner(
+        bool canDecodeAudio,
+        bool canDecodeVideo) : IFfmpegProcessRunner
+    {
+        public List<string> Operations { get; } = [];
+
+        public Task<FfmpegProcessResult> RunAsync(
+            FfmpegCommand command,
+            TimeSpan timeout,
+            CancellationToken cancellationToken = default)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            Operations.Add(command.Operation);
+            var canDecode = command.Operation switch
+            {
+                "decode-required-audio" => canDecodeAudio,
+                "decode-required-video" => canDecodeVideo,
+                _ => throw new InvalidOperationException($"Unexpected operation: {command.Operation}")
+            };
+            return Task.FromResult(new FfmpegProcessResult(
+                true,
+                0,
+                $"out_time_us={(canDecode ? 23_220 : 0)}",
                 string.Empty,
                 false));
         }
