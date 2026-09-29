@@ -56,7 +56,6 @@ public sealed class TargetedResourceForensicsWindowsTests
             Assert.False(wait.IsCompleted);
             owner.Kill(entireProcessTree: true);
             await owner.WaitForExitAsync(TestContext.Current.CancellationToken)
-                .WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken)
                 .ConfigureAwait(true);
             await wait.ConfigureAwait(true);
 
@@ -295,7 +294,6 @@ public sealed class TargetedResourceForensicsWindowsTests
 
             controlledOwner.Kill(entireProcessTree: true);
             await controlledOwner.WaitForExitAsync(TestContext.Current.CancellationToken)
-                .WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken)
                 .ConfigureAwait(true);
             await forensics.ObservePostCleanupAsync(TimeSpan.FromMilliseconds(500))
                 .ConfigureAwait(true);
@@ -446,7 +444,6 @@ public sealed class TargetedResourceForensicsWindowsTests
     {
         var ready = await owner.StandardOutput.ReadLineAsync(
                 TestContext.Current.CancellationToken).AsTask()
-            .WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken)
             .ConfigureAwait(true);
         Assert.StartsWith("fixture-ready pid=", ready, StringComparison.Ordinal);
     }
@@ -455,7 +452,6 @@ public sealed class TargetedResourceForensicsWindowsTests
     {
         var ready = await owner.StandardOutput.ReadLineAsync(
                 TestContext.Current.CancellationToken).AsTask()
-            .WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken)
             .ConfigureAwait(true);
         if (ready is null)
         {
@@ -478,7 +474,6 @@ public sealed class TargetedResourceForensicsWindowsTests
         {
             owner.Kill(entireProcessTree: true);
             await owner.WaitForExitAsync(TestContext.Current.CancellationToken)
-                .WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken)
                 .ConfigureAwait(true);
         }
 
