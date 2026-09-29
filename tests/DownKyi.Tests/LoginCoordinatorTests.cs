@@ -350,7 +350,7 @@ public sealed class LoginCoordinatorTests
                 isWireValue: true)],
             TestContext.Current.CancellationToken);
 
-        await Task.Delay(100, TestContext.Current.CancellationToken);
+        Assert.False(browserCommit.IsCompleted);
         Assert.False(secondValidationStarted.Task.IsCompleted);
         Assert.Equal("SESSDATA=qr-session", LoginHelper.GetLoginInfoCookiesString());
 
