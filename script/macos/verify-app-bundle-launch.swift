@@ -1,5 +1,4 @@
 import AppKit
-import CoreFoundation
 import Darwin
 import Foundation
 
@@ -38,48 +37,30 @@ private final class OpenResult: @unchecked Sendable {
     }
 }
 
-private final class ApplicationLifecycleState: @unchecked Sendable {
-    private let lock = NSLock()
-    private var finishedLaunching = false
-    private var terminated = false
+private let lifecycleObservationInterval: TimeInterval = 0.05
 
-    func update(from application: NSRunningApplication) {
-        lock.lock()
-        finishedLaunching = application.isFinishedLaunching
-        terminated = application.isTerminated
-        lock.unlock()
+private func advanceMainRunLoop() {
+    // The date bounds one observation interval only. It is not a launch or
+    // termination deadline; the CI job owns the single 20-minute hang limit.
+    RunLoop.current.run(until: Date(timeIntervalSinceNow: lifecycleObservationInterval))
+}
 
-        let mainRunLoop = CFRunLoopGetMain()
-        CFRunLoopPerformBlock(mainRunLoop, CFRunLoopMode.defaultMode.rawValue) {
-            CFRunLoopStop(mainRunLoop)
+private func waitForLaunchResolution(
+    _ application: NSRunningApplication
+) -> (finishedLaunching: Bool, terminated: Bool) {
+    while true {
+        let state = (application.isFinishedLaunching, application.isTerminated)
+        if state.0 || state.1 {
+            return state
         }
-        CFRunLoopWakeUp(mainRunLoop)
+
+        advanceMainRunLoop()
     }
+}
 
-    func waitForLaunchResolution() -> (finishedLaunching: Bool, terminated: Bool) {
-        while true {
-            lock.lock()
-            let result = (finishedLaunching, terminated)
-            lock.unlock()
-            if result.0 || result.1 {
-                return result
-            }
-
-            CFRunLoopRun()
-        }
-    }
-
-    func waitForTermination() {
-        while true {
-            lock.lock()
-            let isTerminated = terminated
-            lock.unlock()
-            if isTerminated {
-                return
-            }
-
-            CFRunLoopRun()
-        }
+private func waitForTermination(_ application: NSRunningApplication) {
+    while !application.isTerminated {
+        advanceMainRunLoop()
     }
 }
 
@@ -126,31 +107,17 @@ guard let application = openedApplication else {
     fail("macOS reported no running application for app bundle \(appURL.path).")
 }
 
-private let lifecycle = ApplicationLifecycleState()
-let launchObservation = application.observe(\.isFinishedLaunching, options: [.initial, .new]) {
-    runningApplication, _ in
-    lifecycle.update(from: runningApplication)
-}
-let terminationObservation = application.observe(\.isTerminated, options: [.initial, .new]) {
-    runningApplication, _ in
-    lifecycle.update(from: runningApplication)
-}
-defer {
-    launchObservation.invalidate()
-    terminationObservation.invalidate()
-}
-
 guard let launchedBundleURL = application.bundleURL?.resolvingSymlinksInPath().standardizedFileURL,
       launchedBundleURL == appURL else {
     let actual = application.bundleURL?.path ?? "<none>"
     if !application.isTerminated {
         _ = application.forceTerminate()
-        lifecycle.waitForTermination()
+        waitForTermination(application)
     }
     fail("NSWorkspace launched an unexpected bundle. expected=\(appURL.path) actual=\(actual)")
 }
 
-let launchState = lifecycle.waitForLaunchResolution()
+let launchState = waitForLaunchResolution(application)
 if launchState.terminated || application.isTerminated {
     fail("App bundle terminated before macOS reported isFinishedLaunching. pid=\(application.processIdentifier)")
 }
@@ -164,10 +131,10 @@ print("[INFO] macOS reported isFinishedLaunching for \(appURL.path) (pid \(pid))
 if !application.terminate() {
     if !application.isTerminated {
         _ = application.forceTerminate()
-        lifecycle.waitForTermination()
+        waitForTermination(application)
     }
     fail("macOS could not complete the normal app termination request. pid=\(pid)")
 }
 
-lifecycle.waitForTermination()
+waitForTermination(application)
 print("[INFO] macOS reported isTerminated for \(appURL.path) (pid \(pid)).")

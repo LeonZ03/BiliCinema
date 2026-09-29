@@ -564,8 +564,9 @@ public sealed class ReleaseWorkflowArchitectureTests
         Assert.Contains("NSWorkspace.shared.openApplication", verifyAppBundleLaunchSource, StringComparison.Ordinal);
         Assert.Contains("isFinishedLaunching", verifyAppBundleLaunchSource, StringComparison.Ordinal);
         Assert.Contains("isTerminated", verifyAppBundleLaunchSource, StringComparison.Ordinal);
-        Assert.Contains("CFRunLoopPerformBlock", verifyAppBundleLaunchSource, StringComparison.Ordinal);
-        Assert.Contains("CFRunLoopRun()", verifyAppBundleLaunchSource, StringComparison.Ordinal);
+        Assert.Contains("RunLoop.current.run", verifyAppBundleLaunchSource, StringComparison.Ordinal);
+        Assert.Contains("application.isFinishedLaunching", verifyAppBundleLaunchSource, StringComparison.Ordinal);
+        Assert.Contains("application.isTerminated", verifyAppBundleLaunchSource, StringComparison.Ordinal);
         Assert.Contains("createsNewApplicationInstance = true", verifyAppBundleLaunchSource, StringComparison.Ordinal);
         Assert.Contains("allowsRunningApplicationSubstitution = false", verifyAppBundleLaunchSource, StringComparison.Ordinal);
         Assert.DoesNotContain("events.jsonl", verifyAppBundleLaunchSource, StringComparison.Ordinal);
