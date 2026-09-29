@@ -134,6 +134,7 @@ jobs:
   release-gate:
     name: Release gate (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
     needs: external-assets-preflight
     strategy:
       fail-fast: false
@@ -561,6 +562,7 @@ jobs:
             candidate/publish-manifest-linux-arm64-deb.json
   build-macos:
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
     needs: changelog
     strategy:
       fail-fast: false
