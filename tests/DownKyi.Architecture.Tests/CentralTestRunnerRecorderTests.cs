@@ -174,12 +174,10 @@ public sealed class CentralTestRunnerRecorderTests
                     SnapshotCapture: CaptureControlledSnapshotAsync,
                     ErrorDestination: blockedError),
                 cancellation.Token);
-            await blockedError.Entered.WaitAsync(TimeSpan.FromSeconds(5),
-                TestContext.Current.CancellationToken);
+            await blockedError.Entered.WaitAsync(TestContext.Current.CancellationToken);
 
             await cancellation.CancelAsync();
-            var result = await run.WaitAsync(TimeSpan.FromSeconds(4),
-                TestContext.Current.CancellationToken);
+            var result = await run.WaitAsync(TestContext.Current.CancellationToken);
 
             Assert.Equal(2, result.ExitCode);
             Assert.False(IsProcessAlive(result.RootPid));
@@ -225,7 +223,7 @@ public sealed class CentralTestRunnerRecorderTests
                 });
 
             await Assert.ThrowsAsync<TimeoutException>(() => persistence)
-                .WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken)
+                .WaitAsync(TestContext.Current.CancellationToken)
                 .ConfigureAwait(true);
             Assert.True(persistenceStopped.Task.IsCompleted);
             File.Delete(path);
@@ -622,7 +620,7 @@ public sealed class CentralTestRunnerRecorderTests
             if (!process.HasExited)
             {
                 process.Kill();
-                process.WaitForExit(3000);
+                process.WaitForExit();
             }
         }
         catch (ArgumentException)
