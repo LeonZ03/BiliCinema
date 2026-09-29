@@ -34,7 +34,7 @@ public interface IFfmpegMediaMuxer
 
 public interface IFfmpegMediaStreamValidator
 {
-    Task<bool> HasRequiredStreamsAsync(
+    Task<bool> ValidateRequiredStreamsAsync(
         string mediaFile,
         bool requireAudio,
         bool requireVideo,
@@ -79,14 +79,14 @@ public sealed class FfmpegProcessor : IFfmpegMediaMuxer, IFfmpegMediaStreamValid
             loggerFactory.CreateLogger<FfmpegConcatRuntime>());
     }
 
-    public async Task<bool> HasRequiredStreamsAsync(
+    public async Task<bool> ValidateRequiredStreamsAsync(
         string mediaFile,
         bool requireAudio,
         bool requireVideo,
         CancellationToken cancellationToken = default)
     {
         using var slot = await _operationGate.EnterAsync(cancellationToken).ConfigureAwait(false);
-        return await _mediaValidator.HasRequiredStreamsAsync(
+        return await _mediaValidator.ValidateRequiredStreamsAsync(
                 mediaFile,
                 requireAudio,
                 requireVideo,

@@ -2,6 +2,12 @@ using System.Globalization;
 
 namespace DownKyi.Core.FFmpeg;
 
+internal enum FfmpegMediaStreamKind
+{
+    Audio,
+    Video
+}
+
 internal static class FfmpegCommandFactory
 {
     public static FfmpegCommand BuildMerge(
@@ -212,6 +218,34 @@ internal static class FfmpegCommandFactory
                 "-"
             ],
             "seek-decode");
+    }
+
+    public static FfmpegCommand BuildRequiredStreamDecode(
+        string mediaFile,
+        FfmpegMediaStreamKind streamKind)
+    {
+        var (streamSpecifier, frameLimit, operation) = streamKind switch
+        {
+            FfmpegMediaStreamKind.Audio => ("0:a:0", "-frames:a", "decode-required-audio"),
+            FfmpegMediaStreamKind.Video => ("0:v:0", "-frames:v", "decode-required-video"),
+            _ => throw new ArgumentOutOfRangeException(nameof(streamKind), streamKind, "Unsupported media stream kind.")
+        };
+        return new FfmpegCommand(
+            FfmpegExecutableLocator.Ffmpeg,
+            [
+                "-hide_banner",
+                "-nostdin",
+                "-v", "error",
+                "-xerror",
+                "-i", mediaFile,
+                "-map", streamSpecifier,
+                frameLimit, "1",
+                "-progress", "pipe:1",
+                "-nostats",
+                "-f", "null",
+                "-"
+            ],
+            operation);
     }
 
     public static FfmpegCommand BuildValidateInput(string mediaFile)
