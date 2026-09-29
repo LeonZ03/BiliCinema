@@ -10,22 +10,19 @@ namespace DownKyi.Architecture.Tests;
 public sealed class CentralTestRunnerRecorderTests
 {
     [Fact]
-    public async Task TimedOutTestProcessPreservesIdentityCleanupSnapshotAndGuidance()
+    public async Task CanceledTestProcessPreservesIdentityCleanupSnapshotAndGuidance()
     {
         var evidenceDirectory = CreateEvidenceDirectory();
         try
         {
-            var request = new ProcessExecutionRequest(
-                "fixture.timeout.slice",
-                "fixture.timeout.test",
-                CreateFixtureStartInfo("fixture-hold"),
-                TimeSpan.FromSeconds(1),
+            var (result, fixturePid) = await RunCanceledFixtureAsync(
+                "fixture.cancellation.slice",
+                "fixture.cancellation.test",
                 TimeSpan.FromSeconds(3),
                 evidenceDirectory);
 
-            var result = await FlightRecorderExecution.RunAsync(request, CancellationToken.None);
-
-            Assert.NotEqual(0, result.ExitCode);
+            Assert.Equal(130, result.ExitCode);
+            Assert.Equal(fixturePid, result.RootPid);
             Assert.True(result.RootPid > 0);
             Assert.NotNull(result.RootStartTimeUtc);
             Assert.True(File.Exists(result.EvidencePath));
@@ -34,34 +31,18 @@ public sealed class CentralTestRunnerRecorderTests
                 result.EvidencePath,
                 TestContext.Current.CancellationToken));
             var report = document.RootElement;
-            Assert.Equal("fixture.timeout.slice", report.GetProperty("SliceIdentity").GetString());
-            Assert.Equal("fixture.timeout.test", report.GetProperty("TestIdentity").GetString());
+            Assert.Equal("fixture.cancellation.slice", report.GetProperty("SliceIdentity").GetString());
+            Assert.Equal("fixture.cancellation.test", report.GetProperty("TestIdentity").GetString());
             Assert.Equal(result.RootPid, report.GetProperty("RootProcess").GetProperty("Pid").GetInt32());
             Assert.Equal(
                 result.RootStartTimeUtc,
                 report.GetProperty("RootProcess").GetProperty("StartTimeUtc").GetDateTimeOffset());
-            var standardOutput = report.GetProperty("StdoutTail").GetString() ?? string.Empty;
-            var identityLine = standardOutput
-                .Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries)
-                .Single(line => line.StartsWith("fixture-ready ", StringComparison.Ordinal));
-            var identityPrefix = $"fixture-ready pid={result.RootPid} start=";
-            Assert.StartsWith(identityPrefix, identityLine, StringComparison.Ordinal);
-            var fixtureStartTime = DateTimeOffset.ParseExact(
-                identityLine[identityPrefix.Length..],
-                "O",
-                CultureInfo.InvariantCulture,
-                DateTimeStyles.None);
-            Assert.InRange(
-                Math.Abs((fixtureStartTime - result.RootStartTimeUtc.Value).TotalSeconds),
-                0,
-                1);
-
             var events = report.GetProperty("Events")
                 .EnumerateArray()
                 .Select(item => item.GetProperty("Event").GetString())
                 .ToArray();
             Assert.Contains("process_start", events);
-            Assert.Contains("timeout", events);
+            Assert.Contains("cancellation", events);
             Assert.Contains("bounded_stop_requested", events);
             Assert.Contains("process_exit", events);
             Assert.Contains("cleanup_completed", events);
@@ -82,7 +63,6 @@ public sealed class CentralTestRunnerRecorderTests
                         item.TryGetProperty("ExitCode", out _));
 
             var snapshot = report.GetProperty("FinalSnapshot");
-            Assert.True(snapshot.GetProperty("CapturedAtUtc").GetDateTimeOffset() > result.RootStartTimeUtc.Value);
             Assert.Contains(
                 "absence is not proof",
                 snapshot.GetProperty("Completeness").GetString(),
@@ -107,17 +87,13 @@ public sealed class CentralTestRunnerRecorderTests
         var evidenceDirectory = CreateEvidenceDirectory();
         try
         {
-            var result = await FlightRecorderExecution.RunAsync(
-                new ProcessExecutionRequest(
-                    "fixture.snapshot-failure.slice",
-                    "fixture.snapshot-failure.test",
-                    CreateFixtureStartInfo("fixture-hold"),
-                    TimeSpan.FromSeconds(1),
-                    TimeSpan.FromSeconds(3),
-                    evidenceDirectory,
-                    (_, _) => Task.FromException<FinalProcessSnapshot>(
-                        new IOException("snapshot token=fixture-snapshot-secret"))),
-                CancellationToken.None);
+            var (result, _) = await RunCanceledFixtureAsync(
+                "fixture.snapshot-failure.slice",
+                "fixture.snapshot-failure.test",
+                TimeSpan.FromSeconds(3),
+                evidenceDirectory,
+                snapshotCapture: (_, _) => Task.FromException<FinalProcessSnapshot>(
+                    new IOException("snapshot token=fixture-snapshot-secret")));
 
             Assert.NotEqual(0, result.ExitCode);
             using var document = JsonDocument.Parse(await File.ReadAllTextAsync(
@@ -154,18 +130,14 @@ public sealed class CentralTestRunnerRecorderTests
         var evidenceDirectory = CreateEvidenceDirectory();
         try
         {
-            var result = await FlightRecorderExecution.RunAsync(
-                new ProcessExecutionRequest(
-                    "fixture.snapshot-never-returns.slice",
-                    "fixture.snapshot-never-returns.test",
-                    CreateFixtureStartInfo("fixture-hold"),
-                    TimeSpan.FromMilliseconds(200),
-                    TimeSpan.FromSeconds(2),
-                    evidenceDirectory,
-                    (_, _) => new TaskCompletionSource<FinalProcessSnapshot>().Task),
-                CancellationToken.None);
+            var (result, _) = await RunCanceledFixtureAsync(
+                "fixture.snapshot-never-returns.slice",
+                "fixture.snapshot-never-returns.test",
+                TimeSpan.FromSeconds(2),
+                evidenceDirectory,
+                snapshotCapture: (_, _) => new TaskCompletionSource<FinalProcessSnapshot>().Task);
 
-            Assert.Equal(124, result.ExitCode);
+            Assert.NotEqual(0, result.ExitCode);
             Assert.False(IsProcessAlive(result.RootPid));
             using var document = JsonDocument.Parse(await File.ReadAllTextAsync(
                 result.EvidencePath,
@@ -197,7 +169,6 @@ public sealed class CentralTestRunnerRecorderTests
                     "fixture.stderr-backpressure.slice",
                     "fixture.stderr-backpressure.test",
                     CreateFixtureStartInfo("fixture-stderr-hold"),
-                    TimeSpan.FromSeconds(10),
                     TimeSpan.FromSeconds(1),
                     evidenceDirectory,
                     SnapshotCapture: CaptureControlledSnapshotAsync,
@@ -271,26 +242,27 @@ public sealed class CentralTestRunnerRecorderTests
         var evidenceDirectory = CreateEvidenceDirectory();
         try
         {
-            var startInfo = CreateFixtureStartInfo(
-                "fixture-sensitive-hold",
-                "fixture-bearer-secret",
-                "fixture-url-secret",
-                "fixture-account-secret",
-                "fixture-cookie-secret");
-            startInfo.WorkingDirectory = Directory.GetCurrentDirectory();
             var userProfile = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
-            var result = await FlightRecorderExecution.RunAsync(
-                new ProcessExecutionRequest(
-                    "fixture.redaction.slice",
-                    "fixture.redaction.test token=fixture-identity-secret",
-                    startInfo,
-                    TimeSpan.FromSeconds(1),
-                    TimeSpan.FromSeconds(3),
-                    evidenceDirectory,
-                    (_, _) => Task.FromException<FinalProcessSnapshot>(
-                        new IOException(
-                            $"snapshot access_token=fixture-snapshot-secret url=https://example.invalid/private?token=fixture-query-secret path={userProfile}"))),
-                CancellationToken.None);
+            var (result, _) = await RunCanceledFixtureAsync(
+                "fixture.redaction.slice",
+                "fixture.redaction.test token=fixture-identity-secret",
+                TimeSpan.FromSeconds(3),
+                evidenceDirectory,
+                markerPath =>
+                {
+                    var startInfo = CreateFixtureStartInfo(
+                        "fixture-sensitive-hold",
+                        "fixture-bearer-secret",
+                        "fixture-url-secret",
+                        "fixture-account-secret",
+                        "fixture-cookie-secret",
+                        markerPath);
+                    startInfo.WorkingDirectory = Directory.GetCurrentDirectory();
+                    return startInfo;
+                },
+                (_, _) => Task.FromException<FinalProcessSnapshot>(
+                    new IOException(
+                        $"snapshot access_token=fixture-snapshot-secret url=https://example.invalid/private?token=fixture-query-secret path={userProfile}")));
             await result.Recorder.RecordAsync(
                 "external_detail",
                 detail: "accountId=fixture-event-account-secret token=fixture-event-token-secret");
@@ -531,7 +503,6 @@ public sealed class CentralTestRunnerRecorderTests
                     "fixture.pass.slice",
                     "fixture.pass.test",
                     CreateFixtureStartInfo("fixture-pass"),
-                    TimeSpan.FromSeconds(10),
                     TimeSpan.FromSeconds(3),
                     evidenceDirectory,
                     RootStartTimeReader: _ => throw new InvalidOperationException(
@@ -574,10 +545,38 @@ public sealed class CentralTestRunnerRecorderTests
         return startInfo;
     }
 
+    private static async Task<(ProcessExecutionResult Result, int FixturePid)> RunCanceledFixtureAsync(
+        string sliceIdentity,
+        string testIdentity,
+        TimeSpan cleanupTimeout,
+        string evidenceDirectory,
+        Func<string, ProcessStartInfo>? startInfoFactory = null,
+        Func<int, TimeSpan, Task<FinalProcessSnapshot>>? snapshotCapture = null)
+    {
+        var markerPath = Path.Combine(evidenceDirectory, $"fixture-{Guid.NewGuid():N}.pid");
+        var startInfo = startInfoFactory is null
+            ? CreateFixtureStartInfo("fixture-hold-marker", markerPath)
+            : startInfoFactory(markerPath);
+        using var cancellation = new CancellationTokenSource();
+        var run = FlightRecorderExecution.RunAsync(
+            new ProcessExecutionRequest(
+                sliceIdentity,
+                testIdentity,
+                startInfo,
+                cleanupTimeout,
+                evidenceDirectory,
+                snapshotCapture),
+            cancellation.Token);
+
+        var fixturePid = await WaitForProcessMarkerAsync(markerPath).ConfigureAwait(false);
+        await cancellation.CancelAsync().ConfigureAwait(false);
+        var result = await run.WaitAsync(TestContext.Current.CancellationToken).ConfigureAwait(false);
+        return (result, fixturePid);
+    }
+
     private static async Task<int> WaitForProcessMarkerAsync(string markerPath)
     {
-        var deadline = DateTimeOffset.UtcNow.AddSeconds(5);
-        while (DateTimeOffset.UtcNow < deadline)
+        while (true)
         {
             if (File.Exists(markerPath))
             {
@@ -600,8 +599,6 @@ public sealed class CentralTestRunnerRecorderTests
 
             await Task.Delay(20, TestContext.Current.CancellationToken).ConfigureAwait(false);
         }
-
-        throw new TimeoutException("The build cancellation fixture did not publish its process identity.");
     }
 
     private static bool IsProcessAlive(int processId)

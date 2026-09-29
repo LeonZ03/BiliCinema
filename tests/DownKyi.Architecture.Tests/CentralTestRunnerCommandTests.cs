@@ -5,6 +5,15 @@ namespace DownKyi.Architecture.Tests;
 public sealed class CentralTestRunnerCommandTests
 {
     [Fact]
+    public void CommandOptionsRejectsRemovedPerProjectTimeout()
+    {
+        var exception = Assert.Throws<ArgumentException>(
+            () => CommandOptions.Parse(["--timeout-seconds", "300"]));
+
+        Assert.Contains("Unknown option", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task RunSolutionRejectsEmptyProjectDiscovery()
     {
         var repositoryRoot = await CreateRepositoryAsync();

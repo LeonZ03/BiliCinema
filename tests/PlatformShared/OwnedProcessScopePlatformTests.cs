@@ -116,7 +116,7 @@ public sealed class OwnedProcessScopePlatformTests
                 run = FlightRecorderExecution.RunAsync(
                     new ProcessExecutionRequest(
                         $"scope.snapshot-failure.{iteration}", "root-child-grandchild", startInfo,
-                        TimeSpan.FromSeconds(20), TimeSpan.FromSeconds(5), directory,
+                        TimeSpan.FromSeconds(5), directory,
                         (_, _) => Task.FromException<FinalProcessSnapshot>(new IOException("snapshot unavailable"))),
                     cancellation.Token);
 
@@ -265,7 +265,7 @@ public sealed class OwnedProcessScopePlatformTests
 
             var run = FlightRecorderExecution.RunAsync(new ProcessExecutionRequest(
                 "scope.root-exited", "pipe-holder", startInfo,
-                TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(2), directory),
+                TimeSpan.FromSeconds(2), directory),
                 TestContext.Current.CancellationToken);
             childPid = await ReadMarkerAsync(marker).ConfigureAwait(true);
             Assert.True(IsAlive(childPid.Value));

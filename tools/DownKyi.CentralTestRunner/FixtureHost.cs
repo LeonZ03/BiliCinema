@@ -185,6 +185,13 @@ internal static class FixtureHost
             .ConfigureAwait(false);
         await Console.Out.FlushAsync().ConfigureAwait(false);
         await Console.Error.FlushAsync().ConfigureAwait(false);
+        if (args.Length > 5)
+        {
+            await File.WriteAllTextAsync(
+                args[5],
+                Environment.ProcessId.ToString(System.Globalization.CultureInfo.InvariantCulture))
+                .ConfigureAwait(false);
+        }
         await Task.Delay(Timeout.InfiniteTimeSpan).ConfigureAwait(false);
         return 0;
     }

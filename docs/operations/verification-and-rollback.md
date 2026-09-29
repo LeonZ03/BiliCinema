@@ -51,7 +51,7 @@ Repository 測試只能經由 `script/test-project.ps1` 或
 project/platform allowlist、canonical invocation、必要的 in-process xUnit
 routing、TRX validation 與 exit result。
 
-正常 PASS 不保留 flight-recorder evidence。FAIL、timeout 或 abnormal cleanup
+正常 PASS 不保留 flight-recorder evidence。FAIL、cancellation 或 abnormal cleanup
 會在 `artifacts/test-flight-recorder` 保存 slice/root process identity、事件、
 bounded stdout/stderr 與一次 best-effort final process snapshot；child 未被
 觀察到不代表已證明不存在。詳細 locator 見 `docs/testing/README.md`。

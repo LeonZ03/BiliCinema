@@ -7,7 +7,6 @@ internal sealed record ProcessExecutionRequest(
     string SliceIdentity,
     string TestIdentity,
     ProcessStartInfo StartInfo,
-    TimeSpan Timeout,
     TimeSpan CleanupTimeout,
     string EvidenceDirectory,
     Func<int, TimeSpan, Task<FinalProcessSnapshot>>? SnapshotCapture = null,
@@ -74,19 +73,14 @@ internal static class FlightRecorderExecution
                 startTimeUtc: rootStartTime);
             TracePhase(recorder, rootPid, "process_wait_begin");
 
-            using var timeout = new CancellationTokenSource(request.Timeout);
-            using var waitCancellation = CancellationTokenSource.CreateLinkedTokenSource(
-                cancellationToken,
-                timeout.Token);
-
             try
             {
-                await process.WaitForExitAsync(waitCancellation.Token).ConfigureAwait(false);
+                await process.WaitForExitAsync(cancellationToken).ConfigureAwait(false);
             }
-            catch (OperationCanceledException)
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {
                 var cleanup = new CleanupDeadline(request.CleanupTimeout);
-                var eventName = cancellationToken.IsCancellationRequested ? "cancellation" : "timeout";
+                const string eventName = "cancellation";
                 recorder.RecordInMemory(eventName, pid: rootPid);
                 TracePhase(recorder, rootPid, eventName);
                 TracePhase(recorder, rootPid, "snapshot_begin");
@@ -106,9 +100,7 @@ internal static class FlightRecorderExecution
                 await recorder.FinalizeFailureAsync(eventName, standardOutput, standardError, cleanup)
                     .ConfigureAwait(false);
                 TracePhase(recorder, rootPid, "report_returned");
-                var exitCode = string.Equals(eventName, "timeout", StringComparison.Ordinal)
-                    ? 124
-                    : stopped && drained ? 130 : 2;
+                var exitCode = stopped && drained ? 130 : 2;
                 return new ProcessExecutionResult(
                     exitCode,
                     rootPid,

@@ -23,7 +23,6 @@ public sealed class FlightRecorderOutputTests
                     "fixture.long-line.slice",
                     "fixture.long-line.test",
                     CreateFixtureStartInfo(secret),
-                    TimeSpan.FromSeconds(10),
                     TimeSpan.FromSeconds(3),
                     evidenceDirectory),
                 CancellationToken.None);
@@ -61,7 +60,6 @@ public sealed class FlightRecorderOutputTests
                     "fixture.identity-failure.slice",
                     "fixture.identity-failure.test",
                     CreateFixtureStartInfo(secret),
-                    TimeSpan.FromSeconds(10),
                     TimeSpan.FromSeconds(3),
                     evidenceDirectory,
                     RootStartTimeReader: _ => throw new System.ComponentModel.Win32Exception(
