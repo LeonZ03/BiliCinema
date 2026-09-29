@@ -21,12 +21,11 @@ public sealed class MacAriaRuntimeIntegrityTests
     {
         var fixtureRoot = CreateTemporaryDirectory();
         var appPath = Path.Combine(fixtureRoot, "Fixture.app");
-        var runtimeIdentifier = CurrentRuntimeIdentifier();
 
         try
         {
             CreateAppFixture(fixtureRoot, appPath);
-            AssertSuccess(Run("/bin/bash", fixtureRoot, IntegrityScript, "verify", appPath, runtimeIdentifier));
+            AssertSuccess(Run("/bin/bash", fixtureRoot, IntegrityScript, "verify", appPath));
 
             var ariaExecutable = Path.Combine(appPath, "Contents", "MacOS", "aria2", "aria2c");
             var originalHash = HashFile(ariaExecutable);
@@ -38,12 +37,11 @@ public sealed class MacAriaRuntimeIntegrityTests
                 fixtureRoot,
                 IntegrityScript,
                 "verify",
-                appPath,
-                runtimeIdentifier);
+                appPath);
             AssertFailureContains(staleAfterNestedSigning, "does not match runtime sidecar");
 
             AssertSuccess(Run("/bin/bash", fixtureRoot, IntegrityScript, "refresh", appPath));
-            AssertSuccess(Run("/bin/bash", fixtureRoot, IntegrityScript, "verify", appPath, runtimeIdentifier));
+            AssertSuccess(Run("/bin/bash", fixtureRoot, IntegrityScript, "verify", appPath));
 
             AssertSuccess(Run(
                 "/bin/bash",
@@ -52,22 +50,19 @@ public sealed class MacAriaRuntimeIntegrityTests
                 Path.Combine(RepositoryRoot, "script", "macos", "sign.sh"),
                 appPath));
             AssertSuccess(Run("/usr/bin/codesign", fixtureRoot, "--verify", "--deep", "--strict", appPath));
-            AssertSuccess(Run("/bin/bash", fixtureRoot, IntegrityScript, "verify", appPath, runtimeIdentifier));
+            AssertSuccess(Run("/bin/bash", fixtureRoot, IntegrityScript, "verify", appPath));
             AssertFailureContains(
                 Run("/bin/bash", fixtureRoot, IntegrityScript, "refresh", appPath),
                 "refusing to modify the runtime checksum after the outer app signature is sealed");
 
-            var copiedApp = AssertDmgAndInstalledCopyRoundtrip(
-                fixtureRoot,
-                appPath,
-                runtimeIdentifier);
+            var copiedApp = AssertDmgAndInstalledCopyRoundtrip(fixtureRoot, appPath);
 
             File.AppendAllText(
                 Path.Combine(copiedApp, "Contents", "MacOS", "aria2", "aria2c"),
                 "tamper",
                 new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
             AssertFailureContains(
-                Run("/bin/bash", fixtureRoot, IntegrityScript, "verify", copiedApp, runtimeIdentifier),
+                Run("/bin/bash", fixtureRoot, IntegrityScript, "verify", copiedApp),
                 "does not match runtime sidecar");
 
             File.WriteAllText(
@@ -75,7 +70,7 @@ public sealed class MacAriaRuntimeIntegrityTests
                 new string('0', 64),
                 new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
             AssertFailureContains(
-                Run("/bin/bash", fixtureRoot, IntegrityScript, "verify", appPath, runtimeIdentifier),
+                Run("/bin/bash", fixtureRoot, IntegrityScript, "verify", appPath),
                 "does not match runtime sidecar");
         }
         finally
@@ -89,7 +84,6 @@ public sealed class MacAriaRuntimeIntegrityTests
     {
         var fixtureRoot = CreateTemporaryDirectory();
         var appPath = Path.Combine(fixtureRoot, "Fixture.app");
-        var runtimeIdentifier = CurrentRuntimeIdentifier();
 
         try
         {
@@ -103,7 +97,7 @@ public sealed class MacAriaRuntimeIntegrityTests
                 "aria2c.sha256");
             File.WriteAllText(checksumTarget, "not-a-digest");
             AssertFailureContains(
-                Run("/bin/bash", fixtureRoot, IntegrityScript, "verify", appPath, runtimeIdentifier),
+                Run("/bin/bash", fixtureRoot, IntegrityScript, "verify", appPath),
                 "exactly one 64-character SHA-256 digest");
 
             var checksumLink = Path.Combine(appPath, "Contents", "MacOS", "aria2", "aria2c.sha256");
@@ -115,7 +109,7 @@ public sealed class MacAriaRuntimeIntegrityTests
                 "aria2",
                 "aria2c")));
             AssertFailureContains(
-                Run("/bin/bash", fixtureRoot, IntegrityScript, "verify", appPath, runtimeIdentifier),
+                Run("/bin/bash", fixtureRoot, IntegrityScript, "verify", appPath),
                 "must remain a symlink");
         }
         finally
@@ -126,8 +120,7 @@ public sealed class MacAriaRuntimeIntegrityTests
 
     private static string AssertDmgAndInstalledCopyRoundtrip(
         string fixtureRoot,
-        string appPath,
-        string runtimeIdentifier)
+        string appPath)
     {
         var stagingDirectory = Path.Combine(fixtureRoot, "dmg-staging");
         var stagedApp = Path.Combine(stagingDirectory, Path.GetFileName(appPath));
@@ -169,8 +162,7 @@ public sealed class MacAriaRuntimeIntegrityTests
                 fixtureRoot,
                 IntegrityScript,
                 "verify",
-                mountedApp,
-                runtimeIdentifier));
+                mountedApp));
             AssertSuccess(Run("/usr/bin/codesign", fixtureRoot, "--verify", "--deep", "--strict", mountedApp));
             AssertSuccess(Run("/usr/bin/ditto", fixtureRoot, mountedApp, copiedApp));
         }
@@ -184,8 +176,7 @@ public sealed class MacAriaRuntimeIntegrityTests
             fixtureRoot,
             IntegrityScript,
             "verify",
-            copiedApp,
-            runtimeIdentifier));
+            copiedApp));
         AssertSuccess(Run("/usr/bin/codesign", fixtureRoot, "--verify", "--deep", "--strict", copiedApp));
         return copiedApp;
     }
@@ -244,14 +235,6 @@ public sealed class MacAriaRuntimeIntegrityTests
             """,
             new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
     }
-
-    private static string CurrentRuntimeIdentifier() => $"osx-{RuntimeInformation.ProcessArchitecture switch
-    {
-        Architecture.X64 => "x64",
-        Architecture.Arm64 => "arm64",
-        _ => throw new PlatformNotSupportedException(
-            $"Unsupported macOS architecture: {RuntimeInformation.ProcessArchitecture}")
-    }}";
 
     private static string CurrentArchitecture() => RuntimeInformation.ProcessArchitecture switch
     {

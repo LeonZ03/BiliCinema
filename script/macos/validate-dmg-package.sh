@@ -18,6 +18,19 @@ cleanup() {
 }
 trap cleanup EXIT
 
+validate_app_boundary() {
+  local app_path="$1"
+  local boundary="$2"
+
+  echo "[INFO] Validating $boundary app boundary: $app_path"
+  "$SCRIPT_DIR/verify-runtime-architecture.sh" "$app_path" "$EXPECTED_RUNTIME_IDENTIFIER"
+  "$SCRIPT_DIR/verify-app-signature.sh" "$app_path"
+  /bin/bash "$SCRIPT_DIR/aria2-runtime-integrity.sh" verify "$app_path"
+  /bin/bash "$SCRIPT_DIR/verify-app-loader.sh" "$app_path"
+  /usr/bin/xcrun swift "$SCRIPT_DIR/verify-app-bundle-launch.swift" "$app_path"
+  /bin/bash "$SCRIPT_DIR/verify-aria2-rpc-readiness.sh" "$app_path"
+}
+
 hdiutil attach -readonly -nobrowse -mountpoint "$MOUNT_POINT" "$DMG_PATH" >/dev/null
 ATTACHED=true
 
@@ -35,18 +48,9 @@ if [ "$SHORT_VERSION" != "$EXPECTED_VERSION" ] || [ "$BUNDLE_VERSION" != "$EXPEC
   exit 1
 fi
 
-"$SCRIPT_DIR/verify-runtime-architecture.sh" "$APP_PATH" "$EXPECTED_RUNTIME_IDENTIFIER"
-
-"$SCRIPT_DIR/verify-app.sh" "$APP_PATH"
-/bin/bash "$SCRIPT_DIR/aria2-runtime-integrity.sh" verify "$APP_PATH" "$EXPECTED_RUNTIME_IDENTIFIER"
-/bin/bash "$SCRIPT_DIR/verify-aria2-runtime-readiness.sh" "$APP_PATH" "$EXPECTED_RUNTIME_IDENTIFIER"
-"$SCRIPT_DIR/verify-app-launch.sh" "$APP_PATH"
+validate_app_boundary "$APP_PATH" "mounted DMG"
 
 COPIED_APP_PATH="$COPY_ROOT/$(basename "$APP_PATH")"
 /usr/bin/ditto "$APP_PATH" "$COPIED_APP_PATH"
 
-"$SCRIPT_DIR/verify-runtime-architecture.sh" "$COPIED_APP_PATH" "$EXPECTED_RUNTIME_IDENTIFIER"
-"$SCRIPT_DIR/verify-app.sh" "$COPIED_APP_PATH"
-/bin/bash "$SCRIPT_DIR/aria2-runtime-integrity.sh" verify "$COPIED_APP_PATH" "$EXPECTED_RUNTIME_IDENTIFIER"
-/bin/bash "$SCRIPT_DIR/verify-aria2-runtime-readiness.sh" "$COPIED_APP_PATH" "$EXPECTED_RUNTIME_IDENTIFIER"
-"$SCRIPT_DIR/verify-app-launch.sh" "$COPIED_APP_PATH"
+validate_app_boundary "$COPIED_APP_PATH" "installed copy"

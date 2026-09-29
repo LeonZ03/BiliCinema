@@ -105,11 +105,14 @@ jobs:
             script/macos/codesign-common.sh
             script/macos/prepare-app-layout.sh
             script/macos/sign.sh
-            script/macos/verify-app.sh
-            script/macos/verify-app-launch.sh
+            script/macos/verify-app-signature.sh
+            script/macos/verify-app-loader.sh
+            script/macos/verify-app-bundle-launch.swift
+            script/macos/aria2-runtime-integrity.sh
+            script/macos/verify-aria2-rpc-readiness.sh
             script/macos/sign-dmg.sh
             script/macos/verify-dmg.sh
-            script/macos/verify-dmg-contents.sh
+            script/macos/validate-dmg-package.sh
             docs/testing/test-runner-policy.json
             tools/DownKyi.CentralTestRunner
             tools/DownKyi.ProcessSupervision
@@ -442,11 +445,14 @@ jobs:
         env:
           MACOS_ADHOC_SIGNING: ${{ env.HAS_MACOS_SIGNING != 'true' }}
         run: |
-          chmod +x sign.sh verify-app.sh verify-app-launch.sh verify-runtime-architecture.sh sign-dmg.sh verify-dmg.sh verify-dmg-contents.sh
+          chmod +x sign.sh verify-app-signature.sh verify-app-loader.sh verify-runtime-architecture.sh aria2-runtime-integrity.sh verify-aria2-rpc-readiness.sh sign-dmg.sh verify-dmg.sh validate-dmg-package.sh
           ./sign.sh
-      - name: Strictly verify final app
+      - name: Verify signed app trust
         working-directory: tooling/script/macos
-        run: ./verify-app.sh
+        run: ./verify-app-signature.sh
+      - name: Verify signed aria2 integrity
+        working-directory: tooling/script/macos
+        run: ./aria2-runtime-integrity.sh verify 哔哩下载姬.app
       - name: Notarize and verify app
         if: ${{ env.HAS_MACOS_SIGNING == 'true' }}
         working-directory: tooling/script/macos
@@ -457,7 +463,7 @@ jobs:
           xcrun notarytool submit 哔哩下载姬.zip --apple-id '${{ secrets.APPLE_ID }}' --team-id '${{ secrets.TEAM_ID }}' --password '${{ secrets.APP_SPECIFIC_PASSWORD }}' --wait
           xcrun stapler staple 哔哩下载姬.app
           rm 哔哩下载姬.zip
-          ./verify-app.sh
+          ./verify-app-signature.sh
       - name: Create DMG
         working-directory: tooling/script/macos
         run: |
@@ -477,13 +483,13 @@ jobs:
           xcrun notarytool submit DownKyi-1.1.2-osx-${{ matrix.cpu }}.dmg --apple-id '${{ secrets.APPLE_ID }}' --team-id '${{ secrets.TEAM_ID }}' --password '${{ secrets.APP_SPECIFIC_PASSWORD }}' --wait
           xcrun stapler staple DownKyi-1.1.2-osx-${{ matrix.cpu }}.dmg
           MACOS_VERIFY_NOTARIZATION=true ./verify-dmg.sh DownKyi-1.1.2-osx-${{ matrix.cpu }}.dmg
-      - name: Remount DMG, strictly verify, and launch app
+      - name: Validate mounted and installed macOS package contracts
         working-directory: tooling/script/macos
         env:
           MACOS_VERIFY_GATEKEEPER: ${{ env.HAS_MACOS_SIGNING == 'true' }}
         run: |
           release_version="${EXPECTED_RELEASE_VERSION#v}"
-          ./verify-dmg-contents.sh \
+          ./validate-dmg-package.sh \
             DownKyi-1.1.2-osx-${{ matrix.cpu }}.dmg \
             "$release_version" \
             osx-${{ matrix.cpu }}

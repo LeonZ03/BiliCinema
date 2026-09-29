@@ -475,18 +475,20 @@ public sealed class ReleaseWorkflowArchitectureTests
             Path.Combine(RepositoryRoot, "script", "macos", "package.sh"));
         var prepareAppLayoutScript = File.ReadAllText(
             Path.Combine(RepositoryRoot, "script", "macos", "prepare-app-layout.sh"));
-        var verifyAppScript = File.ReadAllText(
-            Path.Combine(RepositoryRoot, "script", "macos", "verify-app.sh"));
-        var verifyAppLaunchScript = File.ReadAllText(
-            Path.Combine(RepositoryRoot, "script", "macos", "verify-app-launch.sh"));
+        var verifyAppSignatureScript = File.ReadAllText(
+            Path.Combine(RepositoryRoot, "script", "macos", "verify-app-signature.sh"));
+        var verifyAppLoaderScript = File.ReadAllText(
+            Path.Combine(RepositoryRoot, "script", "macos", "verify-app-loader.sh"));
+        var verifyAppBundleLaunchSource = File.ReadAllText(
+            Path.Combine(RepositoryRoot, "script", "macos", "verify-app-bundle-launch.swift"));
         var verifyDmgScript = File.ReadAllText(
             Path.Combine(RepositoryRoot, "script", "macos", "verify-dmg.sh"));
-        var verifyDmgContentsScript = File.ReadAllText(
-            Path.Combine(RepositoryRoot, "script", "macos", "verify-dmg-contents.sh"));
+        var validateDmgPackageScript = File.ReadAllText(
+            Path.Combine(RepositoryRoot, "script", "macos", "validate-dmg-package.sh"));
         var ariaIntegrityScript = File.ReadAllText(
             Path.Combine(RepositoryRoot, "script", "macos", "aria2-runtime-integrity.sh"));
         var ariaReadinessScript = File.ReadAllText(
-            Path.Combine(RepositoryRoot, "script", "macos", "verify-aria2-runtime-readiness.sh"));
+            Path.Combine(RepositoryRoot, "script", "macos", "verify-aria2-rpc-readiness.sh"));
 
         Assert.DoesNotContain(
             "MACOS_SIGNING_REQUIRED",
@@ -505,22 +507,24 @@ public sealed class ReleaseWorkflowArchitectureTests
         Assert.Contains("os: macos-15-intel", workflow, StringComparison.Ordinal);
         Assert.Contains("os: macos-15", workflow, StringComparison.Ordinal);
         Assert.Contains("Run macOS packaging regressions", workflow, StringComparison.Ordinal);
-        Assert.Contains("Verify packaged DMG contents and launch app", workflow, StringComparison.Ordinal);
+        Assert.Contains("Validate mounted and installed macOS package contracts", workflow, StringComparison.Ordinal);
+        Assert.DoesNotContain("Verify pre-sign aria2 supply-chain boundary", workflow, StringComparison.Ordinal);
 
         AssertInOrder(
             workflow,
             "Package app",
             "Validate packaged runtime",
-            "Verify pre-sign aria2 supply-chain boundary",
             "Sign app",
-            "Verify app signature",
+            "Verify signed app trust",
+            "Verify signed aria2 integrity",
             "Notarize app",
-            "Verify notarized app",
+            "Verify notarized app trust",
             "Create DMG",
             "Sign DMG",
             "Verify signed DMG",
             "Notarize DMG",
             "Verify notarized DMG",
+            "Validate mounted and installed macOS package contracts",
             "Hash DMG",
             "Upload build artifacts");
 
@@ -549,26 +553,38 @@ public sealed class ReleaseWorkflowArchitectureTests
         Assert.Contains("Contents/Resources/dotnet", prepareAppLayoutScript, StringComparison.Ordinal);
         Assert.Contains("ln -s", prepareAppLayoutScript, StringComparison.Ordinal);
 
-        Assert.Contains("codesign --verify --deep --strict --verbose=2", verifyAppScript, StringComparison.Ordinal);
-        Assert.Contains("spctl --assess --type execute", verifyAppScript, StringComparison.Ordinal);
-        Assert.Contains("DOWNKYI_DATA_DIR", verifyAppLaunchScript, StringComparison.Ordinal);
-        Assert.Contains("Application initialized.", verifyAppLaunchScript, StringComparison.Ordinal);
-        Assert.DoesNotContain("MACOS_LAUNCH_SECONDS", verifyAppLaunchScript, StringComparison.Ordinal);
-        Assert.Contains("kill -TERM \"$PID\"", verifyAppLaunchScript, StringComparison.Ordinal);
-        Assert.Contains("kill -KILL \"$PID\"", verifyAppLaunchScript, StringComparison.Ordinal);
+        Assert.Contains("codesign --verify --deep --strict --verbose=2", verifyAppSignatureScript, StringComparison.Ordinal);
+        Assert.Contains("spctl --assess --type execute", verifyAppSignatureScript, StringComparison.Ordinal);
+        Assert.Contains("Print :CFBundleExecutable", verifyAppLoaderScript, StringComparison.Ordinal);
+        Assert.Contains("libcoreclr.dylib", verifyAppLoaderScript, StringComparison.Ordinal);
+        Assert.Contains("/usr/sbin/lsof", verifyAppLoaderScript, StringComparison.Ordinal);
+        Assert.Contains("kill -KILL \"$PID\"", verifyAppLoaderScript, StringComparison.Ordinal);
+        Assert.DoesNotContain("events.jsonl", verifyAppLoaderScript, StringComparison.Ordinal);
+        Assert.DoesNotContain("LAUNCH_SECONDS", verifyAppLoaderScript, StringComparison.Ordinal);
+        Assert.Contains("NSWorkspace.shared.openApplication", verifyAppBundleLaunchSource, StringComparison.Ordinal);
+        Assert.Contains("isFinishedLaunching", verifyAppBundleLaunchSource, StringComparison.Ordinal);
+        Assert.Contains("isTerminated", verifyAppBundleLaunchSource, StringComparison.Ordinal);
+        Assert.Contains("CFRunLoopPerformBlock", verifyAppBundleLaunchSource, StringComparison.Ordinal);
+        Assert.Contains("CFRunLoopRun()", verifyAppBundleLaunchSource, StringComparison.Ordinal);
+        Assert.Contains("createsNewApplicationInstance = true", verifyAppBundleLaunchSource, StringComparison.Ordinal);
+        Assert.Contains("allowsRunningApplicationSubstitution = false", verifyAppBundleLaunchSource, StringComparison.Ordinal);
+        Assert.DoesNotContain("events.jsonl", verifyAppBundleLaunchSource, StringComparison.Ordinal);
+        Assert.DoesNotContain("LAUNCH_SECONDS", verifyAppBundleLaunchSource, StringComparison.Ordinal);
         Assert.Contains("codesign --verify --verbose=2", verifyDmgScript, StringComparison.Ordinal);
         Assert.Contains("xcrun stapler validate", verifyDmgScript, StringComparison.Ordinal);
         Assert.Contains("spctl --assess --type open --context context:primary-signature", verifyDmgScript, StringComparison.Ordinal);
-        Assert.Contains("/usr/bin/ditto \"$APP_PATH\" \"$COPIED_APP_PATH\"", verifyDmgContentsScript, StringComparison.Ordinal);
-        Assert.Contains("verify-app.sh\" \"$COPIED_APP_PATH\"", verifyDmgContentsScript, StringComparison.Ordinal);
-        Assert.Equal(2, CountOccurrences(verifyDmgContentsScript, "aria2-runtime-integrity.sh\" verify"));
-        Assert.Equal(2, CountOccurrences(verifyDmgContentsScript, "verify-aria2-runtime-readiness.sh"));
-        Assert.Contains("verify-app-launch.sh\" \"$COPIED_APP_PATH\"", verifyDmgContentsScript, StringComparison.Ordinal);
+        Assert.Contains("/usr/bin/ditto \"$APP_PATH\" \"$COPIED_APP_PATH\"", validateDmgPackageScript, StringComparison.Ordinal);
+        Assert.Equal(1, CountOccurrences(validateDmgPackageScript, "verify-app-signature.sh"));
+        Assert.Equal(1, CountOccurrences(validateDmgPackageScript, "aria2-runtime-integrity.sh\" verify"));
+        Assert.Equal(1, CountOccurrences(validateDmgPackageScript, "verify-app-loader.sh"));
+        Assert.Equal(1, CountOccurrences(validateDmgPackageScript, "verify-app-bundle-launch.swift"));
+        Assert.Equal(1, CountOccurrences(validateDmgPackageScript, "verify-aria2-rpc-readiness.sh"));
+        Assert.Equal(2, CountOccurrences(validateDmgPackageScript, "validate_app_boundary \"$"));
 
         Assert.Contains("runtime checksum path must remain a symlink", ariaIntegrityScript, StringComparison.Ordinal);
         Assert.Contains("Contents/_CodeSignature/CodeResources", ariaIntegrityScript, StringComparison.Ordinal);
         Assert.Contains("refusing to modify the runtime checksum after the outer app signature is sealed", ariaIntegrityScript, StringComparison.Ordinal);
-        Assert.Contains("lipo -archs", ariaIntegrityScript, StringComparison.Ordinal);
+        Assert.DoesNotContain("lipo -archs", ariaIntegrityScript, StringComparison.Ordinal);
         Assert.Contains("aria2.getVersion", ariaReadinessScript, StringComparison.Ordinal);
         Assert.Contains("downkyi-secure-redirect-v2", ariaReadinessScript, StringComparison.Ordinal);
         Assert.Contains("isinstance(features, list)", ariaReadinessScript, StringComparison.Ordinal);
@@ -576,6 +592,10 @@ public sealed class ReleaseWorkflowArchitectureTests
         Assert.Contains("\"$PROBE_ROOT/dht.dat\"", ariaReadinessScript, StringComparison.Ordinal);
         Assert.Contains("\"$PROBE_ROOT/dht6.dat\"", ariaReadinessScript, StringComparison.Ordinal);
         Assert.Contains("aria2.shutdown", ariaReadinessScript, StringComparison.Ordinal);
+        Assert.DoesNotContain("aria2-runtime-integrity.sh", ariaReadinessScript, StringComparison.Ordinal);
+        Assert.DoesNotContain("--connect-timeout", ariaReadinessScript, StringComparison.Ordinal);
+        Assert.DoesNotContain("--max-time", ariaReadinessScript, StringComparison.Ordinal);
+        Assert.DoesNotContain("bounded deadline", ariaReadinessScript, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -591,11 +611,11 @@ public sealed class ReleaseWorkflowArchitectureTests
                      "Run macOS packaging regressions",
                      "Build ${{ matrix.cpu }}",
                      "Package app",
-                     "Verify pre-sign aria2 supply-chain boundary",
                      "Sign app",
-                     "Verify app signature",
+                     "Verify signed app trust",
+                     "Verify signed aria2 integrity",
                      "Create DMG",
-                     "Verify packaged DMG contents and launch app"
+                     "Validate mounted and installed macOS package contracts"
                  })
         {
             AssertStepHasNoCondition(macSteps, stepName);
@@ -606,7 +626,7 @@ public sealed class ReleaseWorkflowArchitectureTests
                      "Import certificate",
                      "Resolve signing identity",
                      "Notarize app",
-                     "Verify notarized app",
+                     "Verify notarized app trust",
                      "Sign DMG",
                      "Verify signed DMG",
                      "Notarize DMG",
@@ -659,12 +679,13 @@ public sealed class ReleaseWorkflowArchitectureTests
 
         Assert.Contains("dotnet publish", workflow, StringComparison.Ordinal);
         Assert.Contains("./sign.sh", workflow, StringComparison.Ordinal);
-        Assert.Contains("./verify-app.sh", workflow, StringComparison.Ordinal);
+        Assert.Contains("./verify-app-signature.sh", workflow, StringComparison.Ordinal);
         Assert.Contains("./aria2-runtime-integrity.sh verify", workflow, StringComparison.Ordinal);
         Assert.Contains("flags=.*runtime", workflow, StringComparison.Ordinal);
         Assert.Contains("create-dmg", workflow, StringComparison.Ordinal);
-        Assert.Contains("./verify-dmg-contents.sh", workflow, StringComparison.Ordinal);
-        var packageSteps = GetWorkflowSteps(workflow, "  package-launch:");
+        Assert.Contains("./validate-dmg-package.sh", workflow, StringComparison.Ordinal);
+        Assert.DoesNotContain("Verify pre-sign aria2 supply-chain boundary", workflow, StringComparison.Ordinal);
+        var packageSteps = GetWorkflowSteps(workflow, "  package-validation:");
         AssertStepCondition(
             packageSteps,
             "Upload macOS test evidence",
@@ -721,8 +742,8 @@ public sealed class ReleaseWorkflowArchitectureTests
         Assert.Contains("HAS_MACOS_SIGNING: ${{ needs.authority.outputs.has_macos_signing }}", workflow, StringComparison.Ordinal);
         Assert.Contains("MACOS_ADHOC_SIGNING: ${{ env.HAS_MACOS_SIGNING != 'true' }}", workflow, StringComparison.Ordinal);
         Assert.Contains("if: ${{ env.HAS_MACOS_SIGNING == 'true' }}", workflow, StringComparison.Ordinal);
-        Assert.Contains("Strictly verify final app", workflow, StringComparison.Ordinal);
-        Assert.Contains("./verify-dmg-contents.sh", workflow, StringComparison.Ordinal);
+        Assert.Contains("Verify signed app trust", workflow, StringComparison.Ordinal);
+        Assert.Contains("./validate-dmg-package.sh", workflow, StringComparison.Ordinal);
         Assert.Contains("Render release notes for selected trust mode", workflow, StringComparison.Ordinal);
         Assert.Contains("bodyFile: tooling/artifacts/v1.1.2-release-notes.md", workflow, StringComparison.Ordinal);
         Assert.DoesNotContain("Require Apple credentials for formal publish", workflow, StringComparison.Ordinal);
@@ -732,8 +753,9 @@ public sealed class ReleaseWorkflowArchitectureTests
         AssertStepCondition(macSteps, "Resolve Developer ID identity", "${{ env.HAS_MACOS_SIGNING == 'true' }}");
         AssertStepCondition(macSteps, "Notarize and verify app", "${{ env.HAS_MACOS_SIGNING == 'true' }}");
         AssertStepCondition(macSteps, "Sign, notarize, and verify DMG", "${{ env.HAS_MACOS_SIGNING == 'true' }}");
-        AssertStepHasNoCondition(macSteps, "Strictly verify final app");
-        AssertStepHasNoCondition(macSteps, "Remount DMG, strictly verify, and launch app");
+        AssertStepHasNoCondition(macSteps, "Verify signed app trust");
+        AssertStepHasNoCondition(macSteps, "Verify signed aria2 integrity");
+        AssertStepHasNoCondition(macSteps, "Validate mounted and installed macOS package contracts");
         var signAppStep = FindWorkflowStep(macSteps, "Sign app");
         Assert.Contains(
             signAppStep,
@@ -748,7 +770,7 @@ public sealed class ReleaseWorkflowArchitectureTests
             line => line.Trim() == "./package.sh ${{ matrix.cpu }} \"$release_version\"");
         var verifyDmgStep = FindWorkflowStep(
             macSteps,
-            "Remount DMG, strictly verify, and launch app");
+            "Validate mounted and installed macOS package contracts");
         Assert.Contains(
             verifyDmgStep,
             line => line.Trim() == "DownKyi-1.1.2-osx-${{ matrix.cpu }}.dmg \\");

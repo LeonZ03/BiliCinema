@@ -73,17 +73,20 @@ public sealed class MacReleasePackageValidationTests
     }
 
     [Fact]
-    public void MountedDmgVerificationOwnsVersionAndArchitectureChecks()
+    public void DmgPackageCoordinatorOwnsVersionAndArtifactBoundaryChecks()
     {
         var script = File.ReadAllText(Path.Combine(
             RepositoryRoot,
             "script",
             "macos",
-            "verify-dmg-contents.sh"));
+            "validate-dmg-package.sh"));
 
         Assert.Contains("CFBundleShortVersionString", script, StringComparison.Ordinal);
         Assert.Contains("CFBundleVersion", script, StringComparison.Ordinal);
         Assert.Contains("verify-runtime-architecture.sh", script, StringComparison.Ordinal);
+        Assert.Contains("validate_app_boundary", script, StringComparison.Ordinal);
+        Assert.Contains("mounted DMG", script, StringComparison.Ordinal);
+        Assert.Contains("installed copy", script, StringComparison.Ordinal);
     }
 
     private static string ReadPlistValue(string plist, string key) =>

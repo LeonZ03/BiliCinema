@@ -30,7 +30,7 @@ public sealed class ReleaseSafetyRegressionTests
         Assert.DoesNotContain("HAS_MACOS_SIGNING: ${{ secrets.", workflow, StringComparison.Ordinal);
         Assert.Equal(3, CountOccurrences(workflow, "validate-release-package.ps1"));
         Assert.Equal(3, CountOccurrences(workflow, "-ExpectedManifestPath"));
-        Assert.Contains("verify-dmg-contents.sh DownKyi-", workflow, StringComparison.Ordinal);
+        Assert.Contains("validate-dmg-package.sh DownKyi-", workflow, StringComparison.Ordinal);
         Assert.Contains("ubuntu-24.04-arm", workflow, StringComparison.Ordinal);
         Assert.Contains("validate-linux-arm64:", workflow, StringComparison.Ordinal);
         Assert.Contains("linux-arm64-${{ matrix.kind }}.candidate.internal.transport.tar", workflow, StringComparison.Ordinal);
