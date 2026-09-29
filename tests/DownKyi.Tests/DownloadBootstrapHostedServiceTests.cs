@@ -267,15 +267,13 @@ public sealed class DownloadBootstrapHostedServiceTests
 
         await service.StartAsync(TestContext.Current.CancellationToken);
         var stopTask = service.StopAsync(TestContext.Current.CancellationToken);
-        await runtime.StopEntered.Task.WaitAsync(
-            TimeSpan.FromSeconds(5),
-            TestContext.Current.CancellationToken);
+        await runtime.StopEntered.Task.WaitAsync(TestContext.Current.CancellationToken);
 
         Assert.False(stopTask.IsCompleted);
         Assert.False(runtime.IsQuiescent);
 
         runtime.AllowStop.TrySetResult();
-        await stopTask.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
+        await stopTask.WaitAsync(TestContext.Current.CancellationToken);
 
         Assert.True(runtime.IsQuiescent);
     }

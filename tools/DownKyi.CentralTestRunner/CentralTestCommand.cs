@@ -147,7 +147,6 @@ internal static class CentralTestCommand
                 relativeProject,
                 testIdentity,
                 startInfo,
-                TimeSpan.FromSeconds(options.TimeoutSeconds),
                 TimeSpan.FromSeconds(5),
                 evidenceDirectory),
             cancellationToken).ConfigureAwait(false);

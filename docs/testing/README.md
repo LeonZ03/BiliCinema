@@ -34,10 +34,10 @@ repository entry。
 ## Lightweight Flight Recorder
 
 CentralTestRunner 從 test process 啟動時記錄 slice identity、root PID 與
-可取得時的 start time，以及 exit、exit code、timeout、cancellation、bounded stop、
+可取得時的 start time，以及 exit、exit code、cancellation、bounded stop、
 cleanup 和 bounded stdout/stderr tail。正常 PASS 會刪除 recorder evidence。
 
-FAIL、timeout 或 abnormal cleanup 會保存 evidence，並取得一次 failure-time
+FAIL、cancellation 或 abnormal cleanup 會保存 evidence，並取得一次 failure-time
 best-effort process snapshot。Child rows 只表示當下觀察到的 PID、PPID 與
 start time；沒有觀察到 child 不能解讀成證明 child 不存在。Recorder 是
 diagnostic aid，不判斷 root cause、PrimaryFailure、causal precedence 或完整
@@ -45,7 +45,7 @@ descendant history。
 
 Focused recorder behavior 位於
 `tests/DownKyi.Architecture.Tests/CentralTestRunnerRecorderTests.cs`：一個
-deterministic timeout fixture 證明失敗 evidence，另一路徑確認 PASS 不保留
+deterministic cancellation fixture 證明失敗 evidence，另一路徑確認 PASS 不保留
 大型 evidence。
 
 短暫 sharing violation、resource busy、rename/move/overwrite 或 database-lock

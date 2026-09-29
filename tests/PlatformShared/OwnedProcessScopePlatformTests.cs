@@ -51,7 +51,7 @@ public sealed class OwnedProcessScopePlatformTests
             startInfo.ArgumentList.Add(directory);
 
             using var scope = await OwnedProcessScope.StartAsync(
-                startInfo, TimeSpan.FromSeconds(5)).ConfigureAwait(true);
+                startInfo, TestContext.Current.CancellationToken).ConfigureAwait(true);
             childPid = await ReadMarkerAsync(Path.Combine(directory, "child.pid")).ConfigureAwait(true);
             grandchildPid = await ReadMarkerAsync(Path.Combine(directory, "grandchild.pid")).ConfigureAwait(true);
             var job = Assert.IsType<SafeFileHandle>(scope.WindowsJobHandle);
@@ -64,8 +64,7 @@ public sealed class OwnedProcessScopePlatformTests
             Assert.False(IsAlive(scope.RootPid));
             Assert.False(IsAlive(childPid.Value));
             Assert.False(IsAlive(grandchildPid.Value));
-            await scope.Host.WaitForExitAsync(TestContext.Current.CancellationToken).WaitAsync(TimeSpan.FromSeconds(5),
-                TestContext.Current.CancellationToken).ConfigureAwait(true);
+            await scope.Host.WaitForExitAsync(TestContext.Current.CancellationToken).ConfigureAwait(true);
         }
         finally
         {
@@ -116,7 +115,7 @@ public sealed class OwnedProcessScopePlatformTests
                 run = FlightRecorderExecution.RunAsync(
                     new ProcessExecutionRequest(
                         $"scope.snapshot-failure.{iteration}", "root-child-grandchild", startInfo,
-                        TimeSpan.FromSeconds(20), TimeSpan.FromSeconds(5), directory,
+                        TimeSpan.FromSeconds(5), directory,
                         (_, _) => Task.FromException<FinalProcessSnapshot>(new IOException("snapshot unavailable"))),
                     cancellation.Token);
 
@@ -134,8 +133,7 @@ public sealed class OwnedProcessScopePlatformTests
                 }
 
                 await cancellation.CancelAsync().ConfigureAwait(true);
-                var result = await run.WaitAsync(TimeSpan.FromSeconds(8),
-                    TestContext.Current.CancellationToken).ConfigureAwait(true);
+                var result = await run.ConfigureAwait(true);
                 Assert.Equal(130, result.ExitCode);
                 AssertStopped(result.RootPid);
                 AssertStopped(childPid.Value);
@@ -152,10 +150,9 @@ public sealed class OwnedProcessScopePlatformTests
                     {
                         if (run is not null)
                         {
-                            await FailurePreservingTestCleanup.CancelStopJoinValidateAndCleanupAsync(
+                            await FailurePreservingTestCleanup.CancelJoinValidateAndCleanupAsync(
                                 run,
                                 async () => await cancellation.CancelAsync().ConfigureAwait(false),
-                                TimeSpan.FromSeconds(8),
                                 terminalResult => Assert.Equal(130, terminalResult.ExitCode),
                                 () => StopIfAlive(rootPid),
                                 () => StopIfAlive(childPid),
@@ -176,7 +173,7 @@ public sealed class OwnedProcessScopePlatformTests
     }
 
     [Fact]
-    public async Task FixtureCleanupJoinsTimedOutRunAfterFallbackStopFailureBeforeDeletingResources()
+    public async Task FixtureCleanupJoinsRunAfterCancellationAndFallbackStopFailuresBeforeDeletingResources()
     {
         var runCompletion = new TaskCompletionSource<int>(TaskCreationOptions.RunContinuationsAsynchronously);
         var fallbackAttempted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -191,14 +188,14 @@ public sealed class OwnedProcessScopePlatformTests
             {
                 try
                 {
-                    await FailurePreservingTestCleanup.CancelStopJoinValidateAndCleanupAsync(
+                    await FailurePreservingTestCleanup.CancelJoinValidateAndCleanupAsync(
                         runCompletion.Task,
                         () =>
                         {
                             cancellationRequested = true;
-                            return Task.CompletedTask;
+                            return Task.FromException(
+                                new InvalidOperationException("Simulated cancellation failure."));
                         },
-                        TimeSpan.FromMilliseconds(50),
                         result =>
                         {
                             Assert.Equal(130, result);
@@ -222,7 +219,10 @@ public sealed class OwnedProcessScopePlatformTests
             }).ConfigureAwait(true);
 
         var aggregate = Assert.IsType<AggregateException>(observedFailure);
-        Assert.Contains(aggregate.InnerExceptions, failure => failure is TimeoutException);
+        Assert.Contains(
+            aggregate.InnerExceptions,
+            failure => failure is InvalidOperationException &&
+                       failure.Message.Contains("cancellation failure", StringComparison.Ordinal));
         Assert.Contains(
             aggregate.InnerExceptions,
             failure => failure is InvalidOperationException &&
@@ -265,12 +265,11 @@ public sealed class OwnedProcessScopePlatformTests
 
             var run = FlightRecorderExecution.RunAsync(new ProcessExecutionRequest(
                 "scope.root-exited", "pipe-holder", startInfo,
-                TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(2), directory),
+                TimeSpan.FromSeconds(2), directory),
                 TestContext.Current.CancellationToken);
             childPid = await ReadMarkerAsync(marker).ConfigureAwait(true);
             Assert.True(IsAlive(childPid.Value));
-            var result = await run.WaitAsync(TimeSpan.FromSeconds(5),
-                TestContext.Current.CancellationToken).ConfigureAwait(true);
+            var result = await run.ConfigureAwait(true);
             Assert.Equal(2, result.ExitCode);
             Assert.False(IsAlive(result.RootPid));
             Assert.False(IsAlive(childPid.Value));
@@ -316,14 +315,14 @@ public sealed class OwnedProcessScopePlatformTests
             startInfo.ArgumentList.Add(runtimeConfig);
             startInfo.ArgumentList.Add(directory);
             scope = await OwnedProcessScope.StartAsync(
-                startInfo, TimeSpan.FromSeconds(5)).ConfigureAwait(true);
+                startInfo, TestContext.Current.CancellationToken).ConfigureAwait(true);
             childPid = await ReadMarkerAsync(Path.Combine(directory, "child.pid")).ConfigureAwait(true);
             grandchildPid = await ReadMarkerAsync(Path.Combine(directory, "grandchild.pid")).ConfigureAwait(true);
 
             StopIfAlive(scope.RootPid);
             StopIfAlive(childPid);
             await scope.Host.WaitForExitAsync(TestContext.Current.CancellationToken)
-                .WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken).ConfigureAwait(true);
+                .ConfigureAwait(true);
             Assert.True(IsAlive(grandchildPid.Value));
 
             var failure = await Record.ExceptionAsync(() => scope.WaitForLinuxProcessGroupToEmptyAsync(
@@ -368,14 +367,14 @@ public sealed class OwnedProcessScopePlatformTests
             startInfo.ArgumentList.Add(runtimeConfig);
             startInfo.ArgumentList.Add(directory);
             scope = await OwnedProcessScope.StartAsync(
-                startInfo, TimeSpan.FromSeconds(5)).ConfigureAwait(true);
+                startInfo, TestContext.Current.CancellationToken).ConfigureAwait(true);
             childPid = await ReadMarkerAsync(Path.Combine(directory, "child.pid")).ConfigureAwait(true);
             grandchildPid = await ReadMarkerAsync(Path.Combine(directory, "grandchild.pid")).ConfigureAwait(true);
 
             StopIfAlive(scope.RootPid);
             StopIfAlive(childPid);
             await scope.Host.WaitForExitAsync(TestContext.Current.CancellationToken)
-                .WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken).ConfigureAwait(true);
+                .ConfigureAwait(true);
             Assert.True(IsAlive(grandchildPid.Value));
 
             var failure = await Record.ExceptionAsync(() => scope.WaitForMacProcessGroupToEmptyAsync(
@@ -549,11 +548,7 @@ public sealed class OwnedProcessScopePlatformTests
         ps.StartInfo.ArgumentList.Add("-o");
         ps.StartInfo.ArgumentList.Add("stat=");
         ps.Start();
-        if (!ps.WaitForExit(2000))
-        {
-            ps.Kill();
-            throw new TimeoutException($"ps did not return the state for pid {pid}.");
-        }
+        ps.WaitForExit();
 
         var state = ps.StandardOutput.ReadToEnd().Trim();
         var error = ps.StandardError.ReadToEnd().Trim();
@@ -587,8 +582,7 @@ public sealed class OwnedProcessScopePlatformTests
 
     private static async Task<int> ReadMarkerAsync(string path)
     {
-        var deadline = Stopwatch.StartNew();
-        while (deadline.Elapsed < TimeSpan.FromSeconds(8))
+        while (true)
         {
             try
             {
@@ -606,8 +600,6 @@ public sealed class OwnedProcessScopePlatformTests
 
             await Task.Delay(20, TestContext.Current.CancellationToken).ConfigureAwait(true);
         }
-
-        throw new TimeoutException($"The fixture did not publish {Path.GetFileName(path)}.");
     }
 
     private static bool IsAlive(int pid)

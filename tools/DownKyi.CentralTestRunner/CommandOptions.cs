@@ -10,7 +10,6 @@ internal sealed record CommandOptions(
     string? TrxName,
     string[] Classes,
     string? Filter,
-    int TimeoutSeconds,
     string? EvidenceDirectory)
 {
     public static CommandOptions Parse(string[] args)
@@ -24,7 +23,6 @@ internal sealed record CommandOptions(
         string? trxName = null;
         var classes = new List<string>();
         string? filter = null;
-        var timeoutSeconds = 300;
         string? evidenceDirectory = null;
 
         for (var index = 0; index < args.Length; index++)
@@ -58,11 +56,6 @@ internal sealed record CommandOptions(
                 case "--filter":
                     filter = ReadValue(args, ref index);
                     break;
-                case "--timeout-seconds":
-                    timeoutSeconds = int.Parse(
-                        ReadValue(args, ref index),
-                        System.Globalization.CultureInfo.InvariantCulture);
-                    break;
                 case "--evidence-directory":
                     evidenceDirectory = ReadValue(args, ref index);
                     break;
@@ -75,11 +68,6 @@ internal sealed record CommandOptions(
         {
             throw new ArgumentOutOfRangeException(nameof(args), "Configuration must be Debug or Release.");
         }
-        if (timeoutSeconds is < 1 or > 3600)
-        {
-            throw new ArgumentOutOfRangeException(nameof(args), "Timeout must be between 1 and 3600 seconds.");
-        }
-
         return new CommandOptions(
             repositoryRoot,
             project,
@@ -90,7 +78,6 @@ internal sealed record CommandOptions(
             trxName,
             classes.ToArray(),
             filter,
-            timeoutSeconds,
             evidenceDirectory);
     }
 

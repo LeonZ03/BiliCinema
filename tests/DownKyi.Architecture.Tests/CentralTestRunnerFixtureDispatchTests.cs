@@ -86,8 +86,7 @@ public sealed class CentralTestRunnerFixtureDispatchTests
         Assert.NotNull(process);
         var standardOutput = process.StandardOutput.ReadToEndAsync();
         var standardError = process.StandardError.ReadToEndAsync();
-        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(15));
-        await process.WaitForExitAsync(timeout.Token).ConfigureAwait(true);
+        await process.WaitForExitAsync(TestContext.Current.CancellationToken).ConfigureAwait(true);
         return new ProcessResult(
             process.ExitCode,
             await standardOutput.ConfigureAwait(true),

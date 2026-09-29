@@ -49,8 +49,6 @@ function Invoke-DownKyiTestProject {
         [string]$TrxName,
         [string[]]$ClassNames = @(),
         [string]$Filter,
-        [ValidateRange(1, 3600)]
-        [int]$ExecutionTimeoutSeconds = 300,
         [string]$EvidenceDirectory
     )
 
@@ -62,8 +60,7 @@ function Invoke-DownKyiTestProject {
         $runnerAssembly, "run-project",
         "--repository-root", $RepositoryRoot,
         "--project", $ProjectPath,
-        "--configuration", $Configuration,
-        "--timeout-seconds", $ExecutionTimeoutSeconds
+        "--configuration", $Configuration
     )
     if ($NoRestore) {
         $arguments += "--no-restore"
@@ -120,8 +117,6 @@ function Invoke-DownKyiTestSolution {
         [switch]$NoRestore,
         [switch]$NoBuild,
         [string]$ResultsDirectory,
-        [ValidateRange(1, 3600)]
-        [int]$ExecutionTimeoutSeconds = 300,
         [string]$EvidenceDirectory
     )
 
@@ -132,8 +127,7 @@ function Invoke-DownKyiTestSolution {
     $arguments = @(
         $runnerAssembly, "run-solution",
         "--repository-root", $RepositoryRoot,
-        "--configuration", $Configuration,
-        "--timeout-seconds", $ExecutionTimeoutSeconds
+        "--configuration", $Configuration
     )
     if ($NoRestore) {
         $arguments += "--no-restore"

@@ -54,7 +54,7 @@ internal static class BuildProcessRunner
         Func<int, TimeSpan, Task<FinalProcessSnapshot>>? captureSnapshotAsync = null)
     {
         var cleanupWindow = cleanupTimeout ?? TimeSpan.FromSeconds(5);
-        using var scope = await OwnedProcessScope.StartAsync(startInfo, cleanupWindow)
+        using var scope = await OwnedProcessScope.StartAsync(startInfo, cancellationToken)
             .ConfigureAwait(false);
         var process = scope.Host;
         var outputTask = ForwardOutputAsync(process.StandardOutput, Console.Out);

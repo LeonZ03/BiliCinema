@@ -124,7 +124,7 @@ function Assert-Type2AppImage {
     }
 }
 
-function Assert-LaunchStaysRunning {
+function Assert-LaunchInitializes {
     param(
         [string]$Label,
         [string]$Path,
@@ -132,23 +132,67 @@ function Assert-LaunchStaysRunning {
         [hashtable]$Environment
     )
 
-    $savedEnvironment = @{}
-    try {
-        foreach ($entry in $Environment.GetEnumerator()) {
-            $savedEnvironment[$entry.Key] = [Environment]::GetEnvironmentVariable($entry.Key, 'Process')
-            [Environment]::SetEnvironmentVariable($entry.Key, [string]$entry.Value, 'Process')
-        }
+    $launchData = Join-Path ([string]$Environment.HOME) "launch-data-$([Guid]::NewGuid().ToString('N'))"
+    New-Item -ItemType Directory -Path $launchData -Force | Out-Null
+    $startInfo = [Diagnostics.ProcessStartInfo]::new()
+    $startInfo.FileName = 'xvfb-run'
+    $startInfo.UseShellExecute = $false
+    $startInfo.CreateNoWindow = $true
+    $startInfo.RedirectStandardOutput = $true
+    $startInfo.RedirectStandardError = $true
+    $startInfo.ArgumentList.Add('-a')
+    $startInfo.ArgumentList.Add($Path)
+    foreach ($argument in $Arguments) {
+        $startInfo.ArgumentList.Add($argument)
+    }
+    foreach ($entry in $Environment.GetEnumerator()) {
+        $startInfo.Environment[$entry.Key] = [string]$entry.Value
+    }
+    $startInfo.Environment['DOWNKYI_DATA_DIR'] = $launchData
 
-        & timeout '--signal=TERM' '--kill-after=2s' '5s' xvfb-run -a $Path @Arguments *> $null
-        $exitCode = $LASTEXITCODE
-        if ($exitCode -ne 124) {
-            throw "$Label launch smoke exited before the five-second validation window (exit code $exitCode)."
+    $process = [Diagnostics.Process]::Start($startInfo)
+    if ($null -eq $process) {
+        throw "$Label launch smoke did not start."
+    }
+
+    $standardOutput = $process.StandardOutput.ReadToEndAsync()
+    $standardError = $process.StandardError.ReadToEndAsync()
+    $initialized = $false
+    $exitCode = $null
+    try {
+        while (-not $process.HasExited) {
+            $initialized = [bool](
+                Get-ChildItem -LiteralPath (Join-Path $launchData 'Logs') `
+                    -Recurse -File -Filter 'events.jsonl' -ErrorAction SilentlyContinue |
+                    Select-String -SimpleMatch 'Application initialized.' -Quiet)
+            if ($initialized -and -not $process.HasExited) {
+                break
+            }
+
+            Start-Sleep -Milliseconds 25
         }
     }
     finally {
-        foreach ($entry in $savedEnvironment.GetEnumerator()) {
-            [Environment]::SetEnvironmentVariable($entry.Key, $entry.Value, 'Process')
+        try {
+            if (-not $process.HasExited) {
+                $process.Kill($true)
+            }
         }
+        catch [InvalidOperationException] {
+            if (-not $process.HasExited) {
+                throw
+            }
+        }
+
+        $process.WaitForExit()
+        $exitCode = $process.ExitCode
+        $null = $standardOutput.GetAwaiter().GetResult()
+        $null = $standardError.GetAwaiter().GetResult()
+        $process.Dispose()
+    }
+
+    if (-not $initialized) {
+        throw "$Label launch smoke exited before the application initialization marker (exit code $exitCode)."
     }
 }
 
@@ -291,12 +335,12 @@ try {
             HOME = $launchHome
             OWD = $temporaryRoot
         }
-        Assert-LaunchStaysRunning `
+        Assert-LaunchInitializes `
             -Label 'AppRun' `
             -Path $appRun `
             -Arguments @() `
             -Environment $launchEnvironment
-        Assert-LaunchStaysRunning `
+        Assert-LaunchInitializes `
             -Label 'AppImage runtime' `
             -Path $package `
             -Arguments @('--appimage-extract-and-run') `

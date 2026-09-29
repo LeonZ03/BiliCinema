@@ -368,7 +368,6 @@ public sealed partial class Aria2TlsIntegrationTests
             cancellationToken).ConfigureAwait(false);
         var firstStatus = await runtime.WaitForTerminalStatusAsync(
             firstGid,
-            DownloadTimeout,
             cancellationToken).ConfigureAwait(false);
         Assert.Equal("error", firstStatus.Status);
         Assert.Equal(1, redirect.ConnectionCount);
@@ -548,7 +547,6 @@ public sealed partial class Aria2TlsIntegrationTests
             cancellationToken).ConfigureAwait(false);
         return await runtime.WaitForTerminalStatusAsync(
             gid,
-            DownloadTimeout,
             cancellationToken).ConfigureAwait(false);
     }
 

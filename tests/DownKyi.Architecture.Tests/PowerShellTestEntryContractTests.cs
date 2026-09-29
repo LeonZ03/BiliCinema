@@ -7,7 +7,6 @@ namespace DownKyi.Architecture.Tests;
 public sealed class PowerShellTestEntryContractTests
 {
     private static readonly string RepositoryRoot = FindRepositoryRoot();
-    private static readonly TimeSpan ProcessTimeout = TimeSpan.FromSeconds(30);
 
     [Theory]
     [InlineData("test-project.ps1", 0)]
@@ -211,17 +210,7 @@ public sealed class PowerShellTestEntryContractTests
         Assert.True(process.Start(), "PowerShell subprocess did not start.");
         var standardOutput = process.StandardOutput.ReadToEndAsync();
         var standardError = process.StandardError.ReadToEndAsync();
-        using var timeout = new CancellationTokenSource(ProcessTimeout);
-        try
-        {
-            await process.WaitForExitAsync(timeout.Token).ConfigureAwait(true);
-        }
-        catch (OperationCanceledException exception)
-        {
-            process.Kill(entireProcessTree: true);
-            await process.WaitForExitAsync().WaitAsync(ProcessTimeout).ConfigureAwait(true);
-            throw new TimeoutException("PowerShell contract fixture exceeded its deadline.", exception);
-        }
+        await process.WaitForExitAsync(TestContext.Current.CancellationToken).ConfigureAwait(true);
 
         return new ProcessResult(
             process.ExitCode,

@@ -51,6 +51,18 @@ public sealed class CentralTestRunnerCancellationComponentTests
     }
 
     [Fact]
+    public async Task OwnedScopeStartupHonorsCallerCancellation()
+    {
+        using var cancellation = new CancellationTokenSource();
+        await cancellation.CancelAsync();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(
+            () => OwnedProcessScope.StartAsync(
+                CreateFixtureStartInfo("fixture-hold"),
+                cancellation.Token)).ConfigureAwait(true);
+    }
+
+    [Fact]
     public async Task RelationshipSnapshotCommandSuccessReturnsAParentMap()
     {
         var parentIds = await ProcessTreeSnapshot.ReadParentIdsAsync(
@@ -116,8 +128,7 @@ public sealed class CentralTestRunnerCancellationComponentTests
                     () => BuildProcessRunner.CleanupAfterCancellationAsync(
                         scope,
                         TimeSpan.FromSeconds(2),
-                        (_, _) => snapshot.Task)
-                        .WaitAsync(TestTimeout, TestContext.Current.CancellationToken))
+                        (_, _) => snapshot.Task))
                     .ConfigureAwait(true);
 
                 Assert.NotNull(failure);
@@ -310,11 +321,11 @@ public sealed class CentralTestRunnerCancellationComponentTests
     {
         var scope = await OwnedProcessScope.StartAsync(
             startInfo ?? CreateFixtureStartInfo("fixture-hold"),
-            TestTimeout).ConfigureAwait(false);
+            TestContext.Current.CancellationToken).ConfigureAwait(false);
         try
         {
-            var readyLine = await scope.Host.StandardOutput.ReadLineAsync()
-                .WaitAsync(TestTimeout, TestContext.Current.CancellationToken)
+            var readyLine = await scope.Host.StandardOutput
+                .ReadLineAsync(TestContext.Current.CancellationToken)
                 .ConfigureAwait(false);
             Assert.StartsWith("fixture-ready pid=", readyLine, StringComparison.Ordinal);
             return scope;
@@ -332,8 +343,8 @@ public sealed class CentralTestRunnerCancellationComponentTests
         process.Start();
         try
         {
-            var readyLine = await process.StandardOutput.ReadLineAsync()
-                .WaitAsync(TestTimeout, TestContext.Current.CancellationToken)
+            var readyLine = await process.StandardOutput
+                .ReadLineAsync(TestContext.Current.CancellationToken)
                 .ConfigureAwait(false);
             Assert.StartsWith("fixture-ready pid=", readyLine, StringComparison.Ordinal);
             return process;
@@ -382,7 +393,7 @@ public sealed class CentralTestRunnerCancellationComponentTests
                 process.Kill(entireProcessTree: true);
             }
 
-            await process.WaitForExitAsync().WaitAsync(TestTimeout).ConfigureAwait(false);
+            await process.WaitForExitAsync(TestContext.Current.CancellationToken).ConfigureAwait(false);
         }
     }
 

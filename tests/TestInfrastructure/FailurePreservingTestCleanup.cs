@@ -152,10 +152,9 @@ public static class FailurePreservingTestCleanup
         "Design",
         "CA1031:Do not catch general exception types",
         Justification = "Every cleanup phase must complete and retain its failures before resources are released.")]
-    public static async Task CancelStopJoinValidateAndCleanupAsync<TResult>(
+    public static async Task CancelJoinValidateAndCleanupAsync<TResult>(
         Task<TResult> operation,
         Func<Task> requestCancellationAsync,
-        TimeSpan boundedWait,
         Action<TResult> validateResult,
         params Action[] cleanupActions)
     {
@@ -163,10 +162,8 @@ public static class FailurePreservingTestCleanup
         ArgumentNullException.ThrowIfNull(requestCancellationAsync);
         ArgumentNullException.ThrowIfNull(validateResult);
         ArgumentNullException.ThrowIfNull(cleanupActions);
-        ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(boundedWait, TimeSpan.Zero);
 
         var failures = new List<Exception>();
-        var fallbackRequired = false;
         try
         {
             await requestCancellationAsync().ConfigureAwait(false);
@@ -174,21 +171,6 @@ public static class FailurePreservingTestCleanup
         catch (Exception exception)
         {
             failures.Add(exception);
-            fallbackRequired = true;
-        }
-
-        try
-        {
-            await operation.WaitAsync(boundedWait).ConfigureAwait(false);
-        }
-        catch (Exception exception)
-        {
-            AddFailure(failures, exception);
-            fallbackRequired = true;
-        }
-
-        if (fallbackRequired)
-        {
             CaptureFailures(cleanupActions, failures);
         }
 

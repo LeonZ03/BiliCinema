@@ -526,7 +526,7 @@ internal sealed class WindowsEtwResourceFlightRecorder : IDisposable
         var deadline = new CleanupDeadline(timeout);
         using var scope = OwnedProcessScope.StartAsync(
                 CreateToolStartInfo(executable, arguments),
-                deadline.WorkWindow)
+                CancellationToken.None)
             .GetAwaiter()
             .GetResult();
         var process = scope.Host;

@@ -797,7 +797,7 @@ public sealed class UiSmokeTests
                 window.Close();
 
                 await closed.Task
-                    .WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken)
+                    .WaitAsync(TestContext.Current.CancellationToken)
                     .ConfigureAwait(true);
                 Assert.Equal(1, lifecycle.ShutdownRequestCount);
                 Assert.False(window.IsVisible);
@@ -873,13 +873,9 @@ public sealed class UiSmokeTests
                 var lifecycle = host.Services.GetRequiredService<AvaloniaApplicationLifecycle>();
                 lifecycle.AttachHost(host);
 
-                await lifecycle
-                    .StartHostAsync()
-                    .WaitAsync(TimeSpan.FromSeconds(10), TestContext.Current.CancellationToken)
-                    .ConfigureAwait(true);
+                await lifecycle.StartHostAsync().ConfigureAwait(true);
                 await lifecycle
                     .RequestShutdownAsync(TestContext.Current.CancellationToken)
-                    .WaitAsync(TimeSpan.FromSeconds(10), TestContext.Current.CancellationToken)
                     .ConfigureAwait(true);
 
                 Assert.Equal(1, runtime.StartCount);
@@ -900,7 +896,6 @@ public sealed class UiSmokeTests
                 {
                     await host
                         .StopAsync(CancellationToken.None)
-                        .WaitAsync(TimeSpan.FromSeconds(10))
                         .ConfigureAwait(true);
                     await DisposeHostAsync(host).ConfigureAwait(true);
                 }

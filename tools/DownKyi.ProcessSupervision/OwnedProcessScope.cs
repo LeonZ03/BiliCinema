@@ -29,8 +29,12 @@ internal sealed class OwnedProcessScope : IDisposable
     internal DateTimeOffset? RootStartTimeUtc { get; }
     internal SafeFileHandle? WindowsJobHandle => job;
 
-    internal static async Task<OwnedProcessScope> StartAsync(ProcessStartInfo testStartInfo, TimeSpan startupWindow)
+    internal static async Task<OwnedProcessScope> StartAsync(
+        ProcessStartInfo testStartInfo,
+        CancellationToken cancellationToken)
     {
+        cancellationToken.ThrowIfCancellationRequested();
+
         // Unix named pipes include the temporary directory in a short socket path.
         var pipeName = Guid.NewGuid().ToString("N");
         using var control = new NamedPipeServerStream(
@@ -68,12 +72,31 @@ internal sealed class OwnedProcessScope : IDisposable
                 [.. testStartInfo.ArgumentList],
                 testStartInfo.WorkingDirectory,
                 new Dictionary<string, string?>(testStartInfo.Environment));
-            await host.StandardInput.WriteLineAsync(JsonSerializer.Serialize(launch))
-                .WaitAsync(startupWindow).ConfigureAwait(false);
+            await host.StandardInput.WriteLineAsync(
+                JsonSerializer.Serialize(launch).AsMemory(), cancellationToken).ConfigureAwait(false);
             host.StandardInput.Close();
-            await control.WaitForConnectionAsync().WaitAsync(startupWindow).ConfigureAwait(false);
+            using var connectionCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            var connectionTask = control.WaitForConnectionAsync(connectionCancellation.Token);
+            var hostExitTask = host.WaitForExitAsync(CancellationToken.None);
+            if (await Task.WhenAny(connectionTask, hostExitTask).ConfigureAwait(false) == hostExitTask)
+            {
+                await connectionCancellation.CancelAsync().ConfigureAwait(false);
+                try
+                {
+                    await connectionTask.ConfigureAwait(false);
+                }
+                catch (OperationCanceledException) when (connectionCancellation.IsCancellationRequested)
+                {
+                    // The ownership host exited before it could connect.
+                }
+
+                throw new InvalidOperationException(
+                    $"The ownership host exited before the startup handshake with exit code {host.ExitCode}.");
+            }
+
+            await connectionTask.ConfigureAwait(false);
             using var reader = new StreamReader(control);
-            var line = await reader.ReadLineAsync().WaitAsync(startupWindow).ConfigureAwait(false);
+            var line = await reader.ReadLineAsync(cancellationToken).ConfigureAwait(false);
             var handshake = line is null ? null : JsonSerializer.Deserialize<ScopeHandshake>(line);
             if (handshake is null || handshake.Error is not null || handshake.Pid <= 0)
             {
@@ -90,6 +113,11 @@ internal sealed class OwnedProcessScope : IDisposable
             if (job is not null)
             {
                 TerminateWindowsJob(job);
+                if (host is { HasExited: false })
+                {
+                    // The host may not have joined the job yet when startup is cancelled.
+                    host.Kill();
+                }
             }
             else if (host is { HasExited: false })
             {

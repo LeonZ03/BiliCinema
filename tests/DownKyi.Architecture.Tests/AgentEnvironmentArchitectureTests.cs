@@ -152,7 +152,7 @@ public sealed class AgentEnvironmentArchitectureTests
     }
 
     [Fact]
-    public void ContinuousIntegrationBoundsAndRetriesOnlyAnIsolatedBuildTestTimeout()
+    public void ContinuousIntegrationBoundsEveryTestJobWithoutRetryingTimeouts()
     {
         var qualityWorkflow = Read(".github/workflows/quality.yml");
         var buildTest = Slice(qualityWorkflow, "  build-test:", "  aria2-tls-security:");
@@ -167,49 +167,10 @@ public sealed class AgentEnvironmentArchitectureTests
             new System.Text.RegularExpressions.Regex(@"(?m)^\s+needs\s*:", System.Text.RegularExpressions.RegexOptions.CultureInvariant),
             qualityWorkflow);
 
-        var retryWorkflow = Read(".github/workflows/retry-timed-out-quality.yml");
-        Assert.Contains("workflow_run:", retryWorkflow, StringComparison.Ordinal);
-        Assert.Contains("- Strict PR CI", retryWorkflow, StringComparison.Ordinal);
-        Assert.Contains("types:\n      - completed", retryWorkflow.Replace("\r\n", "\n", StringComparison.Ordinal), StringComparison.Ordinal);
-        Assert.Matches(
-            new System.Text.RegularExpressions.Regex(
-                @"(?m)^permissions:\r?$\n^  actions: write\r?$\n^  checks: read\r?$\n^\r?$\n^concurrency:",
-                System.Text.RegularExpressions.RegexOptions.CultureInvariant),
-            retryWorkflow);
-        Assert.Contains("github.event.workflow_run.run_attempt == 1", retryWorkflow, StringComparison.Ordinal);
-        Assert.Contains("github.event.workflow_run.conclusion != 'success'", retryWorkflow, StringComparison.Ordinal);
-        Assert.Contains("retry-timed-out-strict-pr-ci-${{ github.event.workflow_run.id }}", retryWorkflow, StringComparison.Ordinal);
-        Assert.Contains("cancel-in-progress: false", retryWorkflow, StringComparison.Ordinal);
-        Assert.Contains("/attempts/{attempt_number}/jobs", retryWorkflow, StringComparison.Ordinal);
-        Assert.Contains("attempt_number: 1", retryWorkflow, StringComparison.Ordinal);
-        Assert.Contains("run.path === \".github/workflows/quality.yml\"", retryWorkflow, StringComparison.Ordinal);
-        Assert.Contains("run.head_sha === eventRun.head_sha", retryWorkflow, StringComparison.Ordinal);
-        Assert.Contains("run.status === \"completed\"", retryWorkflow, StringComparison.Ordinal);
-        Assert.Contains("run.run_attempt === 1", retryWorkflow, StringComparison.Ordinal);
-        Assert.Equal(2, System.Text.RegularExpressions.Regex.Count(retryWorkflow, @"await readRun\(\)"));
-        Assert.Contains("Build and test (windows)", retryWorkflow, StringComparison.Ordinal);
-        Assert.Contains("Build and test (ubuntu-x64)", retryWorkflow, StringComparison.Ordinal);
-        Assert.Contains("Build and test (macos)", retryWorkflow, StringComparison.Ordinal);
-        Assert.Contains("buildJobs.length === expectedBuildTests.length", retryWorkflow, StringComparison.Ordinal);
-        Assert.Contains("job.conclusion === \"cancelled\"", retryWorkflow, StringComparison.Ordinal);
-        Assert.Contains("/check-runs/{check_run_id}/annotations", retryWorkflow, StringComparison.Ordinal);
-        Assert.Contains("annotation.annotation_level === \"failure\"", retryWorkflow, StringComparison.Ordinal);
-        Assert.Contains("The job has exceeded the maximum execution time of 20m0s", retryWorkflow, StringComparison.Ordinal);
-        Assert.Contains("timedOut.length !== 1", retryWorkflow, StringComparison.Ordinal);
-        Assert.Contains("job.conclusion !== \"success\"", retryWorkflow, StringComparison.Ordinal);
-        Assert.DoesNotContain("job.conclusion === \"timed_out\"", retryWorkflow, StringComparison.Ordinal);
-        Assert.DoesNotContain("job.started_at", retryWorkflow, StringComparison.Ordinal);
-        Assert.DoesNotContain("job.completed_at", retryWorkflow, StringComparison.Ordinal);
-        Assert.Single(System.Text.RegularExpressions.Regex.Matches(
-            retryWorkflow,
-            @"POST /repos/\{owner\}/\{repo\}/actions/jobs/\{job_id\}/rerun"));
-        Assert.Contains("actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd", retryWorkflow, StringComparison.Ordinal);
-        Assert.DoesNotContain("actions/checkout", retryWorkflow, StringComparison.Ordinal);
-        Assert.DoesNotContain("download-artifact", retryWorkflow, StringComparison.Ordinal);
-        Assert.DoesNotContain("actions/cache", retryWorkflow, StringComparison.Ordinal);
-        Assert.DoesNotContain("pull_request_target", retryWorkflow, StringComparison.Ordinal);
-        Assert.DoesNotContain("rerun-failed-jobs", retryWorkflow, StringComparison.OrdinalIgnoreCase);
-        Assert.DoesNotContain("actions/runs/{run_id}/rerun", retryWorkflow, StringComparison.OrdinalIgnoreCase);
+        AssertTestJobsUseTwentyMinuteLimit();
+        Assert.False(File.Exists(Path.Combine(
+            RepositoryRoot,
+            PathFromRepository(".github/workflows/retry-timed-out-quality.yml"))));
     }
 
     [Fact]
@@ -319,6 +280,62 @@ public sealed class AgentEnvironmentArchitectureTests
             .ToArray();
 
         Assert.True(missing.Length == 0, $"Missing repository entry points: {string.Join(", ", missing)}");
+    }
+
+    private static void AssertTestJobsUseTwentyMinuteLimit()
+    {
+        var workflowsDirectory = Path.Combine(
+            RepositoryRoot,
+            PathFromRepository(".github/workflows"));
+        var testInvocation = new System.Text.RegularExpressions.Regex(
+            @"^\s+(?:\. )?\./(?:tooling/)?script/test-(?:project|solution)(?:-runner)?\.ps1\b",
+            System.Text.RegularExpressions.RegexOptions.CultureInvariant);
+        var jobHeader = new System.Text.RegularExpressions.Regex(
+            @"^  (?<name>[A-Za-z0-9_-]+):\s*$",
+            System.Text.RegularExpressions.RegexOptions.CultureInvariant);
+        var timeout = new System.Text.RegularExpressions.Regex(
+            @"^    timeout-minutes: 20\s*$",
+            System.Text.RegularExpressions.RegexOptions.CultureInvariant);
+        var testJobs = new HashSet<string>(StringComparer.Ordinal);
+
+        foreach (var workflowPath in Directory.GetFiles(workflowsDirectory, "*.yml"))
+        {
+            var lines = File.ReadAllLines(workflowPath);
+            string? currentJob = null;
+            var currentJobStart = -1;
+
+            for (var index = 0; index < lines.Length; index++)
+            {
+                var header = jobHeader.Match(lines[index]);
+                if (header.Success)
+                {
+                    currentJob = header.Groups["name"].Value;
+                    currentJobStart = index;
+                    continue;
+                }
+
+                if (!testInvocation.IsMatch(lines[index]))
+                {
+                    continue;
+                }
+
+                Assert.NotNull(currentJob);
+                var jobEnd = Array.FindIndex(
+                    lines,
+                    currentJobStart + 1,
+                    line => jobHeader.IsMatch(line));
+                if (jobEnd < 0)
+                {
+                    jobEnd = lines.Length;
+                }
+
+                var jobLines = lines[currentJobStart..jobEnd];
+                Assert.Single(jobLines, line => timeout.IsMatch(line));
+                testJobs.Add($"{Path.GetFileName(workflowPath)}:{currentJob}");
+            }
+        }
+
+        Assert.NotEmpty(testJobs);
     }
 
     private static string Read(string relativePath)

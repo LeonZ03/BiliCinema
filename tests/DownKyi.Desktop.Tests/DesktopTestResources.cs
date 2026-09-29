@@ -9,16 +9,24 @@ internal static class DesktopTestResources
     {
         var application = Avalonia.Application.Current
             ?? throw new InvalidOperationException("Avalonia application is not initialized.");
-        if (application.TryGetResource("ImageBtnStyle", ThemeVariant.Default, out _))
+        if (!application.TryGetResource("DownKyiRadiusMedium", ThemeVariant.Default, out _))
         {
-            return application;
+            application.Resources.MergedDictionaries.Add(new ResourceInclude(
+                new Uri("avares://DownKyi.Desktop.Tests/"))
+            {
+                Source = new Uri("avares://DownKyi.Desktop/Themes/DesignTokens.axaml")
+            });
         }
 
-        application.Resources.MergedDictionaries.Add(new ResourceInclude(
-            new Uri("avares://DownKyi.Desktop.Tests/"))
+        if (!application.TryGetResource("ImageBtnStyle", ThemeVariant.Default, out _))
         {
-            Source = new Uri("avares://DownKyi.Desktop/Themes/ThemeDefault.axaml")
-        });
+            application.Resources.MergedDictionaries.Add(new ResourceInclude(
+                new Uri("avares://DownKyi.Desktop.Tests/"))
+            {
+                Source = new Uri("avares://DownKyi.Desktop/Themes/ThemeDefault.axaml")
+            });
+        }
+
         return application;
     }
 }

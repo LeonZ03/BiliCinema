@@ -22,7 +22,6 @@ public sealed partial class AriaServerWindowsTests
         processJob.Dispose();
         await process
             .WaitForExitAsync(TestContext.Current.CancellationToken)
-            .WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken)
             .ConfigureAwait(true);
         Assert.True(process.HasExited);
     }
@@ -78,7 +77,7 @@ public sealed partial class AriaServerWindowsTests
     {
         var startInfo = new ProcessStartInfo(
             "powershell.exe",
-            "-NoLogo -NoProfile -NonInteractive -Command Start-Sleep -Seconds 30")
+            "-NoLogo -NoProfile -NonInteractive -Command Wait-Event")
         {
             UseShellExecute = false,
             CreateNoWindow = true
