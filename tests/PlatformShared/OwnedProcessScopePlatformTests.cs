@@ -150,10 +150,9 @@ public sealed class OwnedProcessScopePlatformTests
                     {
                         if (run is not null)
                         {
-                            await FailurePreservingTestCleanup.CancelStopJoinValidateAndCleanupAsync(
+                            await FailurePreservingTestCleanup.CancelJoinValidateAndCleanupAsync(
                                 run,
                                 async () => await cancellation.CancelAsync().ConfigureAwait(false),
-                                TimeSpan.FromSeconds(8),
                                 terminalResult => Assert.Equal(130, terminalResult.ExitCode),
                                 () => StopIfAlive(rootPid),
                                 () => StopIfAlive(childPid),
@@ -174,7 +173,7 @@ public sealed class OwnedProcessScopePlatformTests
     }
 
     [Fact]
-    public async Task FixtureCleanupJoinsTimedOutRunAfterFallbackStopFailureBeforeDeletingResources()
+    public async Task FixtureCleanupJoinsRunAfterCancellationAndFallbackStopFailuresBeforeDeletingResources()
     {
         var runCompletion = new TaskCompletionSource<int>(TaskCreationOptions.RunContinuationsAsynchronously);
         var fallbackAttempted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -189,14 +188,14 @@ public sealed class OwnedProcessScopePlatformTests
             {
                 try
                 {
-                    await FailurePreservingTestCleanup.CancelStopJoinValidateAndCleanupAsync(
+                    await FailurePreservingTestCleanup.CancelJoinValidateAndCleanupAsync(
                         runCompletion.Task,
                         () =>
                         {
                             cancellationRequested = true;
-                            return Task.CompletedTask;
+                            return Task.FromException(
+                                new InvalidOperationException("Simulated cancellation failure."));
                         },
-                        TimeSpan.FromMilliseconds(50),
                         result =>
                         {
                             Assert.Equal(130, result);
@@ -220,7 +219,10 @@ public sealed class OwnedProcessScopePlatformTests
             }).ConfigureAwait(true);
 
         var aggregate = Assert.IsType<AggregateException>(observedFailure);
-        Assert.Contains(aggregate.InnerExceptions, failure => failure is TimeoutException);
+        Assert.Contains(
+            aggregate.InnerExceptions,
+            failure => failure is InvalidOperationException &&
+                       failure.Message.Contains("cancellation failure", StringComparison.Ordinal));
         Assert.Contains(
             aggregate.InnerExceptions,
             failure => failure is InvalidOperationException &&
