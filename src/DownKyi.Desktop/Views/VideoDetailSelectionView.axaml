@@ -81,6 +81,10 @@
                     <Setter Property="IsVisible" Value="True" />
                     <Setter Property="Opacity" Value="1" />
                 </Style>
+
+                <Style Selector="DataGridCell:focus-within:not(:focus) /template/ Grid#FocusVisual">
+                    <Setter Property="IsVisible" Value="False" />
+                </Style>
             </DataGrid.Styles>
             <DataGrid.ColumnHeaderTheme>
                 <ControlTheme TargetType="{x:Type DataGridColumnHeader}">
