@@ -36,26 +36,29 @@ public sealed class ViewLoginViewModelTests
         {
             BrowserCookieHeader = "SESSDATA=fixture%2Fsession"
         };
+        var commandEnabled = new TaskCompletionSource(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        var command = viewModel.BrowserCookieLoginCommand;
+        command.CanExecuteChanged += (_, _) =>
+        {
+            if (command.CanExecute(null))
+            {
+                commandEnabled.TrySetResult();
+            }
+        };
 
-        viewModel.BrowserCookieLoginCommand.Execute(null);
+        command.Execute(null);
 
-        var message = await notifications.Task.WaitAsync(
-            TimeSpan.FromSeconds(5),
-            TestContext.Current.CancellationToken);
+        var message = await notifications.Task.WaitAsync(TestContext.Current.CancellationToken);
         Assert.Equal(DictionaryResource.GetString("LoginFailed"), message);
         Assert.True(observedCancellationToken.CanBeCanceled);
         Assert.False(observedCancellationToken.IsCancellationRequested);
         Assert.Equal(string.Empty, viewModel.BrowserCookieHeader);
 
         viewModel.ExecuteBackSpace();
-        for (var attempt = 0;
-             attempt < 50 && !viewModel.BrowserCookieLoginCommand.CanExecute(null);
-             attempt++)
-        {
-            await Task.Delay(20, TestContext.Current.CancellationToken);
-        }
+        await commandEnabled.Task.WaitAsync(TestContext.Current.CancellationToken);
 
-        Assert.True(viewModel.BrowserCookieLoginCommand.CanExecute(null));
+        Assert.True(command.CanExecute(null));
     }
 
     private sealed class StubLoginCoordinator : ILoginCoordinator
