@@ -80,7 +80,7 @@
                     Text="{DynamicResource VideoParseType}" />
                 <ComboBox
                     Name="NameVideoParseTypeList"
-                    Width="200"
+                    MinWidth="200"
                     VerticalContentAlignment="Center"
                     DisplayMemberBinding="{Binding Name}"
                     ItemsSource="{Binding VideoParseTypeList}"
