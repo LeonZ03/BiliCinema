@@ -392,6 +392,7 @@ internal sealed class Aria2TlsTestRuntime : IAsyncDisposable
 
         _disposed = true;
         var failures = new FailurePreservingTestCollector();
+        var shutdownAcknowledged = false;
         await failures.RunAsync(
             "aria2-force-shutdown",
             async () =>
@@ -404,6 +405,7 @@ internal sealed class Aria2TlsTestRuntime : IAsyncDisposable
                 try
                 {
                     await Client.ForceShutdownAsync().ConfigureAwait(false);
+                    shutdownAcknowledged = true;
                 }
                 catch (HttpRequestException)
                 {
@@ -418,16 +420,12 @@ internal sealed class Aria2TlsTestRuntime : IAsyncDisposable
                     return;
                 }
 
-                using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
-                try
-                {
-                    await _process.WaitForExitAsync(timeout.Token).ConfigureAwait(false);
-                }
-                catch (OperationCanceledException) when (timeout.IsCancellationRequested)
+                if (!shutdownAcknowledged)
                 {
                     _process.Kill(entireProcessTree: true);
-                    await _process.WaitForExitAsync(CancellationToken.None).ConfigureAwait(false);
                 }
+
+                await _process.WaitForExitAsync(CancellationToken.None).ConfigureAwait(false);
             }).ConfigureAwait(false);
         await failures.RunAsync(
             "aria2-output-drain",
