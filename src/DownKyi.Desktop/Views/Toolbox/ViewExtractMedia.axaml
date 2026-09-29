@@ -3,6 +3,11 @@
              x:Class="DownKyi.Views.Toolbox.ViewExtractMedia"
              xmlns:vm="clr-namespace:DownKyi.ViewModels.Toolbox"
              x:DataType="vm:ViewExtractMediaViewModel">
+    <UserControl.Styles>
+        <Style Selector="TextBox.extract-media-output /template/ Border#PART_BorderElement">
+            <Setter Property="Background" Value="Black" />
+        </Style>
+    </UserControl.Styles>
     <ScrollViewer HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Disabled">
         <Grid Margin="50,0" RowDefinitions="200,*">
             <StackPanel Grid.Row="0" Orientation="Vertical">
@@ -64,6 +69,7 @@
                     Text="{DynamicResource OutputInfo}" />
                 <TextBox
                     Name="NameStatus"
+                    Classes="extract-media-output"
                     Grid.Row="1"
                     Background="Black"
                     Foreground="White"
