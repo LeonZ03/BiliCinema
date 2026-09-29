@@ -20,6 +20,13 @@
 
     <SolidColorBrush x:Key="BrushSecond" Color="{DynamicResource ColorSecond}" />
 
+    <SolidColorBrush x:Key="BrushSurfaceBase" Color="{DynamicResource ColorSurfaceBase}" />
+    <SolidColorBrush x:Key="BrushSurfaceRaised" Color="{DynamicResource ColorSurfaceRaised}" />
+    <SolidColorBrush x:Key="BrushSurfaceSunken" Color="{DynamicResource ColorSurfaceSunken}" />
+    <SolidColorBrush x:Key="BrushTextPrimary" Color="{DynamicResource ColorTextPrimary}" />
+    <SolidColorBrush x:Key="BrushTextSecondary" Color="{DynamicResource ColorTextSecondary}" />
+    <SolidColorBrush x:Key="BrushBorderSubtle" Color="{DynamicResource ColorBorderSubtle}" />
+
     <SolidColorBrush x:Key="BrushForeground" Color="{DynamicResource ColorForeground}" />
     <SolidColorBrush x:Key="BrushBackground" Color="{DynamicResource ColorBackground}" />
     <SolidColorBrush x:Key="BrushForegroundDark" Color="{DynamicResource ColorForegroundDark}" />

@@ -4,14 +4,16 @@
              x:Class="DownKyi.Views.Toolbox.ViewDelogo"
              x:DataType="vm:ViewDelogoViewModel"
              xmlns:local="clr-namespace:DownKyi.Views.Toolbox"
-             xmlns:customControl="clr-namespace:DownKyi.CustomControl">
+             xmlns:customControl="clr-namespace:DownKyi.CustomControl"
+             Background="{DynamicResource BrushSurfaceBase}"
+             Foreground="{DynamicResource BrushTextPrimary}">
     <ScrollViewer HorizontalScrollBarVisibility="Disabled">
         <Grid Margin="50,0" RowDefinitions="Auto,Auto,400,400">
             <StackPanel Grid.Row="0" Orientation="Vertical">
                 <StackPanel Margin="0,20,0,0" Orientation="Horizontal">
                     <TextBlock
                         FontSize="18"
-                        Foreground="{DynamicResource BrushTextDark}"
+                        Foreground="{DynamicResource BrushTextPrimary}"
                         Text="{DynamicResource Delogo}" />
                 </StackPanel>
 
@@ -116,8 +118,8 @@
             <Border
                 Margin="0,10,0,0"
                 Grid.Row="2"
-                BorderBrush="Gray" 
-                Background="#FF1E1E1E"
+                BorderBrush="{DynamicResource BrushBorderSubtle}"
+                Background="{DynamicResource BrushSurfaceSunken}"
                 BorderThickness="1">
                 <customControl:VideoFramePreview
                     EdgeThreshold="5"
@@ -141,8 +143,9 @@
                 <TextBox
                     Name="NameStatus"
                     Grid.Row="1"
-                    Background="Black"
-                    Foreground="White"
+                    Background="{DynamicResource BrushSurfaceSunken}"
+                    BorderBrush="{DynamicResource BrushBorderSubtle}"
+                    Foreground="{DynamicResource BrushTextPrimary}"
                     ScrollViewer.HorizontalScrollBarVisibility="Visible"
                     IsReadOnly="True"
                     Text="{Binding Status, Mode=TwoWay}"

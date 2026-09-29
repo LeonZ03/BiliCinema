@@ -49,6 +49,29 @@ public sealed class UiThemeArchitectureTests
     }
 
     [Fact]
+    public void ToolboxSurfacesUseSemanticThemeResources()
+    {
+        var toolboxViews = new[]
+        {
+            ReadSource("src", "DownKyi.Desktop", "Views", "ViewToolbox.axaml"),
+            ReadSource("src", "DownKyi.Desktop", "Views", "Toolbox", "ViewBiliHelper.axaml"),
+            ReadSource("src", "DownKyi.Desktop", "Views", "Toolbox", "ViewExtractMedia.axaml"),
+            ReadSource("src", "DownKyi.Desktop", "Views", "Toolbox", "ViewDelogo.axaml")
+        };
+
+        Assert.All(
+            toolboxViews,
+            source => Assert.Contains("BrushSurfaceBase", source, StringComparison.Ordinal));
+
+        var combinedSource = string.Join(Environment.NewLine, toolboxViews);
+        Assert.DoesNotContain("Background=\"LightGray\"", combinedSource, StringComparison.Ordinal);
+        Assert.DoesNotContain("Background=\"Black\"", combinedSource, StringComparison.Ordinal);
+        Assert.DoesNotContain("Foreground=\"White\"", combinedSource, StringComparison.Ordinal);
+        Assert.DoesNotContain("BorderBrush=\"Gray\"", combinedSource, StringComparison.Ordinal);
+        Assert.DoesNotContain("Background=\"#FF1E1E1E\"", combinedSource, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void EveryReferencedSemanticThemeResourceIsDeclared()
     {
         var desktopRoot = Path.Combine(RepositoryRoot, "src", "DownKyi.Desktop");

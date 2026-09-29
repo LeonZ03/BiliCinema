@@ -2,10 +2,12 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              x:Class="DownKyi.Views.Toolbox.ViewExtractMedia"
              xmlns:vm="clr-namespace:DownKyi.ViewModels.Toolbox"
-             x:DataType="vm:ViewExtractMediaViewModel">
+             x:DataType="vm:ViewExtractMediaViewModel"
+             Background="{DynamicResource BrushSurfaceBase}"
+             Foreground="{DynamicResource BrushTextPrimary}">
     <UserControl.Styles>
         <Style Selector="TextBox.extract-media-output /template/ Border#PART_BorderElement">
-            <Setter Property="Background" Value="Black" />
+            <Setter Property="Background" Value="{DynamicResource BrushSurfaceSunken}" />
         </Style>
     </UserControl.Styles>
     <ScrollViewer HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Disabled">
@@ -14,7 +16,7 @@
                 <StackPanel Margin="0,20,0,0" Orientation="Horizontal">
                     <TextBlock
                         FontSize="18"
-                        Foreground="{DynamicResource BrushTextDark}"
+                        Foreground="{DynamicResource BrushTextPrimary}"
                         Text="{DynamicResource ExtractMedia}" />
                 </StackPanel>
 
@@ -71,8 +73,9 @@
                     Name="NameStatus"
                     Classes="extract-media-output"
                     Grid.Row="1"
-                    Background="Black"
-                    Foreground="White"
+                    Background="{DynamicResource BrushSurfaceSunken}"
+                    BorderBrush="{DynamicResource BrushBorderSubtle}"
+                    Foreground="{DynamicResource BrushTextPrimary}"
                     ScrollViewer.HorizontalScrollBarVisibility="Visible"
                     IsReadOnly="True"
                     Text="{Binding Status, Mode=TwoWay}"
