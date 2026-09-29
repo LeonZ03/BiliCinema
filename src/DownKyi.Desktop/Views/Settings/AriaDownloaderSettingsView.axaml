@@ -236,7 +236,7 @@
                 Text="{DynamicResource AriaFileAllocation}" />
             <ComboBox
                 Name="NameAriaFileAllocations"
-                Width="100"
+                MinWidth="100"
                 VerticalContentAlignment="Center"
                 ItemsSource="{Binding AriaFileAllocations}"
                 SelectedValue="{Binding SelectedAriaFileAllocation}">
