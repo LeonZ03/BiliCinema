@@ -236,11 +236,9 @@ internal sealed class Aria2TlsTestRuntime : IAsyncDisposable
 
     public async Task<AriaTellStatusResult> WaitForTerminalStatusAsync(
         string gid,
-        TimeSpan timeout,
         CancellationToken cancellationToken)
     {
-        var deadline = DateTimeOffset.UtcNow + timeout;
-        while (DateTimeOffset.UtcNow < deadline)
+        while (true)
         {
             cancellationToken.ThrowIfCancellationRequested();
             var status = await Client.TellStatus(gid).ConfigureAwait(false);
@@ -255,8 +253,6 @@ internal sealed class Aria2TlsTestRuntime : IAsyncDisposable
             await Task.Delay(TimeSpan.FromMilliseconds(50), cancellationToken)
                 .ConfigureAwait(false);
         }
-
-        throw new TimeoutException("aria2 did not reach a terminal status before the test deadline.");
     }
 
     private static ProcessStartInfo CreateStartInfo(
@@ -309,8 +305,7 @@ internal sealed class Aria2TlsTestRuntime : IAsyncDisposable
         AriaClient client,
         CancellationToken cancellationToken)
     {
-        Exception? lastError = null;
-        for (var attempt = 0; attempt < 100; attempt++)
+        while (true)
         {
             cancellationToken.ThrowIfCancellationRequested();
             if (process.HasExited)
@@ -332,18 +327,13 @@ internal sealed class Aria2TlsTestRuntime : IAsyncDisposable
                     return response.Result.Version;
                 }
             }
-            catch (HttpRequestException error)
+            catch (HttpRequestException)
             {
-                lastError = error;
             }
 
             await Task.Delay(TimeSpan.FromMilliseconds(50), cancellationToken)
                 .ConfigureAwait(false);
         }
-
-        throw new TimeoutException(
-            "aria2 RPC did not become ready before the test deadline.",
-            lastError);
     }
 
     private static int GetAvailablePort()

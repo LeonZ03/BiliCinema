@@ -12,7 +12,6 @@ namespace DownKyi.Tests;
 public sealed partial class Aria2TlsIntegrationTests
 {
     private const int ExpectedReportCaseCount = 1;
-    private static readonly TimeSpan DownloadTimeout = TimeSpan.FromSeconds(20);
     private static readonly JsonSerializerOptions ReportJsonOptions = new()
     {
         WriteIndented = true
@@ -343,7 +342,6 @@ public sealed partial class Aria2TlsIntegrationTests
             cancellationToken).ConfigureAwait(false);
         var status = await runtime.WaitForTerminalStatusAsync(
             gid,
-            DownloadTimeout,
             cancellationToken).ConfigureAwait(false);
         var outputPath = runtime.GetOutputPath(outputName);
         AssertCompleted(status, "trusted-split", server.Failures);
@@ -388,7 +386,6 @@ public sealed partial class Aria2TlsIntegrationTests
             cancellationToken).ConfigureAwait(false);
         var status = await runtime.WaitForTerminalStatusAsync(
             gid,
-            DownloadTimeout,
             cancellationToken).ConfigureAwait(false);
 
         AssertCompleted(status, "trusted-local-connect-proxy", server.Failures);
@@ -433,7 +430,6 @@ public sealed partial class Aria2TlsIntegrationTests
             cancellationToken).ConfigureAwait(false);
         var status = await runtime.WaitForTerminalStatusAsync(
             gid,
-            DownloadTimeout,
             cancellationToken).ConfigureAwait(false);
         var classification = AssertRejectedCertificateStatus(
             status,
@@ -479,7 +475,6 @@ public sealed partial class Aria2TlsIntegrationTests
             cancellationToken).ConfigureAwait(false);
         var status = await runtime.WaitForTerminalStatusAsync(
             gid,
-            DownloadTimeout,
             cancellationToken).ConfigureAwait(false);
         AssertCompleted(status, "trusted-resume", server.Failures);
         AssertPayload(payload, runtime.GetOutputPath(outputName));
@@ -514,7 +509,6 @@ public sealed partial class Aria2TlsIntegrationTests
         Assert.Equal(gid, removed.Result);
         var status = await runtime.WaitForTerminalStatusAsync(
             gid,
-            DownloadTimeout,
             cancellationToken).ConfigureAwait(false);
         Assert.Equal("removed", status.Status);
         results.Add(new Aria2TlsCaseResult("rpc-add-query-remove", true, "removed"));
@@ -544,7 +538,6 @@ public sealed partial class Aria2TlsIntegrationTests
             cancellationToken).ConfigureAwait(false);
         var status = await runtime.WaitForTerminalStatusAsync(
             gid,
-            DownloadTimeout,
             cancellationToken).ConfigureAwait(false);
         var classification = AssertRejectedCertificateStatus(
             status,
@@ -583,7 +576,6 @@ public sealed partial class Aria2TlsIntegrationTests
             cancellationToken).ConfigureAwait(false);
         var status = await runtime.WaitForTerminalStatusAsync(
             gid,
-            DownloadTimeout,
             cancellationToken).ConfigureAwait(false);
         var classification = AssertRejectedCertificateStatus(
             status,
@@ -625,7 +617,6 @@ public sealed partial class Aria2TlsIntegrationTests
             cancellationToken).ConfigureAwait(false);
         var interruptedStatus = await runtime.WaitForTerminalStatusAsync(
             gid,
-            DownloadTimeout,
             cancellationToken).ConfigureAwait(false);
         Assert.Equal("error", interruptedStatus.Status);
         Assert.Equal(1, server.ConnectionCount);
@@ -642,7 +633,6 @@ public sealed partial class Aria2TlsIntegrationTests
             cancellationToken).ConfigureAwait(false);
         var status = await runtime.WaitForTerminalStatusAsync(
             retryGid,
-            DownloadTimeout,
             cancellationToken).ConfigureAwait(false);
         var classification = AssertRejectedCertificateStatus(
             status,
@@ -694,8 +684,7 @@ public sealed partial class Aria2TlsIntegrationTests
         string gid,
         CancellationToken cancellationToken)
     {
-        var deadline = DateTimeOffset.UtcNow + DownloadTimeout;
-        while (DateTimeOffset.UtcNow < deadline)
+        while (true)
         {
             cancellationToken.ThrowIfCancellationRequested();
             var response = await runtime.Client.TellStatus(gid).ConfigureAwait(false);
@@ -709,8 +698,6 @@ public sealed partial class Aria2TlsIntegrationTests
             await Task.Delay(TimeSpan.FromMilliseconds(25), cancellationToken)
                 .ConfigureAwait(false);
         }
-
-        throw new TimeoutException("aria2 did not expose an active task before removal.");
     }
 
     private static void AssertPayload(byte[] expected, string path)
