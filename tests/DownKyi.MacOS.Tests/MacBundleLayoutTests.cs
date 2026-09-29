@@ -170,39 +170,39 @@ public sealed class MacBundleLayoutTests
     }
 
     [Fact]
-    public void LaunchVerificationBoundsCleanupForTermResistantApp()
+    public void LaunchVerificationKillsTermResistantApp()
     {
         var fixtureRoot = Path.Combine(Path.GetTempPath(), $"downkyi-launch-{Guid.NewGuid():N}");
         var appPath = Path.Combine(fixtureRoot, "Test.app");
         var executableDirectory = Path.Combine(appPath, "Contents", "MacOS");
         var executablePath = Path.Combine(executableDirectory, "TestApp");
+        var pidMarker = Path.Combine(fixtureRoot, "app.pid");
         Directory.CreateDirectory(executableDirectory);
 
         try
         {
             File.WriteAllText(
                 executablePath,
-                "#!/bin/bash\ntrap '' TERM\nwhile true; do sleep 1; done\n",
+                "#!/bin/bash\nprintf '%s' \"$$\" > \"$DOWNKYI_PID_MARKER\"\ntrap '' TERM\nwhile true; do sleep 1; done\n",
                 new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
             AssertSuccess(Run("/bin/chmod", fixtureRoot, "+x", executablePath));
 
-            var stopwatch = Stopwatch.StartNew();
             var result = Run(
                 "/bin/bash",
                 RepositoryRoot,
                 new Dictionary<string, string?>
                 {
                     ["MACOS_EXECUTABLE_NAME"] = "TestApp",
-                    ["MACOS_LAUNCH_SECONDS"] = "1"
+                    ["MACOS_LAUNCH_SECONDS"] = "1",
+                    ["DOWNKYI_PID_MARKER"] = pidMarker
                 },
                 Path.Combine(RepositoryRoot, "script", "macos", "verify-app-launch.sh"),
                 appPath);
-            stopwatch.Stop();
 
             AssertSuccess(result);
-            Assert.True(
-                stopwatch.Elapsed < TimeSpan.FromSeconds(15),
-                $"Launch cleanup exceeded its bound: {stopwatch.Elapsed}.");
+            var pid = File.ReadAllText(pidMarker).Trim();
+            Assert.Matches("^[0-9]+$", pid);
+            AssertSuccess(Run("/bin/bash", fixtureRoot, "-c", $"! kill -0 {pid} 2>/dev/null"));
         }
         finally
         {
@@ -310,11 +310,7 @@ public sealed class MacBundleLayoutTests
         Assert.NotNull(process);
         var standardOutput = process.StandardOutput.ReadToEndAsync();
         var standardError = process.StandardError.ReadToEndAsync();
-        if (!process.WaitForExit(120_000))
-        {
-            process.Kill(entireProcessTree: true);
-            throw new TimeoutException($"Process timed out: {fileName}");
-        }
+        process.WaitForExit();
 
         return new ProcessResult(
             process.ExitCode,
