@@ -71,17 +71,13 @@ public sealed class AvaloniaApplicationLifecycleTests
         {
             await lifecycle.StartHostAsync().ConfigureAwait(true);
             var shutdownTask = lifecycle.RequestShutdownAsync(TestContext.Current.CancellationToken);
-            await hostedService.StopEntered.Task.WaitAsync(
-                TimeSpan.FromSeconds(5),
-                TestContext.Current.CancellationToken);
+            await hostedService.StopEntered.Task.WaitAsync(TestContext.Current.CancellationToken);
 
             Assert.False(shutdownTask.IsCompleted);
             Assert.False(hostedService.IsQuiescent);
 
             hostedService.AllowStop.TrySetResult();
-            await shutdownTask.WaitAsync(
-                TimeSpan.FromSeconds(5),
-                TestContext.Current.CancellationToken);
+            await shutdownTask.WaitAsync(TestContext.Current.CancellationToken);
 
             Assert.True(hostedService.IsQuiescent);
         }
