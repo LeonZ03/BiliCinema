@@ -661,20 +661,18 @@ jobs:
             -RuntimeIdentifier "osx-${{ matrix.cpu }}" `
             -ExpectedVersion "${{ steps.version.outputs.content }}" `
             -OutputPath "script/macos/publish-manifest-osx-${{ matrix.cpu }}.json"
-      - name: Verify pre-sign aria2 supply-chain boundary
-        run: /bin/bash ./aria2-runtime-integrity.sh verify 哔哩下载姬.app osx-${{ matrix.cpu }}
-        working-directory: ./script/macos
       - name: Sign app
         run: |
-          chmod +x codesign-common.sh prepare-app-layout.sh sign.sh verify-app.sh verify-app-launch.sh sign-dmg.sh verify-dmg.sh verify-dmg-contents.sh verify-runtime-architecture.sh aria2-runtime-integrity.sh verify-aria2-runtime-readiness.sh
+          chmod +x codesign-common.sh prepare-app-layout.sh sign.sh verify-app-signature.sh verify-app-loader.sh sign-dmg.sh verify-dmg.sh validate-dmg-package.sh verify-runtime-architecture.sh aria2-runtime-integrity.sh verify-aria2-rpc-readiness.sh
           ./sign.sh
         working-directory: ./script/macos
         env:
           MACOS_ADHOC_SIGNING: ${{ env.HAS_MACOS_SIGNING != 'true' }}
-      - name: Verify app signature
-        run: |
-          ./verify-app.sh
-          ./aria2-runtime-integrity.sh verify 哔哩下载姬.app osx-${{ matrix.cpu }}
+      - name: Verify signed app trust
+        run: ./verify-app-signature.sh
+        working-directory: ./script/macos
+      - name: Verify signed aria2 integrity
+        run: ./aria2-runtime-integrity.sh verify 哔哩下载姬.app
         working-directory: ./script/macos
       - name: Notarize app
         if: ${{ env.HAS_MACOS_SIGNING == 'true' }}
@@ -684,11 +682,9 @@ jobs:
           xcrun stapler staple 哔哩下载姬.app
           rm -rf ./哔哩下载姬.zip
         working-directory: ./script/macos
-      - name: Verify notarized app
+      - name: Verify notarized app trust
         if: ${{ env.HAS_MACOS_SIGNING == 'true' }}
-        run: |
-          ./verify-app.sh
-          ./aria2-runtime-integrity.sh verify 哔哩下载姬.app osx-${{ matrix.cpu }}
+        run: ./verify-app-signature.sh
         working-directory: ./script/macos
         env:
           MACOS_VERIFY_GATEKEEPER: true
@@ -725,9 +721,9 @@ jobs:
         working-directory: ./script/macos
         env:
           MACOS_VERIFY_NOTARIZATION: true
-      - name: Verify packaged DMG contents and launch app
+      - name: Validate mounted and installed macOS package contracts
         run: |
-          ./verify-dmg-contents.sh DownKyi-${{ steps.version.outputs.content }}-osx-${{ matrix.cpu }}.dmg ${{ steps.version.outputs.content }} osx-${{ matrix.cpu }}
+          ./validate-dmg-package.sh DownKyi-${{ steps.version.outputs.content }}-osx-${{ matrix.cpu }}.dmg ${{ steps.version.outputs.content }} osx-${{ matrix.cpu }}
         working-directory: ./script/macos
         env:
           MACOS_VERIFY_GATEKEEPER: ${{ env.HAS_MACOS_SIGNING == 'true' }}

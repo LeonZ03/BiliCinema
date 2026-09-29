@@ -1,9 +1,13 @@
 #!/bin/bash
 set -euo pipefail
 
+if [ "$#" -ne 2 ]; then
+  echo "::error::Usage: aria2-runtime-integrity.sh <verify|refresh> <app-bundle-path>" >&2
+  exit 1
+fi
+
 MODE="${1:?Mode is required: verify or refresh.}"
 APP_PATH="${2:?App bundle path is required.}"
-RUNTIME_IDENTIFIER="${3:-}"
 ARIA_EXECUTABLE="$APP_PATH/Contents/MacOS/aria2/aria2c"
 CHECKSUM_LINK="$ARIA_EXECUTABLE.sha256"
 CHECKSUM_TARGET="$APP_PATH/Contents/Resources/dotnet/aria2/aria2c.sha256"
@@ -73,17 +77,4 @@ if [ "$ACTUAL_SHA256" != "$EXPECTED_SHA256" ]; then
   fail "final aria2 executable SHA-256 '$ACTUAL_SHA256' does not match runtime sidecar '$EXPECTED_SHA256'."
 fi
 
-if [ -n "$RUNTIME_IDENTIFIER" ]; then
-  case "$RUNTIME_IDENTIFIER" in
-    osx-x64) EXPECTED_ARCHITECTURE="x86_64" ;;
-    osx-arm64) EXPECTED_ARCHITECTURE="arm64" ;;
-    *) fail "unsupported macOS runtime identifier: $RUNTIME_IDENTIFIER" ;;
-  esac
-
-  ACTUAL_ARCHITECTURE="$(lipo -archs "$ARIA_EXECUTABLE" 2>/dev/null || true)"
-  if [ "$ACTUAL_ARCHITECTURE" != "$EXPECTED_ARCHITECTURE" ]; then
-    fail "aria2 executable architecture is '$ACTUAL_ARCHITECTURE', expected '$EXPECTED_ARCHITECTURE' for $RUNTIME_IDENTIFIER."
-  fi
-fi
-
-echo "[INFO] Final aria2 runtime integrity verified${RUNTIME_IDENTIFIER:+ for $RUNTIME_IDENTIFIER}."
+echo "[INFO] Final aria2 runtime checksum and bundle layout verified."

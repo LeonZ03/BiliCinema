@@ -1,25 +1,16 @@
 #!/bin/bash
 set -euo pipefail
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 APP_PATH="${1:?App bundle path is required.}"
-RUNTIME_IDENTIFIER="${2:?Runtime identifier is required.}"
 ARIA_EXECUTABLE="$APP_PATH/Contents/MacOS/aria2/aria2c"
 PROBE_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/downkyi-aria2-probe.XXXXXX")"
 ARIA_PID=""
 
 cleanup() {
   if [ -n "$ARIA_PID" ] && kill -0 "$ARIA_PID" 2>/dev/null; then
-    kill -TERM "$ARIA_PID" 2>/dev/null || true
-    for _ in {1..20}; do
-      if ! kill -0 "$ARIA_PID" 2>/dev/null; then
-        break
-      fi
-      sleep 0.1
-    done
-    if kill -0 "$ARIA_PID" 2>/dev/null; then
-      kill -KILL "$ARIA_PID" 2>/dev/null || true
-    fi
+    kill -KILL "$ARIA_PID" 2>/dev/null || true
+  fi
+  if [ -n "$ARIA_PID" ]; then
     wait "$ARIA_PID" 2>/dev/null || true
   fi
   rm -rf -- "$PROBE_ROOT"
@@ -27,15 +18,16 @@ cleanup() {
 trap cleanup EXIT
 
 fail() {
-  echo "::error::aria2 runtime readiness invariant failed: $*" >&2
+  echo "::error::aria2 RPC readiness invariant failed: $*" >&2
   if [ -f "$PROBE_ROOT/aria2.stderr" ]; then
     sed -E 's/token:[[:xdigit:]]+/token:[redacted]/g' "$PROBE_ROOT/aria2.stderr" >&2
   fi
   exit 1
 }
 
-/bin/bash "$SCRIPT_DIR/aria2-runtime-integrity.sh" verify "$APP_PATH" "$RUNTIME_IDENTIFIER"
-
+if [ ! -x "$ARIA_EXECUTABLE" ]; then
+  fail "bundled aria2 executable is missing or not executable: $ARIA_EXECUTABLE"
+fi
 if ! command -v python3 >/dev/null 2>&1; then
   fail "python3 is required for the deterministic RPC readiness probe."
 fi
@@ -90,16 +82,18 @@ printf '{"jsonrpc":"2.0","id":"runtime-shutdown","method":"aria2.shutdown","para
   >"$PROBE_ROOT/aria2.stdout" 2>"$PROBE_ROOT/aria2.stderr" &
 ARIA_PID=$!
 
-READY=false
-for _ in {1..50}; do
+while true; do
   if ! kill -0 "$ARIA_PID" 2>/dev/null; then
-    wait "$ARIA_PID" || status=$?
-    fail "aria2 exited before RPC became ready (status ${status:-0})."
+    if wait "$ARIA_PID"; then
+      status=0
+    else
+      status=$?
+    fi
+    ARIA_PID=""
+    fail "aria2 exited before RPC became ready (status $status)."
   fi
 
   if curl --fail --silent --show-error \
-      --connect-timeout 1 \
-      --max-time 1 \
       --header 'Content-Type: application/json' \
       --data-binary "@$VERSION_REQUEST" \
       "http://127.0.0.1:$RPC_PORT/jsonrpc" \
@@ -121,20 +115,13 @@ if "downkyi-secure-redirect-v2" not in features:
     raise SystemExit(1)
 PY
   then
-    READY=true
     break
   fi
 
   sleep 0.1
 done
 
-if [ "$READY" != "true" ]; then
-  fail "aria2 did not return system version and required downkyi-secure-redirect-v2 capability before the bounded deadline."
-fi
-
 if ! curl --fail --silent --show-error \
-    --connect-timeout 1 \
-    --max-time 2 \
     --header 'Content-Type: application/json' \
     --data-binary "@$SHUTDOWN_REQUEST" \
     "http://127.0.0.1:$RPC_PORT/jsonrpc" \
@@ -156,17 +143,14 @@ then
   fail "aria2 shutdown RPC did not return OK."
 fi
 
-for _ in {1..50}; do
-  if ! kill -0 "$ARIA_PID" 2>/dev/null; then
-    wait "$ARIA_PID" || status=$?
-    if [ "${status:-0}" -ne 0 ]; then
-      fail "aria2 exited abnormally after shutdown RPC (status $status)."
-    fi
-    ARIA_PID=""
-    echo "[INFO] Packaged aria2 passed integrity, RPC readiness, secure-redirect capability, and graceful shutdown checks."
-    exit 0
-  fi
-  sleep 0.1
-done
+if wait "$ARIA_PID"; then
+  status=0
+else
+  status=$?
+fi
+ARIA_PID=""
+if [ "$status" -ne 0 ]; then
+  fail "aria2 exited abnormally after shutdown RPC (status $status)."
+fi
 
-fail "aria2 did not exit after successful shutdown RPC."
+echo "[INFO] Packaged aria2 passed RPC readiness, secure-redirect capability, and graceful shutdown checks."

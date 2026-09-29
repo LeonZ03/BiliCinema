@@ -115,7 +115,7 @@ public sealed class MacBundleLayoutTests
             AssertSuccess(Run(
                 "/bin/bash",
                 RepositoryRoot,
-                Path.Combine(RepositoryRoot, "script", "macos", "verify-app.sh"),
+                Path.Combine(RepositoryRoot, "script", "macos", "verify-app-signature.sh"),
                 correctedApp));
 
             var launch = Run(
@@ -130,16 +130,23 @@ public sealed class MacBundleLayoutTests
     }
 
     [Fact]
-    public void LaunchVerificationReportsRuntimeLoaderExit130()
+    public void AppLoaderVerificationReportsRuntimeLoaderExit130()
     {
-        var fixtureRoot = Path.Combine(Path.GetTempPath(), $"downkyi-launch-failure-{Guid.NewGuid():N}");
+        var fixtureRoot = Path.Combine(Path.GetTempPath(), $"downkyi-loader-failure-{Guid.NewGuid():N}");
         var appPath = Path.Combine(fixtureRoot, "Test.app");
         var executableDirectory = Path.Combine(appPath, "Contents", "MacOS");
         var executablePath = Path.Combine(executableDirectory, "TestApp");
+        var runtimeDirectory = Path.Combine(appPath, "Contents", "Resources", "dotnet");
         Directory.CreateDirectory(executableDirectory);
+        Directory.CreateDirectory(runtimeDirectory);
 
         try
         {
+            WriteInfoPlist(appPath, "TestApp", "cn.bzdrs.downkyi.loader-failure");
+            File.WriteAllText(Path.Combine(runtimeDirectory, "libcoreclr.dylib"), "fixture");
+            File.CreateSymbolicLink(
+                Path.Combine(executableDirectory, "libcoreclr.dylib"),
+                "../Resources/dotnet/libcoreclr.dylib");
             File.WriteAllText(
                 executablePath,
                 "#!/bin/bash\necho 'Failed to load libhostfxr.dylib' >&2\necho 'mapping process and mapped file (non-platform) have different Team IDs' >&2\nexit 130\n",
@@ -149,12 +156,7 @@ public sealed class MacBundleLayoutTests
             var result = Run(
                 "/bin/bash",
                 RepositoryRoot,
-                new Dictionary<string, string?>
-                {
-                    ["MACOS_EXECUTABLE_NAME"] = "TestApp",
-                    ["MACOS_LAUNCH_SECONDS"] = "1"
-                },
-                Path.Combine(RepositoryRoot, "script", "macos", "verify-app-launch.sh"),
+                Path.Combine(RepositoryRoot, "script", "macos", "verify-app-loader.sh"),
                 appPath);
 
             Assert.NotEqual(0, result.ExitCode);
@@ -170,39 +172,145 @@ public sealed class MacBundleLayoutTests
     }
 
     [Fact]
-    public void LaunchVerificationKillsTermResistantApp()
+    public void AppLoaderVerificationObservesMappedCoreClrAndCleansUpProbe()
     {
-        var fixtureRoot = Path.Combine(Path.GetTempPath(), $"downkyi-launch-{Guid.NewGuid():N}");
+        var fixtureRoot = Path.Combine(Path.GetTempPath(), $"downkyi-loader-{Guid.NewGuid():N}");
         var appPath = Path.Combine(fixtureRoot, "Test.app");
         var executableDirectory = Path.Combine(appPath, "Contents", "MacOS");
         var executablePath = Path.Combine(executableDirectory, "TestApp");
+        var runtimeDirectory = Path.Combine(appPath, "Contents", "Resources", "dotnet");
+        var runtimePath = Path.Combine(runtimeDirectory, "libcoreclr.dylib");
+        var librarySource = Path.Combine(fixtureRoot, "runtime.c");
+        var executableSource = Path.Combine(fixtureRoot, "app.c");
         var pidMarker = Path.Combine(fixtureRoot, "app.pid");
         Directory.CreateDirectory(executableDirectory);
+        Directory.CreateDirectory(runtimeDirectory);
 
         try
         {
+            WriteInfoPlist(appPath, "TestApp", "cn.bzdrs.downkyi.loader-probe");
             File.WriteAllText(
-                executablePath,
-                "#!/bin/bash\nprintf '%s' \"$$\" > \"$DOWNKYI_PID_MARKER\"\ntrap '' TERM\nwhile true; do sleep 1; done\n",
+                librarySource,
+                "int downkyi_fixture_runtime(void) { return 0; }\n",
                 new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
-            AssertSuccess(Run("/bin/chmod", fixtureRoot, "+x", executablePath));
+            AssertSuccess(Run(
+                "/usr/bin/clang",
+                fixtureRoot,
+                "-dynamiclib",
+                "-Wl,-install_name,@rpath/libcoreclr.dylib",
+                "-o",
+                runtimePath,
+                librarySource));
+            File.CreateSymbolicLink(
+                Path.Combine(executableDirectory, "libcoreclr.dylib"),
+                "../Resources/dotnet/libcoreclr.dylib");
+
+            File.WriteAllText(
+                executableSource,
+                "#include <signal.h>\n#include <stdio.h>\n#include <stdlib.h>\n#include <unistd.h>\nextern int downkyi_fixture_runtime(void);\nint main(void) {\n  if (downkyi_fixture_runtime() != 0) return 2;\n  const char *marker = getenv(\"DOWNKYI_PID_MARKER\");\n  if (marker == NULL) return 3;\n  FILE *file = fopen(marker, \"w\");\n  if (file == NULL) return 4;\n  fprintf(file, \"%d\", getpid());\n  if (fclose(file) != 0) return 5;\n  signal(SIGTERM, SIG_IGN);\n  for (;;) pause();\n}\n",
+                new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
+            AssertSuccess(Run(
+                "/usr/bin/clang",
+                fixtureRoot,
+                executableSource,
+                "-L",
+                runtimeDirectory,
+                "-lcoreclr",
+                "-Wl,-rpath,@executable_path/../Resources/dotnet",
+                "-o",
+                executablePath));
 
             var result = Run(
                 "/bin/bash",
                 RepositoryRoot,
                 new Dictionary<string, string?>
                 {
-                    ["MACOS_EXECUTABLE_NAME"] = "TestApp",
-                    ["MACOS_LAUNCH_SECONDS"] = "1",
                     ["DOWNKYI_PID_MARKER"] = pidMarker
                 },
-                Path.Combine(RepositoryRoot, "script", "macos", "verify-app-launch.sh"),
+                Path.Combine(RepositoryRoot, "script", "macos", "verify-app-loader.sh"),
                 appPath);
 
             AssertSuccess(result);
+            Assert.Contains("mapped bundled libcoreclr.dylib", result.StandardOutput, StringComparison.Ordinal);
             var pid = File.ReadAllText(pidMarker).Trim();
             Assert.Matches("^[0-9]+$", pid);
             AssertSuccess(Run("/bin/bash", fixtureRoot, "-c", $"! kill -0 {pid} 2>/dev/null"));
+        }
+        finally
+        {
+            Directory.Delete(fixtureRoot, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void BundleLaunchVerificationUsesNativeFinishedLaunchingAndTerminationStates()
+    {
+        var fixtureRoot = Path.Combine(Path.GetTempPath(), $"downkyi-bundle-launch-{Guid.NewGuid():N}");
+        var appPath = Path.Combine(fixtureRoot, "NativeFixture.app");
+        var executableDirectory = Path.Combine(appPath, "Contents", "MacOS");
+        var executablePath = Path.Combine(executableDirectory, "NativeFixture");
+        var sourcePath = Path.Combine(fixtureRoot, "NativeFixture.m");
+        Directory.CreateDirectory(executableDirectory);
+
+        try
+        {
+            WriteInfoPlist(appPath, "NativeFixture", $"cn.bzdrs.downkyi.native-fixture-{Guid.NewGuid():N}");
+            File.WriteAllText(
+                sourcePath,
+                "#import <AppKit/AppKit.h>\n@interface FixtureDelegate : NSObject <NSApplicationDelegate>\n@end\n@implementation FixtureDelegate\n- (NSApplicationTerminateReply)applicationShouldTerminate:(NSApplication *)sender { return NSTerminateNow; }\n@end\nint main(int argc, const char *argv[]) {\n  @autoreleasepool {\n    NSApplication *application = [NSApplication sharedApplication];\n    FixtureDelegate *delegate = [FixtureDelegate new];\n    application.delegate = delegate;\n    [application setActivationPolicy:NSApplicationActivationPolicyProhibited];\n    [application run];\n    (void)delegate;\n  }\n  return 0;\n}\n",
+                new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
+            AssertSuccess(Run(
+                "/usr/bin/clang",
+                fixtureRoot,
+                "-fobjc-arc",
+                "-framework",
+                "AppKit",
+                "-o",
+                executablePath,
+                sourcePath));
+
+            var result = Run(
+                "/usr/bin/xcrun",
+                RepositoryRoot,
+                "swift",
+                Path.Combine(RepositoryRoot, "script", "macos", "verify-app-bundle-launch.swift"),
+                appPath);
+
+            AssertSuccess(result);
+            Assert.Contains("isFinishedLaunching", result.StandardOutput, StringComparison.Ordinal);
+            Assert.Contains("isTerminated", result.StandardOutput, StringComparison.Ordinal);
+        }
+        finally
+        {
+            Directory.Delete(fixtureRoot, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void BundleLaunchVerificationRejectsTerminationBeforeFinishedLaunching()
+    {
+        var fixtureRoot = Path.Combine(Path.GetTempPath(), $"downkyi-bundle-termination-{Guid.NewGuid():N}");
+        var appPath = Path.Combine(fixtureRoot, "TerminatingFixture.app");
+        var executableDirectory = Path.Combine(appPath, "Contents", "MacOS");
+        var executablePath = Path.Combine(executableDirectory, "TerminatingFixture");
+        var sourcePath = Path.Combine(fixtureRoot, "TerminatingFixture.c");
+        Directory.CreateDirectory(executableDirectory);
+
+        try
+        {
+            WriteInfoPlist(appPath, "TerminatingFixture", $"cn.bzdrs.downkyi.terminating-fixture-{Guid.NewGuid():N}");
+            File.WriteAllText(sourcePath, "int main(void) { return 17; }\n", new UTF8Encoding(false));
+            AssertSuccess(Run("/usr/bin/clang", fixtureRoot, "-o", executablePath, sourcePath));
+
+            var result = Run(
+                "/usr/bin/xcrun",
+                RepositoryRoot,
+                "swift",
+                Path.Combine(RepositoryRoot, "script", "macos", "verify-app-bundle-launch.swift"),
+                appPath);
+
+            Assert.NotEqual(0, result.ExitCode);
+            Assert.Contains("::error::", result.StandardError, StringComparison.Ordinal);
         }
         finally
         {
@@ -263,6 +371,29 @@ public sealed class MacBundleLayoutTests
               <string>BundleProbe</string>
               <key>CFBundleIdentifier</key>
               <string>cn.bzdrs.downkyi.bundle-probe</string>
+              <key>CFBundlePackageType</key>
+              <string>APPL</string>
+            </dict>
+            </plist>
+            """,
+            new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
+    }
+
+    private static void WriteInfoPlist(string appPath, string executableName, string bundleIdentifier)
+    {
+        var contentsDirectory = Path.Combine(appPath, "Contents");
+        Directory.CreateDirectory(contentsDirectory);
+        File.WriteAllText(
+            Path.Combine(contentsDirectory, "Info.plist"),
+            $$"""
+            <?xml version="1.0" encoding="UTF-8"?>
+            <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+            <plist version="1.0">
+            <dict>
+              <key>CFBundleExecutable</key>
+              <string>{{executableName}}</string>
+              <key>CFBundleIdentifier</key>
+              <string>{{bundleIdentifier}}</string>
               <key>CFBundlePackageType</key>
               <string>APPL</string>
             </dict>
