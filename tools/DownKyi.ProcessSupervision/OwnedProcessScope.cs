@@ -144,7 +144,8 @@ internal sealed class OwnedProcessScope : IDisposable
         if (OperatingSystem.IsWindows())
         {
             TerminateWindowsJob(job!);
-            await WaitForWindowsJobToEmptyAsync(job!, deadline).ConfigureAwait(false);
+            await WaitForWindowsJobToEmptyAsync(
+                job!, deadline, CancellationToken.None).ConfigureAwait(false);
             return;
         }
 
@@ -171,6 +172,20 @@ internal sealed class OwnedProcessScope : IDisposable
         {
             await WaitForLinuxProcessGroupToEmptyAsync(deadline).ConfigureAwait(false);
         }
+    }
+
+    internal async Task TerminateAsync(CancellationToken cancellationToken)
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            throw new PlatformNotSupportedException(
+                "State-driven termination without a cleanup deadline is only used by Windows test diagnostics.");
+        }
+
+        terminationAttempted = true;
+        TerminateWindowsJob(job!);
+        await WaitForWindowsJobToEmptyAsync(
+            job!, deadline: null, cancellationToken).ConfigureAwait(false);
     }
 
     internal async Task WaitForMacProcessGroupToEmptyAsync(CleanupDeadline deadline)
@@ -346,7 +361,9 @@ internal sealed class OwnedProcessScope : IDisposable
     }
 
     private static async Task WaitForWindowsJobToEmptyAsync(
-        SafeFileHandle handle, CleanupDeadline deadline)
+        SafeFileHandle handle,
+        CleanupDeadline? deadline,
+        CancellationToken cancellationToken)
     {
         while (true)
         {
@@ -362,15 +379,20 @@ internal sealed class OwnedProcessScope : IDisposable
                 return;
             }
 
-            var remaining = deadline.WorkWindow;
-            if (remaining == TimeSpan.Zero)
+            var delay = TimeSpan.FromMilliseconds(10);
+            if (deadline is not null)
             {
-                throw new TimeoutException(
-                    $"The owned Windows Job still has {accounting.ActiveProcesses} active processes.");
+                var remaining = deadline.WorkWindow;
+                if (remaining == TimeSpan.Zero)
+                {
+                    throw new TimeoutException(
+                        $"The owned Windows Job still has {accounting.ActiveProcesses} active processes.");
+                }
+
+                delay = TimeSpan.FromTicks(Math.Min(delay.Ticks, remaining.Ticks));
             }
 
-            await Task.Delay(TimeSpan.FromTicks(Math.Min(
-                TimeSpan.FromMilliseconds(10).Ticks, remaining.Ticks))).ConfigureAwait(false);
+            await Task.Delay(delay, cancellationToken).ConfigureAwait(false);
         }
     }
 

@@ -1,7 +1,6 @@
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
-using System.Runtime.ExceptionServices;
 using System.Text;
 using System.Text.RegularExpressions;
 using System.Xml.Linq;
@@ -513,17 +512,10 @@ internal sealed class WindowsEtwResourceFlightRecorder : IDisposable
         return int.TryParse(trimmed, NumberStyles.Integer, CultureInfo.InvariantCulture, out processId);
     }
 
-    private static ToolResult RunTool(string executable, params string[] arguments) =>
-        RunTool(executable, TimeSpan.FromSeconds(15), arguments);
-
     internal static ToolResult RunTool(
         string executable,
-        TimeSpan timeout,
         params string[] arguments)
     {
-        ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(timeout, TimeSpan.Zero);
-
-        var deadline = new CleanupDeadline(timeout);
         using var scope = OwnedProcessScope.StartAsync(
                 CreateToolStartInfo(executable, arguments),
                 CancellationToken.None)
@@ -532,37 +524,12 @@ internal sealed class WindowsEtwResourceFlightRecorder : IDisposable
         var process = scope.Host;
         var outputTask = process.StandardOutput.ReadToEndAsync();
         var errorTask = process.StandardError.ReadToEndAsync();
-        var drainTask = Task.WhenAll(outputTask, errorTask);
+        process.WaitForExit();
+        var exitCode = process.ExitCode;
 
-        Exception? primaryFailure = null;
-        if (!process.WaitForExit(deadline.WorkWindow))
-        {
-            primaryFailure = new TimeoutException(
-                $"{executable} did not finish within the diagnostic timeout.");
-        }
-        else if (!WaitForDrain(drainTask, deadline.WorkWindow))
-        {
-            primaryFailure = new TimeoutException(
-                $"{executable} output did not drain within the diagnostic timeout.");
-        }
-
-        if (primaryFailure is not null)
-        {
-            var cleanupFailure = CompleteTimedOutToolCleanup(
-                scope,
-                drainTask,
-                executable,
-                deadline);
-            if (cleanupFailure is not null)
-            {
-                throw new AggregateException(
-                    $"{executable} exceeded its diagnostic deadline and cleanup also failed.",
-                    primaryFailure,
-                    cleanupFailure);
-            }
-
-            ExceptionDispatchInfo.Capture(primaryFailure).Throw();
-        }
+        // Root exit is the completion signal. Closing any remaining owned
+        // descendants makes inherited output handles reach their terminal state.
+        scope.TerminateAsync(CancellationToken.None).GetAwaiter().GetResult();
 
         string output;
         try
@@ -578,7 +545,7 @@ internal sealed class WindowsEtwResourceFlightRecorder : IDisposable
         }
 
         return new ToolResult(
-            process.ExitCode,
+            exitCode,
             Sanitize(output.ReplaceLineEndings(" ").Trim()));
     }
 
@@ -599,85 +566,6 @@ internal sealed class WindowsEtwResourceFlightRecorder : IDisposable
         }
 
         return startInfo;
-    }
-
-    private static bool WaitForDrain(Task drainTask, TimeSpan timeout)
-    {
-        if (drainTask.IsCompleted)
-        {
-            drainTask.GetAwaiter().GetResult();
-            return true;
-        }
-
-        try
-        {
-            drainTask.WaitAsync(timeout).GetAwaiter().GetResult();
-            return true;
-        }
-        catch (TimeoutException)
-        {
-            return false;
-        }
-    }
-
-    [SuppressMessage(
-        "Design",
-        "CA1031:Do not catch general exception types",
-        Justification = "The original tool timeout must be retained while every bounded cleanup step is attempted.")]
-    private static Exception? CompleteTimedOutToolCleanup(
-        OwnedProcessScope scope,
-        Task drainTask,
-        string executable,
-        CleanupDeadline deadline)
-    {
-        var failures = new List<Exception>();
-        try
-        {
-            scope.TerminateAsync(deadline).GetAwaiter().GetResult();
-        }
-        catch (Exception exception)
-        {
-            failures.Add(exception);
-        }
-
-        var process = scope.Host;
-        try
-        {
-            if (!process.HasExited && !process.WaitForExit(deadline.Remaining))
-            {
-                failures.Add(new TimeoutException(
-                    $"{executable} did not exit before the diagnostic deadline."));
-            }
-        }
-        catch (Exception exception)
-        {
-            failures.Add(exception);
-        }
-
-        try
-        {
-            if (!WaitForDrain(drainTask, deadline.Remaining))
-            {
-                process.StandardOutput.Dispose();
-                process.StandardError.Dispose();
-                if (!WaitForDrain(drainTask, deadline.Remaining))
-                {
-                    failures.Add(new TimeoutException(
-                        $"{executable} output did not drain before the diagnostic deadline."));
-                }
-            }
-        }
-        catch (Exception exception)
-        {
-            failures.Add(exception);
-        }
-
-        return failures.Count switch
-        {
-            0 => null,
-            1 => failures[0],
-            _ => new AggregateException($"{executable} cleanup had multiple failures.", failures)
-        };
     }
 
     private static string ReadRunIdentity()
