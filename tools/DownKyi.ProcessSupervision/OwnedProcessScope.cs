@@ -143,8 +143,7 @@ internal sealed class OwnedProcessScope : IDisposable
         terminationAttempted = true;
         if (OperatingSystem.IsWindows())
         {
-            await Task.Run(() => TerminateWindowsJob(job!))
-                .WaitAsync(deadline.Remaining).ConfigureAwait(false);
+            TerminateWindowsJob(job!);
             await WaitForWindowsJobToEmptyAsync(job!, deadline).ConfigureAwait(false);
             return;
         }
