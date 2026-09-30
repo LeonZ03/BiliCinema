@@ -5,10 +5,10 @@ namespace DownKyi.TestInfrastructure;
 
 public sealed class TestDataIsolationFixture : IAsyncDisposable
 {
-    private const int DeleteAttempts = 4;
     private const string LifecycleMarkerEnvironmentVariable = "DOWNKYI_LIFECYCLE_MARKER";
     private readonly string _root;
     private readonly string? _lifecycleMarker;
+    private readonly Action<string> _deleteRoot;
 
     public TestDataIsolationFixture()
     {
@@ -20,39 +20,30 @@ public sealed class TestDataIsolationFixture : IAsyncDisposable
             Environment.ProcessId.ToString(CultureInfo.InvariantCulture));
         Environment.SetEnvironmentVariable("DOWNKYI_DATA_DIR", _root);
         _lifecycleMarker = Environment.GetEnvironmentVariable(LifecycleMarkerEnvironmentVariable);
+        _deleteRoot = DeleteRoot;
         WriteLifecycleMarker("started");
     }
 
-    public async ValueTask DisposeAsync()
+    internal TestDataIsolationFixture(string root, Action<string> deleteRoot)
     {
-        WriteLifecycleMarker("disposing");
-        for (var attempt = 1; attempt < DeleteAttempts; attempt++)
-        {
-            try
-            {
-                DeleteRoot();
-                WriteLifecycleMarker("disposed");
-                return;
-            }
-            catch (IOException)
-            {
-                await Task.Delay(TimeSpan.FromMilliseconds(50 * attempt)).ConfigureAwait(false);
-            }
-            catch (UnauthorizedAccessException)
-            {
-                await Task.Delay(TimeSpan.FromMilliseconds(50 * attempt)).ConfigureAwait(false);
-            }
-        }
-
-        DeleteRoot();
-        WriteLifecycleMarker("disposed");
+        ArgumentNullException.ThrowIfNull(deleteRoot);
+        _root = root;
+        _deleteRoot = deleteRoot;
     }
 
-    private void DeleteRoot()
+    public ValueTask DisposeAsync()
     {
-        if (Directory.Exists(_root))
+        WriteLifecycleMarker("disposing");
+        _deleteRoot(_root);
+        WriteLifecycleMarker("disposed");
+        return ValueTask.CompletedTask;
+    }
+
+    private static void DeleteRoot(string root)
+    {
+        if (Directory.Exists(root))
         {
-            Directory.Delete(_root, recursive: true);
+            Directory.Delete(root, recursive: true);
         }
     }
 
