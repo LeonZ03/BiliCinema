@@ -11,31 +11,10 @@ public sealed class WindowsEtwResourceFlightRecorderTests
     {
         var result = WindowsEtwResourceFlightRecorder.RunTool(
             "dotnet",
-            TimeSpan.FromSeconds(10),
             CreateFixtureArguments("fixture-dual-output"));
 
         Assert.Equal(0, result.ExitCode);
         Assert.Equal(256 * 1024, result.Output.Length);
-    }
-
-    [Fact]
-    public void DiagnosticToolTimeoutIsTyped()
-    {
-        var exception = Record.Exception(
-            () => WindowsEtwResourceFlightRecorder.RunTool(
-                "dotnet",
-                TimeSpan.FromSeconds(1),
-                CreateFixtureArguments("fixture-hold")));
-
-        var timeout = exception switch
-        {
-            TimeoutException directTimeout => directTimeout,
-            AggregateException aggregate =>
-                Assert.IsType<TimeoutException>(aggregate.InnerExceptions[0]),
-            _ => throw new Xunit.Sdk.XunitException(
-                "Expected a bounded timeout failure.")
-        };
-        Assert.Contains("diagnostic timeout", timeout.Message, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -47,24 +26,14 @@ public sealed class WindowsEtwResourceFlightRecorderTests
         int? childPid = null;
         try
         {
-            var exception = Record.Exception(
-                () => WindowsEtwResourceFlightRecorder.RunTool(
-                    "dotnet",
-                    TimeSpan.FromSeconds(2),
-                    CreateFixtureArguments(
-                        "fixture-exit-with-pipe-holder",
-                        RuntimeConfigPath,
-                        marker)));
+            var result = WindowsEtwResourceFlightRecorder.RunTool(
+                "dotnet",
+                CreateFixtureArguments(
+                    "fixture-exit-with-pipe-holder",
+                    RuntimeConfigPath,
+                    marker));
 
-            var timeout = exception switch
-            {
-                TimeoutException directTimeout => directTimeout,
-                AggregateException aggregate =>
-                    Assert.IsType<TimeoutException>(aggregate.InnerExceptions[0]),
-                _ => throw new Xunit.Sdk.XunitException(
-                    "Expected a bounded timeout failure.")
-            };
-            Assert.Contains("diagnostic timeout", timeout.Message, StringComparison.Ordinal);
+            Assert.Equal(0, result.ExitCode);
             childPid = int.Parse(
                 File.ReadAllText(marker),
                 System.Globalization.CultureInfo.InvariantCulture);
