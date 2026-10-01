@@ -72,6 +72,11 @@ does not change its public API.
   classification. If the WebSocket disconnects, each affected transfer makes at
   most one `TellStatus` check and never treats active, unknown or failed status
   lookup as paused.
+- Once an exact-GID WebSocket event or status response confirms `paused`, that
+  product result remains authoritative. Losing HTTP, WebSocket or status
+  operations are observed and logged by transport layer but cannot replace the
+  confirmed pause with a transfer failure. A transfer fails only when the final
+  exact-GID status check still cannot confirm pause or a terminal state.
 
 `AriaClientRpcContractTests` invokes every public RPC method against an injected
 capture transport. It verifies that the public method inventory and wire method

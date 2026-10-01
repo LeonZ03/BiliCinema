@@ -289,7 +289,34 @@ internal sealed partial class Aria2TransferBackend : ITransferBackend
                     request).ConfigureAwait(true);
             }
 
-            var checkpoint = await pauseCheckpointTask.ConfigureAwait(true);
+            Aria2RuntimeLifecycle.Aria2PauseCheckpoint checkpoint;
+            try
+            {
+                checkpoint = await pauseCheckpointTask.ConfigureAwait(true);
+            }
+            catch (Exception exception) when (IsPauseCommunicationFailure(exception))
+            {
+                LogPauseCommunicationFailure(
+                    "pause-rpc",
+                    exception,
+                    pauseConfirmed: false);
+                var statusAfterPauseFailure = await CancelAndObserveStatusAsync(
+                    transferCancellation,
+                    statusTask,
+                    pauseConfirmed: false).ConfigureAwait(true);
+                if (statusAfterPauseFailure != null)
+                {
+                    return await CreateTransferResultAsync(statusAfterPauseFailure, request)
+                        .ConfigureAwait(true);
+                }
+
+                return await ResolveUnconfirmedPauseAsync(
+                    ariaManager,
+                    activeGid,
+                    request,
+                    triggerLayer: "pause-rpc").ConfigureAwait(true);
+            }
+
             if (checkpoint is Aria2RuntimeLifecycle.Aria2PauseCheckpoint.Complete
                 or Aria2RuntimeLifecycle.Aria2PauseCheckpoint.Error
                 or Aria2RuntimeLifecycle.Aria2PauseCheckpoint.Removed)
@@ -299,24 +326,31 @@ internal sealed partial class Aria2TransferBackend : ITransferBackend
                     request).ConfigureAwait(true);
             }
 
+            if (checkpoint == Aria2RuntimeLifecycle.Aria2PauseCheckpoint.Paused)
+            {
+                _ = await CancelAndObserveStatusAsync(
+                    transferCancellation,
+                    statusTask,
+                    pauseConfirmed: true).ConfigureAwait(true);
+                LogPauseConfirmed("websocket");
+                return DownloadTransferResult.Paused();
+            }
+
             var racedStatus = await CancelAndObserveStatusAsync(
                 transferCancellation,
-                statusTask).ConfigureAwait(true);
+                statusTask,
+                pauseConfirmed: false).ConfigureAwait(true);
             if (racedStatus != null)
             {
                 return await CreateTransferResultAsync(racedStatus, request)
                     .ConfigureAwait(true);
             }
 
-            if (checkpoint == Aria2RuntimeLifecycle.Aria2PauseCheckpoint.Paused)
-            {
-                return DownloadTransferResult.Paused();
-            }
-
-            return await ResolveDisconnectedPauseAsync(
+            return await ResolveUnconfirmedPauseAsync(
                 ariaManager,
                 activeGid,
-                request).ConfigureAwait(true);
+                request,
+                triggerLayer: "websocket").ConfigureAwait(true);
         }
         finally
         {
@@ -333,21 +367,96 @@ internal sealed partial class Aria2TransferBackend : ITransferBackend
             CancellationToken cancellationToken)
     {
         using var waiter = _runtimeLifecycle.RegisterPauseWaiter(gid);
-        var pause = await _ariaClient.PauseAsync(gid, cancellationToken)
+        using var pauseCancellation = CancellationTokenSource.CreateLinkedTokenSource(
+            cancellationToken);
+        var pauseTask = _ariaClient.PauseAsync(gid, pauseCancellation.Token);
+        var completedTask = await Task.WhenAny(pauseTask, waiter.Completion)
             .ConfigureAwait(true);
+        if (ReferenceEquals(completedTask, waiter.Completion))
+        {
+            var checkpoint = await waiter.Completion.ConfigureAwait(true);
+            if (checkpoint != Aria2RuntimeLifecycle.Aria2PauseCheckpoint.Disconnected)
+            {
+                await pauseCancellation.CancelAsync().ConfigureAwait(true);
+                await ObservePauseRpcAfterCheckpointAsync(
+                    gid,
+                    pauseTask,
+                    pauseCancellation,
+                    checkpoint).ConfigureAwait(true);
+                return checkpoint;
+            }
+        }
+
+        AriaPause pause;
+        try
+        {
+            pause = await pauseTask.ConfigureAwait(true);
+        }
+        catch (Exception exception) when (
+            IsPauseCommunicationFailure(exception)
+            && waiter.Completion.IsCompleted)
+        {
+            var checkpoint = await waiter.Completion.ConfigureAwait(true);
+            LogPauseCommunicationFailure(
+                "pause-rpc",
+                exception,
+                checkpoint == Aria2RuntimeLifecycle.Aria2PauseCheckpoint.Paused);
+            return checkpoint;
+        }
+
         if (pause is not { Result: { } pausedGid }
             || !string.Equals(pausedGid, gid, StringComparison.Ordinal))
         {
+            if (waiter.Completion.IsCompleted)
+            {
+                var checkpoint = await waiter.Completion.ConfigureAwait(true);
+                _logger.LogWarningMessage(
+                    "aria2 pause RPC response was rejected after a notification checkpoint; " +
+                    $"layer=pause-rpc; pauseConfirmed={IsPaused(checkpoint)}.");
+                return checkpoint;
+            }
+
             throw new InvalidOperationException("aria2 rejected the pause request.");
         }
 
         return await waiter.Completion.WaitAsync(cancellationToken).ConfigureAwait(true);
     }
 
-    private async Task<DownloadTransferResult> ResolveDisconnectedPauseAsync(
+    private async Task ObservePauseRpcAfterCheckpointAsync(
+        string gid,
+        Task<AriaPause> pauseTask,
+        CancellationTokenSource pauseCancellation,
+        Aria2RuntimeLifecycle.Aria2PauseCheckpoint checkpoint)
+    {
+        try
+        {
+            var pause = await pauseTask.ConfigureAwait(true);
+            if (pause is not { Result: { } pausedGid }
+                || !string.Equals(pausedGid, gid, StringComparison.Ordinal))
+            {
+                _logger.LogWarningMessage(
+                    "aria2 pause RPC response was rejected after a notification checkpoint; " +
+                    $"layer=pause-rpc; pauseConfirmed={IsPaused(checkpoint)}.");
+            }
+        }
+        catch (OperationCanceledException) when (pauseCancellation.IsCancellationRequested)
+        {
+            return;
+        }
+        catch (Exception exception) when (IsPauseCommunicationFailure(exception))
+        {
+            LogPauseCommunicationFailure(
+                "pause-rpc",
+                exception,
+                checkpoint == Aria2RuntimeLifecycle.Aria2PauseCheckpoint.Paused);
+        }
+    }
+
+    private async Task<DownloadTransferResult> ResolveUnconfirmedPauseAsync(
         AriaManager ariaManager,
         string gid,
-        DownloadTransferRequest request)
+        DownloadTransferRequest request,
+        string triggerLayer)
     {
         AriaTellStatus status;
         try
@@ -361,9 +470,10 @@ internal sealed partial class Aria2TransferBackend : ITransferBackend
             or TimeoutException
             or Newtonsoft.Json.JsonException)
         {
-            _logger.LogWarningMessage(
-                $"aria2 pause could not be confirmed after WebSocket disconnect; " +
-                $"type={exception.GetType().Name}.");
+            LogPauseCommunicationFailure(
+                "status-rpc",
+                exception,
+                pauseConfirmed: false);
             return DownloadTransferResult.Failed(
                 DownloadTransferFailureKind.TransientNetwork,
                 "download.transfer.aria2-rpc");
@@ -372,7 +482,8 @@ internal sealed partial class Aria2TransferBackend : ITransferBackend
         if (status is not { Result: { } statusResult })
         {
             _logger.LogWarningMessage(
-                "aria2 pause could not be confirmed after WebSocket disconnect.");
+                "aria2 pause remains unconfirmed; " +
+                $"trigger={triggerLayer}; layer=status-rpc; state=missing.");
             return DownloadTransferResult.Failed(
                 DownloadTransferFailureKind.TransientNetwork,
                 "download.transfer.aria2-rpc");
@@ -381,6 +492,7 @@ internal sealed partial class Aria2TransferBackend : ITransferBackend
         var state = AriaManager.ClassifyStatus(statusResult);
         if (state == AriaDownloadState.Paused)
         {
+            LogPauseConfirmed("status-rpc");
             return DownloadTransferResult.Paused();
         }
 
@@ -396,7 +508,8 @@ internal sealed partial class Aria2TransferBackend : ITransferBackend
         }
 
         _logger.LogWarningMessage(
-            $"aria2 pause could not be confirmed after WebSocket disconnect; state={state}.");
+            "aria2 pause remains unconfirmed; " +
+            $"trigger={triggerLayer}; layer=status-rpc; state={state}.");
         return DownloadTransferResult.Failed(
             DownloadTransferFailureKind.TransientNetwork,
             "download.transfer.aria2-rpc");
@@ -406,7 +519,7 @@ internal sealed partial class Aria2TransferBackend : ITransferBackend
         AriaDownloadStatus status,
         DownloadTransferRequest request)
     {
-        if (status.Result == DownloadResult.SUCCESS)
+        if (status is { Result: DownloadResult.SUCCESS })
         {
             var finalFile = Path.Combine(request.Directory, request.FileName);
             var integrity = DownloadFileIntegrity.Check(
@@ -436,9 +549,10 @@ internal sealed partial class Aria2TransferBackend : ITransferBackend
             status.ErrorMessage);
     }
 
-    private static async Task<AriaDownloadStatus?> CancelAndObserveStatusAsync(
+    private async Task<AriaDownloadStatus?> CancelAndObserveStatusAsync(
         CancellationTokenSource cancellation,
-        Task<AriaDownloadStatus> statusTask)
+        Task<AriaDownloadStatus> statusTask,
+        bool pauseConfirmed)
     {
         await cancellation.CancelAsync().ConfigureAwait(true);
         try
@@ -449,7 +563,42 @@ internal sealed partial class Aria2TransferBackend : ITransferBackend
         {
             return null;
         }
+        catch (Exception exception) when (IsPauseCommunicationFailure(exception))
+        {
+            LogPauseCommunicationFailure("status-poll", exception, pauseConfirmed);
+            return null;
+        }
     }
+
+    private void LogPauseConfirmed(string source)
+    {
+        _logger.LogInformationMessage(
+            $"aria2 pause result; result=paused; source={source}.");
+    }
+
+    private void LogPauseCommunicationFailure(
+        string layer,
+        Exception exception,
+        bool pauseConfirmed)
+    {
+        _logger.LogWarningMessage(
+            "aria2 pause communication failed; " +
+            $"layer={layer}; pauseConfirmed={(pauseConfirmed ? "true" : "false")}; " +
+            $"type={exception.GetType().Name}.",
+            exception);
+    }
+
+    private static bool IsPauseCommunicationFailure(Exception exception)
+    {
+        return exception is HttpRequestException
+            or IOException
+            or TimeoutException
+            or Newtonsoft.Json.JsonException;
+    }
+
+    private static bool IsPaused(
+        Aria2RuntimeLifecycle.Aria2PauseCheckpoint checkpoint) =>
+        checkpoint == Aria2RuntimeLifecycle.Aria2PauseCheckpoint.Paused;
 
     private static async Task ObserveRacedTaskCompletionAsync(Task? task)
     {

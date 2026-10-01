@@ -265,6 +265,9 @@ internal sealed class Aria2RuntimeLifecycle : IDisposable
                     .ConfigureAwait(false);
                 if (received.MessageType == WebSocketMessageType.Close)
                 {
+                    _logger.LogWarningMessage(
+                        "aria2 pause communication ended; " +
+                        "layer=websocket; operation=receive; close=remote.");
                     return;
                 }
 
@@ -299,13 +302,16 @@ internal sealed class Aria2RuntimeLifecycle : IDisposable
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
+            return;
         }
         catch (Exception exception) when (exception is WebSocketException
             or IOException
             or ObjectDisposedException)
         {
             _logger.LogWarningMessage(
-                $"aria2 WebSocket notification listener stopped; type={exception.GetType().Name}.");
+                "aria2 pause communication failed; " +
+                $"layer=websocket; operation=receive; type={exception.GetType().Name}.",
+                exception);
         }
         finally
         {
@@ -329,7 +335,9 @@ internal sealed class Aria2RuntimeLifecycle : IDisposable
         catch (Newtonsoft.Json.JsonException exception)
         {
             _logger.LogWarningMessage(
-                $"aria2 WebSocket notification was invalid JSON; type={exception.GetType().Name}.");
+                "aria2 pause communication failed; " +
+                $"layer=websocket; operation=parse; type={exception.GetType().Name}.",
+                exception);
             return;
         }
 
@@ -389,7 +397,9 @@ internal sealed class Aria2RuntimeLifecycle : IDisposable
         catch (Exception exception) when (exception is WebSocketException or IOException)
         {
             _logger.LogWarningMessage(
-                $"aria2 WebSocket close failed; type={exception.GetType().Name}.");
+                "aria2 pause communication failed; " +
+                $"layer=websocket; operation=close; type={exception.GetType().Name}.",
+                exception);
         }
         finally
         {

@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Net;
 using System.Net.WebSockets;
 using System.Reflection;
@@ -8,6 +9,7 @@ using DownKyi.Core.Aria2cNet.Client;
 using DownKyi.Core.Aria2cNet.Server;
 using DownKyi.Domain.Downloads;
 using DownKyi.Services.Download;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
@@ -194,6 +196,157 @@ public sealed class Aria2PauseEventTests
         Assert.Equal(DownloadTransferOutcome.Paused, result.Outcome);
         Assert.Equal(1, Volatile.Read(ref tellStatusCount));
         await statusCancellationObserved.Task.WaitAsync(TestContext.Current.CancellationToken);
+    }
+
+    [Fact]
+    public async Task PauseCheckpointWinsWhenPauseRpcResponseIsLost()
+    {
+        const string gid = "pause-rpc-lost-gid";
+        using var socket = new TestAria2NotificationSocket();
+        var pauseRequested = new TaskCompletionSource(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        var initialStatusStarted = new TaskCompletionSource(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        var statusCancellationObserved = new TaskCompletionSource(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        var logger = new RecordingLogger<Aria2TransferBackend>();
+        var client = CreateClient(async (_, payload, cancellationToken) =>
+        {
+            var method = JObject.Parse(payload)["method"]?.Value<string>();
+            switch (method)
+            {
+                case "aria2.getVersion":
+                    return CreateVersionResponse();
+                case "aria2.addUri":
+                    return CreateResponse(gid);
+                case "aria2.tellStatus":
+                    initialStatusStarted.TrySetResult();
+                    try
+                    {
+                        await Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken)
+                            .ConfigureAwait(false);
+                    }
+                    catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+                    {
+                        statusCancellationObserved.TrySetResult();
+                        throw;
+                    }
+
+                    throw new InvalidOperationException("The status request was not canceled.");
+                case "aria2.pause":
+                    var receiveAttempt = socket.ReceiveAttemptCount;
+                    socket.Emit("aria2.onDownloadPause", gid);
+                    await socket.WaitForReceiveAttemptAsync(
+                        receiveAttempt + 1,
+                        CancellationToken.None).ConfigureAwait(false);
+                    throw new HttpRequestException("The pause response was lost.");
+                default:
+                    throw new InvalidOperationException($"Unexpected RPC method '{method}'.");
+            }
+        });
+
+        var result = await RunTransferAsync(
+            client,
+            socket,
+            gid,
+            pauseRequested,
+            initialStatusStarted,
+            beforeAwait: () =>
+            {
+                pauseRequested.TrySetResult();
+                return Task.CompletedTask;
+            },
+            backendLogger: logger);
+
+        Assert.Equal(DownloadTransferOutcome.Paused, result.Outcome);
+        Assert.Contains(logger.Entries, entry =>
+            entry.Level == LogLevel.Warning
+            && entry.Message.Contains(
+                "layer=pause-rpc; pauseConfirmed=true; type=HttpRequestException",
+                StringComparison.Ordinal));
+        Assert.Contains(logger.Entries, entry =>
+            entry.Level == LogLevel.Information
+            && entry.Message.Contains(
+                "result=paused; source=websocket",
+                StringComparison.Ordinal));
+        await statusCancellationObserved.Task
+            .WaitAsync(TestContext.Current.CancellationToken).ConfigureAwait(true);
+    }
+
+    [Fact]
+    public async Task PauseCheckpointWinsWhenCanceledStatusPollFaults()
+    {
+        const string gid = "status-poll-fault-gid";
+        using var socket = new TestAria2NotificationSocket();
+        var pauseRequested = new TaskCompletionSource(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        var initialStatusStarted = new TaskCompletionSource(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        var statusCancellationObserved = new TaskCompletionSource(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        var logger = new RecordingLogger<Aria2TransferBackend>();
+        var client = CreateClient(async (_, payload, cancellationToken) =>
+        {
+            var method = JObject.Parse(payload)["method"]?.Value<string>();
+            switch (method)
+            {
+                case "aria2.getVersion":
+                    return CreateVersionResponse();
+                case "aria2.addUri":
+                    return CreateResponse(gid);
+                case "aria2.tellStatus":
+                    initialStatusStarted.TrySetResult();
+                    try
+                    {
+                        await Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken)
+                            .ConfigureAwait(false);
+                    }
+                    catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+                    {
+                        statusCancellationObserved.TrySetResult();
+                        throw new HttpRequestException(
+                            "The status transport failed while cancellation was observed.");
+                    }
+
+                    throw new InvalidOperationException("The status request was not canceled.");
+                case "aria2.pause":
+                    var receiveAttempt = socket.ReceiveAttemptCount;
+                    socket.Emit("aria2.onDownloadPause", gid);
+                    await socket.WaitForReceiveAttemptAsync(
+                        receiveAttempt + 1,
+                        cancellationToken).ConfigureAwait(false);
+                    return CreateResponse(gid);
+                default:
+                    throw new InvalidOperationException($"Unexpected RPC method '{method}'.");
+            }
+        });
+
+        var result = await RunTransferAsync(
+            client,
+            socket,
+            gid,
+            pauseRequested,
+            initialStatusStarted,
+            beforeAwait: () =>
+            {
+                pauseRequested.TrySetResult();
+                return Task.CompletedTask;
+            },
+            backendLogger: logger);
+
+        Assert.Equal(DownloadTransferOutcome.Paused, result.Outcome);
+        Assert.Contains(logger.Entries, entry =>
+            entry.Level == LogLevel.Warning
+            && entry.Message.Contains(
+                "layer=status-poll; pauseConfirmed=true; type=HttpRequestException",
+                StringComparison.Ordinal));
+        Assert.Contains(logger.Entries, entry =>
+            entry.Level == LogLevel.Information
+            && entry.Message.Contains(
+                "result=paused; source=websocket",
+                StringComparison.Ordinal));
+        await statusCancellationObserved.Task
+            .WaitAsync(TestContext.Current.CancellationToken).ConfigureAwait(true);
     }
 
     [Fact]
@@ -467,6 +620,7 @@ public sealed class Aria2PauseEventTests
             TaskCreationOptions.RunContinuationsAsynchronously);
         var initialStatusStarted = new TaskCompletionSource(
             TaskCreationOptions.RunContinuationsAsynchronously);
+        var tellStatusCount = 0;
         var client = CreateClient(async (_, payload, cancellationToken) =>
         {
             var method = JObject.Parse(payload)["method"]?.Value<string>();
@@ -479,11 +633,13 @@ public sealed class Aria2PauseEventTests
                 case "aria2.tellStatus" when failedOperation == "status":
                     initialStatusStarted.TrySetResult();
                     throw new HttpRequestException("Status failed.");
-                case "aria2.tellStatus":
+                case "aria2.tellStatus" when Interlocked.Increment(ref tellStatusCount) == 1:
                     initialStatusStarted.TrySetResult();
                     await WaitUntilCanceledAsync(otherCancellationObserved, cancellationToken)
                         .ConfigureAwait(false);
                     throw new InvalidOperationException("The status request was not canceled.");
+                case "aria2.tellStatus":
+                    return CreateStatusResponse("active", outputPath: null);
                 case "aria2.pause":
                     throw new HttpRequestException("Pause failed.");
                 default:
@@ -522,7 +678,8 @@ public sealed class Aria2PauseEventTests
         TaskCompletionSource initialStatusStarted,
         Func<Task> beforeAwait,
         Action<string>? outputPathObserver = null,
-        Func<CancellationToken, Task>? waitForPauseAsync = null)
+        Func<CancellationToken, Task>? waitForPauseAsync = null,
+        ILogger<Aria2TransferBackend>? backendLogger = null)
     {
         var directory = Path.Combine(
             Path.GetTempPath(),
@@ -545,7 +702,7 @@ public sealed class Aria2PauseEventTests
             new DownloadDiagnosticLogger(NullLogger<DownloadDiagnosticLogger>.Instance),
             new AriaServer(NullLoggerFactory.Instance),
             NullLoggerFactory.Instance,
-            NullLogger<Aria2TransferBackend>.Instance,
+            backendLogger ?? NullLogger<Aria2TransferBackend>.Instance,
             ownsAriaServer: true,
             localEndpoint: new LocalAriaRpcEndpoint(6800, "test-token"),
             notificationSocketFactory: () => socket);
@@ -746,6 +903,31 @@ public sealed class Aria2PauseEventTests
 
         public void Dispose() => _release.Dispose();
     }
+
+    private sealed class RecordingLogger<T> : ILogger<T>
+    {
+        private readonly ConcurrentQueue<LogEntry> _entries = new();
+
+        public IReadOnlyCollection<LogEntry> Entries => _entries.ToArray();
+
+        public IDisposable? BeginScope<TState>(TState state)
+            where TState : notnull => null;
+
+        public bool IsEnabled(LogLevel logLevel) => true;
+
+        public void Log<TState>(
+            LogLevel logLevel,
+            EventId eventId,
+            TState state,
+            Exception? exception,
+            Func<TState, Exception?, string> formatter)
+        {
+            ArgumentNullException.ThrowIfNull(formatter);
+            _entries.Enqueue(new LogEntry(logLevel, formatter(state, exception)));
+        }
+    }
+
+    private sealed record LogEntry(LogLevel Level, string Message);
 }
 
 internal sealed class TestAria2NotificationSocket : IAria2NotificationSocket
