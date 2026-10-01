@@ -242,6 +242,15 @@ internal sealed class Aria2RuntimeLifecycle : IDisposable
                 _notificationTask = ReceiveNotificationsAsync(listenerCancellation.Token);
             }
         }
+        catch (WebSocketException exception) when (!cancellationToken.IsCancellationRequested)
+        {
+            listenerCancellation.Dispose();
+            socket.Dispose();
+            _logger.LogWarningMessage(
+                "aria2 pause communication failed; " +
+                $"layer=websocket; operation=connect; type={exception.GetType().Name}.",
+                exception);
+        }
         catch
         {
             listenerCancellation.Dispose();

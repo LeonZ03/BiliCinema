@@ -19,6 +19,67 @@ namespace DownKyi.Tests;
 public sealed class Aria2PauseEventTests
 {
     [Fact]
+    public async Task NotificationConnectWebSocketFailureUsesDisconnectedFallback()
+    {
+        using var settings = new TestSettingsStore();
+        using var socket = new FailingConnectAria2NotificationSocket(
+            new WebSocketException("Synthetic notification connection failure."));
+        var logger = new RecordingLogger<Aria2RuntimeLifecycle>();
+        using var lifecycle = new Aria2RuntimeLifecycle(
+            settings.Store.Current.Network,
+            CreateCapabilityClient(),
+            new DownloadDiagnosticLogger(NullLogger<DownloadDiagnosticLogger>.Instance),
+            new AriaServer(NullLoggerFactory.Instance),
+            logger,
+            ownsAriaServer: true,
+            localEndpoint: new LocalAriaRpcEndpoint(6800, "test-token"),
+            notificationSocketFactory: () => socket);
+
+        await InvokeNotificationLifecycleAsync(
+            lifecycle,
+            "StartNotificationListenerAsync",
+            TestContext.Current.CancellationToken);
+
+        using var waiter = lifecycle.RegisterPauseWaiter("connect-failure-gid");
+        Assert.Equal(
+            Aria2RuntimeLifecycle.Aria2PauseCheckpoint.Disconnected,
+            await waiter.Completion.ConfigureAwait(true));
+        Assert.True(socket.IsDisposed);
+        Assert.Contains(
+            logger.Entries,
+            entry => entry.Level == LogLevel.Warning
+                && entry.Message.Contains(
+                    "layer=websocket; operation=connect; type=WebSocketException.",
+                    StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task NotificationConnectCancellationStillPropagates()
+    {
+        using var settings = new TestSettingsStore();
+        using var cancellation = new CancellationTokenSource();
+        await cancellation.CancelAsync();
+        using var socket = new FailingConnectAria2NotificationSocket(
+            new OperationCanceledException(cancellation.Token));
+        using var lifecycle = new Aria2RuntimeLifecycle(
+            settings.Store.Current.Network,
+            CreateCapabilityClient(),
+            new DownloadDiagnosticLogger(NullLogger<DownloadDiagnosticLogger>.Instance),
+            new AriaServer(NullLoggerFactory.Instance),
+            NullLogger<Aria2RuntimeLifecycle>.Instance,
+            ownsAriaServer: true,
+            localEndpoint: new LocalAriaRpcEndpoint(6800, "test-token"),
+            notificationSocketFactory: () => socket);
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            InvokeNotificationLifecycleAsync(
+                lifecycle,
+                "StartNotificationListenerAsync",
+                TestContext.Current.CancellationToken));
+        Assert.True(socket.IsDisposed);
+    }
+
+    [Fact]
     public async Task NotificationListenerRoutesFourEventsByExactGid()
     {
         using var settings = new TestSettingsStore();
@@ -928,6 +989,35 @@ public sealed class Aria2PauseEventTests
     }
 
     private sealed record LogEntry(LogLevel Level, string Message);
+}
+
+internal sealed class FailingConnectAria2NotificationSocket(Exception exception)
+    : IAria2NotificationSocket
+{
+    private readonly Exception _exception = exception;
+
+    public WebSocketState State => WebSocketState.None;
+
+    public bool IsDisposed { get; private set; }
+
+    public Task ConnectAsync(Uri uri, CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        return Task.FromException(_exception);
+    }
+
+    public ValueTask<ValueWebSocketReceiveResult> ReceiveAsync(
+        Memory<byte> buffer,
+        CancellationToken cancellationToken) =>
+        throw new InvalidOperationException("The failing socket cannot receive notifications.");
+
+    public Task CloseOutputAsync(
+        WebSocketCloseStatus closeStatus,
+        string? statusDescription,
+        CancellationToken cancellationToken) =>
+        throw new InvalidOperationException("The failing socket cannot close its output.");
+
+    public void Dispose() => IsDisposed = true;
 }
 
 internal sealed class TestAria2NotificationSocket : IAria2NotificationSocket
