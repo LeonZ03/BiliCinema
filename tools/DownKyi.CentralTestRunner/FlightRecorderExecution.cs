@@ -12,7 +12,12 @@ internal sealed record ProcessExecutionRequest(
     Func<int, TimeSpan, Task<FinalProcessSnapshot>>? SnapshotCapture = null,
     Func<Process, DateTimeOffset>? RootStartTimeReader = null,
     TextWriter? ErrorDestination = null,
-    Func<string, string, CancellationToken, Task>? RecorderPersistence = null);
+    Func<string, string, CancellationToken, Task>? RecorderPersistence = null,
+    Action<ProcessExecutionStartup>? StartupReady = null);
+
+internal sealed record ProcessExecutionStartup(
+    int RootPid,
+    DateTimeOffset? RootStartTimeUtc);
 
 internal sealed record ProcessExecutionResult(
     int ExitCode,
@@ -77,6 +82,7 @@ internal static class FlightRecorderExecution
                 pid: rootPid,
                 startTimeUtc: rootStartTime,
                 cancellationToken: cancellationToken).ConfigureAwait(false);
+            request.StartupReady?.Invoke(new ProcessExecutionStartup(rootPid, rootStartTime));
             TracePhase(recorder, rootPid, "process_wait_begin");
 
             try
