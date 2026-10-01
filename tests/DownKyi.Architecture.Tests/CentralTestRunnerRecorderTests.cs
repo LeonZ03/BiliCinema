@@ -82,6 +82,132 @@ public sealed class CentralTestRunnerRecorderTests
     }
 
     [Fact]
+    public async Task CanceledStartupDiagnosticPersistenceCleansUpLaunchedProcess()
+    {
+        var evidenceDirectory = CreateEvidenceDirectory();
+        var markerPath = Path.Combine(evidenceDirectory, $"fixture-{Guid.NewGuid():N}.pid");
+        var persistenceEntered = new TaskCompletionSource(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        var handshakeWriteIntercepted = 0;
+        int? fixturePid = null;
+        using var cancellation = new CancellationTokenSource();
+        try
+        {
+            async Task PersistAsync(string path, string json, CancellationToken cancellationToken)
+            {
+                if (LastEventMatches(json, "scope_launch_phase", "handshake_received") &&
+                    Interlocked.Exchange(ref handshakeWriteIntercepted, 1) == 0)
+                {
+                    persistenceEntered.TrySetResult();
+                    await Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken).ConfigureAwait(false);
+                    return;
+                }
+
+                await File.WriteAllTextAsync(path, json, cancellationToken).ConfigureAwait(false);
+            }
+
+            var run = FlightRecorderExecution.RunAsync(
+                new ProcessExecutionRequest(
+                    "fixture.persistence-cancellation.slice",
+                    "fixture.persistence-cancellation.test",
+                    CreateFixtureStartInfo("fixture-hold-marker", markerPath),
+                    TimeSpan.FromSeconds(3),
+                    evidenceDirectory,
+                    RecorderPersistence: PersistAsync),
+                cancellation.Token);
+
+            fixturePid = await WaitForProcessMarkerAsync(markerPath);
+            await persistenceEntered.Task.WaitAsync(TestContext.Current.CancellationToken);
+            await cancellation.CancelAsync();
+
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(() => run)
+                .WaitAsync(TestContext.Current.CancellationToken);
+            try
+            {
+                using var fixture = Process.GetProcessById(fixturePid.Value);
+                await fixture.WaitForExitAsync(TestContext.Current.CancellationToken);
+            }
+            catch (ArgumentException)
+            {
+                // The startup cleanup completed before the test opened the process handle.
+            }
+            Assert.False(IsProcessAlive(fixturePid.Value));
+        }
+        finally
+        {
+            await cancellation.CancelAsync();
+            if (fixturePid is not null)
+            {
+                StopFixtureProcessIfAlive(fixturePid.Value);
+            }
+            Directory.Delete(evidenceDirectory, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task HandshakeDiagnosticPersistenceFailurePreservesEstablishedRootIdentity()
+    {
+        var evidenceDirectory = CreateEvidenceDirectory();
+        var handshakeWriteIntercepted = 0;
+        try
+        {
+            Task PersistAsync(string path, string json, CancellationToken cancellationToken)
+            {
+                if (LastEventMatches(json, "scope_launch_phase", "handshake_received") &&
+                    Interlocked.Exchange(ref handshakeWriteIntercepted, 1) == 0)
+                {
+                    return Task.FromException(
+                        new IOException("handshake_received diagnostic persistence failed"));
+                }
+
+                return File.WriteAllTextAsync(path, json, cancellationToken);
+            }
+
+            var result = await FlightRecorderExecution.RunAsync(
+                new ProcessExecutionRequest(
+                    "fixture.persistence-failure.slice",
+                    "fixture.persistence-failure.test",
+                    CreateFixtureStartInfo("fixture-pass"),
+                    TimeSpan.FromSeconds(3),
+                    evidenceDirectory,
+                    RecorderPersistence: PersistAsync),
+                TestContext.Current.CancellationToken);
+
+            Assert.Equal(1, handshakeWriteIntercepted);
+            Assert.Equal(0, result.ExitCode);
+            Assert.True(result.RootPid > 0);
+            using var document = JsonDocument.Parse(await File.ReadAllTextAsync(
+                result.EvidencePath,
+                TestContext.Current.CancellationToken));
+            var report = document.RootElement;
+            Assert.Equal(result.RootPid, report.GetProperty("RootProcess").GetProperty("Pid").GetInt32());
+            var events = report.GetProperty("Events").EnumerateArray().ToArray();
+            Assert.Contains(events, item => string.Equals(
+                item.GetProperty("Event").GetString(),
+                "process_start",
+                StringComparison.Ordinal));
+            Assert.Contains(events, item =>
+                string.Equals(
+                    item.GetProperty("Event").GetString(),
+                    "recorder_persistence_failed",
+                    StringComparison.Ordinal) &&
+                item.GetProperty("Detail").GetString()!.Contains(
+                    "handshake_received diagnostic persistence failed",
+                    StringComparison.Ordinal));
+            Assert.DoesNotContain(events, item => string.Equals(
+                item.GetProperty("Event").GetString(),
+                "process_start_failed",
+                StringComparison.Ordinal));
+
+            await FlightRecorderExecution.DiscardAsync(result);
+        }
+        finally
+        {
+            Directory.Delete(evidenceDirectory, recursive: true);
+        }
+    }
+
+    [Fact]
     public async Task SnapshotFailureDoesNotPreventCleanupOrActionableFailureEvidence()
     {
         var evidenceDirectory = CreateEvidenceDirectory();
@@ -263,7 +389,8 @@ public sealed class CentralTestRunnerRecorderTests
                         $"snapshot access_token=fixture-snapshot-secret url=https://example.invalid/private?token=fixture-query-secret path={userProfile}")));
             await result.Recorder.RecordAsync(
                 "external_detail",
-                detail: "accountId=fixture-event-account-secret token=fixture-event-token-secret");
+                detail: "accountId=fixture-event-account-secret token=fixture-event-token-secret",
+                cancellationToken: TestContext.Current.CancellationToken);
 
             var artifact = await File.ReadAllTextAsync(
                 result.EvidencePath,
@@ -635,6 +762,16 @@ public sealed class CentralTestRunnerRecorderTests
 
             await Task.Delay(20, TestContext.Current.CancellationToken).ConfigureAwait(false);
         }
+    }
+
+    private static bool LastEventMatches(string json, string eventName, string detail)
+    {
+        using var report = JsonDocument.Parse(json);
+        var events = report.RootElement.GetProperty("Events").EnumerateArray().ToArray();
+        var lastEvent = events[^1];
+        return string.Equals(lastEvent.GetProperty("Event").GetString(), eventName, StringComparison.Ordinal) &&
+               lastEvent.TryGetProperty("Detail", out var actualDetail) &&
+               string.Equals(actualDetail.GetString(), detail, StringComparison.Ordinal);
     }
 
     private static bool IsProcessAlive(int processId)
