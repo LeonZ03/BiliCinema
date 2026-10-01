@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Globalization;
 using DownKyi.CentralTestRunner;
 using DownKyi.TestInfrastructure;
 
@@ -23,24 +24,37 @@ public sealed class WindowsEtwResourceFlightRecorderTests
         var marker = Path.Combine(
             Path.GetTempPath(),
             $"downkyi-etw-tool-child-{Guid.NewGuid():N}.pid");
+        var releaseName = $"Local\\downkyi-etw-tool-release-{Guid.NewGuid():N}";
+        using var release = new EventWaitHandle(
+            initialState: false,
+            EventResetMode.ManualReset,
+            releaseName);
         int? childPid = null;
         try
         {
-            var result = WindowsEtwResourceFlightRecorder.RunTool(
+            var childWasAliveBeforeRelease = false;
+            var result = WindowsEtwResourceFlightRecorder.RunToolAfterReadiness(
                 "dotnet",
+                () =>
+                {
+                    childPid = ReadMarkerAsync(marker).GetAwaiter().GetResult();
+                    childWasAliveBeforeRelease = IsAlive(childPid.Value);
+                    release.Set();
+                },
                 CreateFixtureArguments(
                     "fixture-exit-with-pipe-holder",
                     RuntimeConfigPath,
-                    marker));
+                    marker,
+                    releaseName));
 
+            Assert.True(childPid.HasValue, "The pipe-holder PID marker was not published.");
+            Assert.True(childWasAliveBeforeRelease, "The pipe-holder exited before the root was released.");
             Assert.Equal(0, result.ExitCode);
-            childPid = int.Parse(
-                File.ReadAllText(marker),
-                System.Globalization.CultureInfo.InvariantCulture);
             Assert.False(IsAlive(childPid.Value));
         }
         finally
         {
+            release.Set();
             if (childPid is { } pid && IsAlive(pid))
             {
                 using var child = Process.GetProcessById(pid);
@@ -50,6 +64,34 @@ public sealed class WindowsEtwResourceFlightRecorderTests
 
             File.Delete(marker);
         }
+    }
+
+    private static async Task<int> ReadMarkerAsync(string path)
+    {
+        var deadline = Stopwatch.StartNew();
+        while (deadline.Elapsed < TimeSpan.FromSeconds(8))
+        {
+            try
+            {
+                if (File.Exists(path) && int.TryParse(
+                        await File.ReadAllTextAsync(path, TestContext.Current.CancellationToken)
+                            .ConfigureAwait(false),
+                        NumberStyles.Integer,
+                        CultureInfo.InvariantCulture,
+                        out var processId))
+                {
+                    return processId;
+                }
+            }
+            catch (IOException)
+            {
+                // The fixture has created the marker but has not closed its write handle.
+            }
+
+            await Task.Delay(20, TestContext.Current.CancellationToken).ConfigureAwait(false);
+        }
+
+        throw new TimeoutException($"The fixture did not publish {Path.GetFileName(path)}.");
     }
 
     private static string RuntimeConfigPath => Path.Combine(
