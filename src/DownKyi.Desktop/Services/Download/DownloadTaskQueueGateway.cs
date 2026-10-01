@@ -7,7 +7,10 @@ using DownKyi.Domain.Downloads;
 
 namespace DownKyi.Services.Download;
 
-internal sealed class DownloadTaskQueueGateway : IDownloadTaskQueue, IDownloadRuntimeAvailability
+internal sealed class DownloadTaskQueueGateway :
+    IDownloadTaskQueue,
+    IDownloadSchedulerControl,
+    IDownloadRuntimeAvailability
 {
     private readonly Lock _sync = new();
     private readonly HashSet<DownloadTaskId> _pending = [];
@@ -208,6 +211,31 @@ internal sealed class DownloadTaskQueueGateway : IDownloadTaskQueue, IDownloadRu
         return runtime == null
             ? Task.FromResult(false)
             : runtime.CancelAsync(taskId);
+    }
+
+    public Task PauseAllAsync(CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        return GetReadyRuntime().PauseAllAsync(cancellationToken);
+    }
+
+    public Task ResumeAllAsync(CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        return GetReadyRuntime().ResumeAllAsync(cancellationToken);
+    }
+
+    private IDownloadRuntime GetReadyRuntime()
+    {
+        lock (_sync)
+        {
+            if (_state != DownloadRuntimeState.Ready || _runtime == null)
+            {
+                throw CreateUnavailableException();
+            }
+
+            return _runtime;
+        }
     }
 
     private DownloadRuntimeUnavailableException CreateUnavailableException()

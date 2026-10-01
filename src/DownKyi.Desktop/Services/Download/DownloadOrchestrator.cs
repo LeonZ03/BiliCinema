@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Concurrent;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Net.Http;
@@ -24,11 +25,18 @@ internal sealed class DownloadOrchestrator : IDownloadRuntime
     private readonly ILogger<DownloadOrchestrator> _logger;
     private readonly ConcurrentDictionary<DownloadTaskId, byte> _scheduledTasks = new();
     private readonly ConcurrentDictionary<DownloadTaskId, ActiveDownloadExecution> _activeExecutions = new();
+    private readonly Lock _schedulerSync = new();
+    private readonly SemaphoreSlim _schedulerIntentGate = new(1, 1);
+    private readonly HashSet<DownloadTaskId> _pauseOwnedTasks = [];
     private Channel<DownloadTaskId>? _admissionQueue;
     private Channel<DownloadTaskId>? _downloadQueue;
     private Task _admissionWorker = Task.CompletedTask;
     private Task[] _downloadWorkers = [];
     private CancellationTokenSource? _tokenSource;
+    private TaskCompletionSource? _dispatchBlocked;
+    private TaskCompletionSource? _intentSuperseded;
+    private long _schedulerIntentVersion;
+    private bool _pauseIntent;
     private bool _disposed;
 
     public DownloadOrchestrator(
@@ -56,6 +64,7 @@ internal sealed class DownloadOrchestrator : IDownloadRuntime
         cancellationToken.ThrowIfCancellationRequested();
         await _executor.StartAsync(cancellationToken).ConfigureAwait(false);
 
+        ResetSchedulerState();
         _tokenSource = new CancellationTokenSource();
         _admissionQueue = Channel.CreateUnbounded<DownloadTaskId>(new UnboundedChannelOptions
         {
@@ -117,6 +126,264 @@ internal sealed class DownloadOrchestrator : IDownloadRuntime
         return true;
     }
 
+    public Task PauseAllAsync(CancellationToken cancellationToken = default)
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        cancellationToken.ThrowIfCancellationRequested();
+        var intent = BeginPauseIntent();
+        return ApplyPauseIntentAsync(
+            intent.Version,
+            intent.Superseded,
+            intent.ActiveExecutions,
+            cancellationToken);
+    }
+
+    public Task ResumeAllAsync(CancellationToken cancellationToken = default)
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        cancellationToken.ThrowIfCancellationRequested();
+        var intent = BeginResumeIntent();
+        return ApplyResumeIntentAsync(
+            intent.Version,
+            intent.Superseded,
+            cancellationToken);
+    }
+
+    private (
+        long Version,
+        Task Superseded,
+        KeyValuePair<DownloadTaskId, ActiveDownloadExecution>[] ActiveExecutions)
+        BeginPauseIntent()
+    {
+        lock (_schedulerSync)
+        {
+            EnsureStarted();
+            _intentSuperseded?.TrySetResult();
+            _intentSuperseded = CreateSignal();
+            _pauseIntent = true;
+            _dispatchBlocked ??= CreateSignal();
+            return (
+                ++_schedulerIntentVersion,
+                _intentSuperseded.Task,
+                _activeExecutions.ToArray());
+        }
+    }
+
+    private (long Version, Task Superseded) BeginResumeIntent()
+    {
+        lock (_schedulerSync)
+        {
+            EnsureStarted();
+            _intentSuperseded?.TrySetResult();
+            _intentSuperseded = CreateSignal();
+            _pauseIntent = false;
+            return (++_schedulerIntentVersion, _intentSuperseded.Task);
+        }
+    }
+
+    private async Task ApplyPauseIntentAsync(
+        long version,
+        Task superseded,
+        IReadOnlyList<KeyValuePair<DownloadTaskId, ActiveDownloadExecution>> activeExecutions,
+        CancellationToken cancellationToken)
+    {
+        await _schedulerIntentGate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            if (!IsCurrentIntent(version, pauseIntent: true))
+            {
+                return;
+            }
+
+            var pausedCompletions = new List<Task>(activeExecutions.Count);
+            foreach (var (taskId, execution) in activeExecutions)
+            {
+                if (!IsCurrentIntent(version, pauseIntent: true))
+                {
+                    return;
+                }
+
+                var startedOrSuperseded = await Task
+                    .WhenAny(execution.Started, superseded)
+                    .WaitAsync(cancellationToken)
+                    .ConfigureAwait(false);
+                if (ReferenceEquals(startedOrSuperseded, superseded)
+                    || !await execution.Started.ConfigureAwait(false))
+                {
+                    continue;
+                }
+
+                var pause = await _tasks
+                    .PauseAsync(taskId, cancellationToken)
+                    .ConfigureAwait(false);
+                if (!pause.TryGetValue(out var paused))
+                {
+                    if (pause.Error?.Code == "download.transition.invalid")
+                    {
+                        continue;
+                    }
+
+                    throw new InvalidOperationException(
+                        "Download pause state could not be persisted.");
+                }
+
+                if (paused.Phase != DownloadPhase.Pausing)
+                {
+                    continue;
+                }
+
+                lock (_schedulerSync)
+                {
+                    _pauseOwnedTasks.Add(taskId);
+                }
+
+                pausedCompletions.Add(execution.Completion);
+            }
+
+            if (!IsCurrentIntent(version, pauseIntent: true)
+                || pausedCompletions.Count == 0)
+            {
+                return;
+            }
+
+            var allPausedExecutionsStopped = Task.WhenAll(pausedCompletions);
+            var completionOrSuperseded = await Task
+                .WhenAny(allPausedExecutionsStopped, superseded)
+                .WaitAsync(cancellationToken)
+                .ConfigureAwait(false);
+            if (ReferenceEquals(completionOrSuperseded, allPausedExecutionsStopped))
+            {
+                await allPausedExecutionsStopped.ConfigureAwait(false);
+            }
+        }
+        finally
+        {
+            _schedulerIntentGate.Release();
+        }
+    }
+
+    private async Task ApplyResumeIntentAsync(
+        long version,
+        Task superseded,
+        CancellationToken cancellationToken)
+    {
+        await _schedulerIntentGate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            if (!IsCurrentIntent(version, pauseIntent: false))
+            {
+                return;
+            }
+
+            DownloadTaskId[] pausedTaskIds;
+            lock (_schedulerSync)
+            {
+                pausedTaskIds = [.. _pauseOwnedTasks];
+            }
+
+            foreach (var taskId in pausedTaskIds)
+            {
+                if (!IsCurrentIntent(version, pauseIntent: false))
+                {
+                    return;
+                }
+
+                if (_activeExecutions.TryGetValue(taskId, out var execution))
+                {
+                    var completionOrSuperseded = await Task
+                        .WhenAny(execution.Completion, superseded)
+                        .WaitAsync(cancellationToken)
+                        .ConfigureAwait(false);
+                    if (ReferenceEquals(completionOrSuperseded, superseded))
+                    {
+                        return;
+                    }
+
+                    await execution.Completion.ConfigureAwait(false);
+                }
+
+                if (!IsCurrentIntent(version, pauseIntent: false))
+                {
+                    return;
+                }
+
+                var task = await _tasks
+                    .FindAsync(taskId, cancellationToken)
+                    .ConfigureAwait(false);
+                if (task?.Phase == DownloadPhase.Pausing)
+                {
+                    return;
+                }
+
+                if (task?.Phase == DownloadPhase.Paused)
+                {
+                    var resume = await _tasks
+                        .ResumeAsync(taskId, cancellationToken)
+                        .ConfigureAwait(false);
+                    if (!resume.TryGetValue(out task))
+                    {
+                        throw new InvalidOperationException(
+                            "Download resume state could not be persisted.");
+                    }
+
+                    if (task.Phase != DownloadPhase.Queued)
+                    {
+                        return;
+                    }
+                }
+
+                if (task?.Phase == DownloadPhase.Queued)
+                {
+                    await EnqueueAsync(taskId, cancellationToken).ConfigureAwait(false);
+                }
+
+                lock (_schedulerSync)
+                {
+                    _pauseOwnedTasks.Remove(taskId);
+                }
+            }
+
+            OpenDispatchIfCurrent(version);
+        }
+        finally
+        {
+            _schedulerIntentGate.Release();
+        }
+    }
+
+    private bool IsCurrentIntent(long version, bool pauseIntent)
+    {
+        lock (_schedulerSync)
+        {
+            return version == _schedulerIntentVersion && _pauseIntent == pauseIntent;
+        }
+    }
+
+    private void OpenDispatchIfCurrent(long version)
+    {
+        lock (_schedulerSync)
+        {
+            if (version != _schedulerIntentVersion || _pauseIntent)
+            {
+                return;
+            }
+
+            _dispatchBlocked?.TrySetResult();
+            _dispatchBlocked = null;
+        }
+    }
+
+    private void EnsureStarted()
+    {
+        if (_tokenSource == null)
+        {
+            throw new InvalidOperationException("The download runtime has not started.");
+        }
+    }
+
+    private static TaskCompletionSource CreateSignal() =>
+        new(TaskCreationOptions.RunContinuationsAsynchronously);
+
     private static async Task CancelAndWaitForCompletionAsync(
         ActiveDownloadExecution execution)
     {
@@ -167,6 +434,7 @@ internal sealed class DownloadOrchestrator : IDownloadRuntime
                 _admissionWorker = Task.CompletedTask;
                 _downloadWorkers = [];
                 _scheduledTasks.Clear();
+                ResetSchedulerState();
             }
         }
     }
@@ -207,14 +475,16 @@ internal sealed class DownloadOrchestrator : IDownloadRuntime
                         continue;
                     }
 
-                    execution = new ActiveDownloadExecution(shutdownToken);
-                    ownsExecution = _activeExecutions.TryAdd(taskId, execution);
+                    execution = await WaitForExecutionAdmissionAsync(taskId, shutdownToken)
+                        .ConfigureAwait(false);
+                    ownsExecution = execution != null;
                     if (!ownsExecution)
                     {
                         continue;
                     }
 
-                    await _stateWriter.StartAsync(taskId, execution.Token).ConfigureAwait(false);
+                    await _stateWriter.StartAsync(taskId, execution!.Token).ConfigureAwait(false);
+                    execution.ReportStarted();
                     await _executor.ExecuteAsync(taskId, execution.Token).ConfigureAwait(false);
                 }
                 catch (OperationCanceledException) when (shutdownToken.IsCancellationRequested)
@@ -244,9 +514,18 @@ internal sealed class DownloadOrchestrator : IDownloadRuntime
                 {
                     try
                     {
+                        execution?.ReportNotStarted();
                         await ConfirmPauseAfterWorkerStopsAsync(taskId).ConfigureAwait(false);
-                        if (ownsExecution &&
-                            _activeExecutions.TryRemove(taskId, out var ownedExecution))
+                        ActiveDownloadExecution? ownedExecution = null;
+                        if (ownsExecution)
+                        {
+                            lock (_schedulerSync)
+                            {
+                                _activeExecutions.TryRemove(taskId, out ownedExecution);
+                            }
+                        }
+
+                        if (ownedExecution != null)
                         {
                             ownedExecution.Dispose();
                         }
@@ -268,6 +547,33 @@ internal sealed class DownloadOrchestrator : IDownloadRuntime
         catch (OperationCanceledException) when (shutdownToken.IsCancellationRequested)
         {
             return;
+        }
+    }
+
+    private async Task<ActiveDownloadExecution?> WaitForExecutionAdmissionAsync(
+        DownloadTaskId taskId,
+        CancellationToken shutdownToken)
+    {
+        while (true)
+        {
+            Task? dispatchResumed;
+            lock (_schedulerSync)
+            {
+                dispatchResumed = _dispatchBlocked?.Task;
+                if (dispatchResumed == null)
+                {
+                    var execution = new ActiveDownloadExecution(shutdownToken);
+                    if (_activeExecutions.TryAdd(taskId, execution))
+                    {
+                        return execution;
+                    }
+
+                    execution.Dispose();
+                    return null;
+                }
+            }
+
+            await dispatchResumed.WaitAsync(shutdownToken).ConfigureAwait(false);
         }
     }
 
@@ -342,16 +648,34 @@ internal sealed class DownloadOrchestrator : IDownloadRuntime
         }
 
         _disposed = true;
+        ResetSchedulerState();
         _tokenSource?.Cancel();
         _tokenSource?.Dispose();
         _tokenSource = null;
+        _schedulerIntentGate.Dispose();
         _executor.Dispose();
+    }
+
+    private void ResetSchedulerState()
+    {
+        lock (_schedulerSync)
+        {
+            _intentSuperseded?.TrySetResult();
+            _intentSuperseded = null;
+            _dispatchBlocked?.TrySetResult();
+            _dispatchBlocked = null;
+            _pauseOwnedTasks.Clear();
+            _pauseIntent = false;
+            _schedulerIntentVersion++;
+        }
     }
 
     private sealed class ActiveDownloadExecution : IDisposable
     {
         private readonly CancellationTokenSource _cancellation;
         private readonly TaskCompletionSource _completion =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private readonly TaskCompletionSource<bool> _started =
             new(TaskCreationOptions.RunContinuationsAsynchronously);
 
         public ActiveDownloadExecution(CancellationToken shutdownToken)
@@ -365,7 +689,13 @@ internal sealed class DownloadOrchestrator : IDownloadRuntime
 
         public Task Completion => _completion.Task;
 
+        public Task<bool> Started => _started.Task;
+
         public Task CancelAsync() => _cancellation.CancelAsync();
+
+        public void ReportStarted() => _started.TrySetResult(true);
+
+        public void ReportNotStarted() => _started.TrySetResult(false);
 
         public void Complete() => _completion.TrySetResult();
 

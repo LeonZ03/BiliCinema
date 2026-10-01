@@ -63,9 +63,28 @@ public sealed class DownloadTaskQueueGatewayTests
         Assert.Same(failure, outcome.Failure);
     }
 
+    [Fact]
+    public async Task SchedulerIntentsAreForwardedToReadyRuntime()
+    {
+        var gateway = new DownloadTaskQueueGateway();
+        using var runtime = new RecordingRuntime();
+        await gateway.AttachAsync(runtime, TestContext.Current.CancellationToken);
+        await gateway.MarkReadyAsync(runtime, TestContext.Current.CancellationToken);
+
+        await gateway.PauseAllAsync(TestContext.Current.CancellationToken);
+        await gateway.ResumeAllAsync(TestContext.Current.CancellationToken);
+
+        Assert.Equal(1, runtime.PauseCount);
+        Assert.Equal(1, runtime.ResumeCount);
+    }
+
     private sealed class RecordingRuntime : IDownloadRuntime
     {
         public List<DownloadTaskId> Enqueued { get; } = [];
+
+        public int PauseCount { get; private set; }
+
+        public int ResumeCount { get; private set; }
 
         public Task StartAsync(CancellationToken cancellationToken = default)
         {
@@ -89,6 +108,20 @@ public sealed class DownloadTaskQueueGatewayTests
         public Task<bool> CancelAsync(DownloadTaskId taskId)
         {
             return Task.FromResult(false);
+        }
+
+        public Task PauseAllAsync(CancellationToken cancellationToken = default)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            PauseCount++;
+            return Task.CompletedTask;
+        }
+
+        public Task ResumeAllAsync(CancellationToken cancellationToken = default)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            ResumeCount++;
+            return Task.CompletedTask;
         }
 
         public void Dispose()

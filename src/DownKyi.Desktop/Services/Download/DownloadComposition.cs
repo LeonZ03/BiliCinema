@@ -31,6 +31,8 @@ internal static class DownloadComposition
         services.AddSingleton<DownloadTaskQueueGateway>();
         services.AddSingleton<IDownloadTaskQueue>(provider =>
             provider.GetRequiredService<DownloadTaskQueueGateway>());
+        services.AddSingleton<IDownloadSchedulerControl>(provider =>
+            provider.GetRequiredService<DownloadTaskQueueGateway>());
         services.AddSingleton<IDownloadRuntimeAvailability>(provider =>
             provider.GetRequiredService<DownloadTaskQueueGateway>());
         services.AddSingleton<DownloadTaskAdmissionService>();

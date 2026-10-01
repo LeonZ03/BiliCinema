@@ -70,6 +70,228 @@ public sealed class DownloadOrchestratorTests
     }
 
     [Fact]
+    public async Task PauseAllStopsAtActiveExecutionsAndBlocksBoundedQueueDispatch()
+    {
+        using var context = new OrchestratorContext();
+        DownloadTaskId[] taskIds = await context.AddQueuedTasksAsync(40);
+        var started = new ConcurrentDictionary<DownloadTaskId, byte>();
+        var fourStarted = new TaskCompletionSource(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        using var executor = new RecordingExecutor(async (taskId, _) =>
+        {
+            started.TryAdd(taskId, 0);
+            if (started.Count == 4)
+            {
+                fourStarted.TrySetResult();
+            }
+
+            await WaitForPhaseAsync(context, taskId, DownloadPhase.Pausing)
+                .ConfigureAwait(false);
+        });
+        using var orchestrator = context.CreateOrchestrator(executor, workerCount: 4);
+
+        await orchestrator.StartAsync(TestContext.Current.CancellationToken);
+        await Task.WhenAll(taskIds.Select(taskId =>
+            orchestrator.EnqueueAsync(taskId, TestContext.Current.CancellationToken)));
+        await fourStarted.Task.WaitAsync(TestContext.Current.CancellationToken);
+
+        await orchestrator.PauseAllAsync(TestContext.Current.CancellationToken);
+
+        Assert.Equal(4, started.Count);
+        foreach (var taskId in taskIds)
+        {
+            var task = Assert.IsType<DownloadTask>(await context.Tasks.FindAsync(
+                taskId,
+                TestContext.Current.CancellationToken));
+            Assert.Equal(
+                started.ContainsKey(taskId) ? DownloadPhase.Paused : DownloadPhase.Queued,
+                task.Phase);
+            if (!started.ContainsKey(taskId))
+            {
+                Assert.Null(task.Transfer.BackendIdentity);
+            }
+        }
+
+        await Task.Delay(TimeSpan.FromMilliseconds(100), TestContext.Current.CancellationToken);
+        Assert.Equal(4, started.Count);
+        await orchestrator.StopAsync(TestContext.Current.CancellationToken);
+    }
+
+    [Fact]
+    public async Task ResumeRestoresPauseOwnedTaskBeforeDispatchReopens()
+    {
+        using var context = new OrchestratorContext();
+        DownloadTaskId[] taskIds = await context.AddQueuedTasksAsync(2);
+        var firstStarted = new TaskCompletionSource(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        var phaseAtNextDispatch = new TaskCompletionSource<DownloadPhase>(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        var releaseNextExecution = new TaskCompletionSource(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        var executionCounts = new ConcurrentDictionary<DownloadTaskId, int>();
+        using var executor = new RecordingExecutor(async (taskId, cancellationToken) =>
+        {
+            var count = executionCounts.AddOrUpdate(taskId, 1, static (_, current) => current + 1);
+            if (taskId == taskIds[0] && count == 1)
+            {
+                firstStarted.TrySetResult();
+                await WaitForPhaseAsync(context, taskId, DownloadPhase.Pausing)
+                    .ConfigureAwait(false);
+                return;
+            }
+
+            var pauseOwnedTask = Assert.IsType<DownloadTask>(await context.Tasks.FindAsync(
+                taskIds[0],
+                TestContext.Current.CancellationToken).ConfigureAwait(false));
+            phaseAtNextDispatch.TrySetResult(pauseOwnedTask.Phase);
+            await releaseNextExecution.Task.WaitAsync(cancellationToken).ConfigureAwait(false);
+        });
+        using var orchestrator = context.CreateOrchestrator(executor, workerCount: 1);
+
+        await orchestrator.StartAsync(TestContext.Current.CancellationToken);
+        await orchestrator.EnqueueAsync(taskIds[0], TestContext.Current.CancellationToken);
+        await firstStarted.Task.WaitAsync(TestContext.Current.CancellationToken);
+        await orchestrator.EnqueueAsync(taskIds[1], TestContext.Current.CancellationToken);
+        await orchestrator.PauseAllAsync(TestContext.Current.CancellationToken);
+
+        Assert.Equal(DownloadPhase.Paused, (await GetTaskAsync(context, taskIds[0])).Phase);
+        Assert.Equal(DownloadPhase.Queued, (await GetTaskAsync(context, taskIds[1])).Phase);
+
+        await orchestrator.ResumeAllAsync(TestContext.Current.CancellationToken);
+        var restoredPhase = await phaseAtNextDispatch.Task
+            .WaitAsync(TestContext.Current.CancellationToken);
+        Assert.True(restoredPhase is DownloadPhase.Queued or DownloadPhase.Downloading);
+
+        releaseNextExecution.TrySetResult();
+        await orchestrator.StopAsync(TestContext.Current.CancellationToken);
+    }
+
+    [Fact]
+    public async Task LatestResumeIntentWinsAfterRapidPauseThenResume()
+    {
+        using var context = new OrchestratorContext();
+        DownloadTaskId taskId = Assert.Single(await context.AddQueuedTasksAsync(1));
+        var started = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        using var executor = new RecordingExecutor((_, _) =>
+        {
+            started.TrySetResult();
+            return Task.CompletedTask;
+        });
+        using var orchestrator = context.CreateOrchestrator(executor, workerCount: 1);
+
+        await orchestrator.StartAsync(TestContext.Current.CancellationToken);
+        var pause = orchestrator.PauseAllAsync(TestContext.Current.CancellationToken);
+        var resume = orchestrator.ResumeAllAsync(TestContext.Current.CancellationToken);
+        await Task.WhenAll(pause, resume).WaitAsync(TestContext.Current.CancellationToken);
+
+        await orchestrator.EnqueueAsync(taskId, TestContext.Current.CancellationToken);
+        await started.Task.WaitAsync(TestContext.Current.CancellationToken);
+        await orchestrator.StopAsync(TestContext.Current.CancellationToken);
+    }
+
+    [Fact]
+    public async Task LatestPauseIntentWinsAfterRapidResumeThenPause()
+    {
+        using var context = new OrchestratorContext();
+        DownloadTaskId taskId = Assert.Single(await context.AddQueuedTasksAsync(1));
+        var started = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        using var executor = new RecordingExecutor((_, _) =>
+        {
+            started.TrySetResult();
+            return Task.CompletedTask;
+        });
+        using var orchestrator = context.CreateOrchestrator(executor, workerCount: 1);
+
+        await orchestrator.StartAsync(TestContext.Current.CancellationToken);
+        await orchestrator.PauseAllAsync(TestContext.Current.CancellationToken);
+        var resume = orchestrator.ResumeAllAsync(TestContext.Current.CancellationToken);
+        var pause = orchestrator.PauseAllAsync(TestContext.Current.CancellationToken);
+        await Task.WhenAll(resume, pause).WaitAsync(TestContext.Current.CancellationToken);
+
+        await orchestrator.EnqueueAsync(taskId, TestContext.Current.CancellationToken);
+        await Task.Delay(TimeSpan.FromMilliseconds(100), TestContext.Current.CancellationToken);
+        Assert.False(started.Task.IsCompleted);
+
+        await orchestrator.ResumeAllAsync(TestContext.Current.CancellationToken);
+        await started.Task.WaitAsync(TestContext.Current.CancellationToken);
+        await orchestrator.StopAsync(TestContext.Current.CancellationToken);
+    }
+
+    [Fact]
+    public async Task RestartReopensRuntimeOnlyDispatchGate()
+    {
+        using var context = new OrchestratorContext();
+        DownloadTaskId taskId = Assert.Single(await context.AddQueuedTasksAsync(1));
+        var started = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        using var executor = new RecordingExecutor((_, _) =>
+        {
+            started.TrySetResult();
+            return Task.CompletedTask;
+        });
+        using var orchestrator = context.CreateOrchestrator(executor, workerCount: 1);
+
+        await orchestrator.StartAsync(TestContext.Current.CancellationToken);
+        await orchestrator.PauseAllAsync(TestContext.Current.CancellationToken);
+        await orchestrator.EnqueueAsync(taskId, TestContext.Current.CancellationToken);
+        await Task.Delay(TimeSpan.FromMilliseconds(100), TestContext.Current.CancellationToken);
+        Assert.False(started.Task.IsCompleted);
+        await orchestrator.StopAsync(TestContext.Current.CancellationToken);
+
+        await orchestrator.StartAsync(TestContext.Current.CancellationToken);
+        await orchestrator.EnqueueAsync(taskId, TestContext.Current.CancellationToken);
+        await started.Task.WaitAsync(TestContext.Current.CancellationToken);
+        await orchestrator.StopAsync(TestContext.Current.CancellationToken);
+    }
+
+    [Fact]
+    public async Task UnconfirmedPauseDoesNotBecomePausedOrReopenDispatch()
+    {
+        using var context = new OrchestratorContext();
+        DownloadTaskId[] taskIds = await context.AddQueuedTasksAsync(2);
+        var firstStarted = new TaskCompletionSource(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        var queuedStarted = new TaskCompletionSource(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        using var executor = new RecordingExecutor(async (taskId, cancellationToken) =>
+        {
+            if (taskId == taskIds[0])
+            {
+                firstStarted.TrySetResult();
+                await WaitForPhaseAsync(context, taskId, DownloadPhase.Pausing)
+                    .ConfigureAwait(false);
+                await context.StateWriter.FailAsync(
+                    taskId,
+                    new DownloadFailure(
+                        "download.transfer.aria2-rpc",
+                        "Synthetic unconfirmed pause.",
+                        true),
+                    CancellationToken.None).ConfigureAwait(false);
+                return;
+            }
+
+            queuedStarted.TrySetResult();
+            await Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken).ConfigureAwait(false);
+        });
+        using var orchestrator = context.CreateOrchestrator(executor, workerCount: 1);
+
+        await orchestrator.StartAsync(TestContext.Current.CancellationToken);
+        await orchestrator.EnqueueAsync(taskIds[0], TestContext.Current.CancellationToken);
+        await firstStarted.Task.WaitAsync(TestContext.Current.CancellationToken);
+        await orchestrator.EnqueueAsync(taskIds[1], TestContext.Current.CancellationToken);
+
+        await orchestrator.PauseAllAsync(TestContext.Current.CancellationToken);
+
+        Assert.Equal(DownloadPhase.Failed, (await GetTaskAsync(context, taskIds[0])).Phase);
+        Assert.Equal(DownloadPhase.Queued, (await GetTaskAsync(context, taskIds[1])).Phase);
+        await Task.Delay(TimeSpan.FromMilliseconds(100), TestContext.Current.CancellationToken);
+        Assert.False(queuedStarted.Task.IsCompleted);
+
+        await orchestrator.ResumeAllAsync(TestContext.Current.CancellationToken);
+        await queuedStarted.Task.WaitAsync(TestContext.Current.CancellationToken);
+        await orchestrator.StopAsync(TestContext.Current.CancellationToken);
+    }
+
+    [Fact]
     public async Task CancelingOneActiveTaskDoesNotStopTheWorker()
     {
         using var context = new OrchestratorContext();
@@ -319,6 +541,15 @@ public sealed class DownloadOrchestratorTests
                 TimeSpan.FromMilliseconds(20),
                 TestContext.Current.CancellationToken).ConfigureAwait(false);
         }
+    }
+
+    private static async Task<DownloadTask> GetTaskAsync(
+        OrchestratorContext context,
+        DownloadTaskId taskId)
+    {
+        return Assert.IsType<DownloadTask>(await context.Tasks.FindAsync(
+            taskId,
+            TestContext.Current.CancellationToken).ConfigureAwait(false));
     }
 
     private sealed class OrchestratorContext : IDisposable

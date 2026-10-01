@@ -764,6 +764,12 @@ public sealed class DownloadBootstrapHostedServiceTests
             return Task.FromResult(false);
         }
 
+        public Task PauseAllAsync(CancellationToken cancellationToken = default) =>
+            Task.CompletedTask;
+
+        public Task ResumeAllAsync(CancellationToken cancellationToken = default) =>
+            Task.CompletedTask;
+
         public void Dispose()
         {
             Disposed = true;
@@ -806,6 +812,12 @@ public sealed class DownloadBootstrapHostedServiceTests
             return Task.FromResult(false);
         }
 
+        public Task PauseAllAsync(CancellationToken cancellationToken = default) =>
+            Task.CompletedTask;
+
+        public Task ResumeAllAsync(CancellationToken cancellationToken = default) =>
+            Task.CompletedTask;
+
         public void Dispose()
         {
         }
@@ -841,6 +853,12 @@ public sealed class DownloadBootstrapHostedServiceTests
         }
 
         public Task<bool> CancelAsync(DownloadTaskId taskId) => Task.FromResult(false);
+
+        public Task PauseAllAsync(CancellationToken cancellationToken = default) =>
+            Task.CompletedTask;
+
+        public Task ResumeAllAsync(CancellationToken cancellationToken = default) =>
+            Task.CompletedTask;
 
         public void Dispose()
         {
@@ -879,6 +897,12 @@ public sealed class DownloadBootstrapHostedServiceTests
         }
 
         public Task<bool> CancelAsync(DownloadTaskId taskId) => Task.FromResult(false);
+
+        public Task PauseAllAsync(CancellationToken cancellationToken = default) =>
+            Task.CompletedTask;
+
+        public Task ResumeAllAsync(CancellationToken cancellationToken = default) =>
+            Task.CompletedTask;
 
         public void Dispose()
         {
