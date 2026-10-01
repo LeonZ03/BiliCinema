@@ -24,18 +24,21 @@ internal sealed class FlightRecorder
     private readonly RecorderReport report;
     private readonly TimeSpan recorderTimeout;
     private readonly Func<int, TimeSpan, Task<FinalProcessSnapshot>> snapshotCapture;
+    private readonly Func<string, string, CancellationToken, Task> persistReportAsync;
 
     private FlightRecorder(
         string evidencePath,
         RecorderReport report,
         TimeSpan recorderTimeout,
         Func<int, TimeSpan, Task<FinalProcessSnapshot>> snapshotCapture,
-        SensitiveEvidenceRedactor redactor)
+        SensitiveEvidenceRedactor redactor,
+        Func<string, string, CancellationToken, Task> persistReportAsync)
     {
         EvidencePath = evidencePath;
         this.report = report;
         this.recorderTimeout = recorderTimeout;
         this.snapshotCapture = snapshotCapture;
+        this.persistReportAsync = persistReportAsync;
         Redactor = redactor;
     }
 
@@ -44,7 +47,9 @@ internal sealed class FlightRecorder
     internal SensitiveEvidenceRedactor Redactor { get; }
 
 
-    public static async Task<FlightRecorder> CreateAsync(ProcessExecutionRequest request)
+    public static async Task<FlightRecorder> CreateAsync(
+        ProcessExecutionRequest request,
+        CancellationToken cancellationToken)
     {
         Directory.CreateDirectory(request.EvidenceDirectory);
         var safeSlice = string.Concat(request.SliceIdentity.Select(character =>
@@ -69,9 +74,11 @@ internal sealed class FlightRecorder
             report,
             request.CleanupTimeout,
             request.SnapshotCapture ?? ProcessTreeSnapshot.CaptureAsync,
-            redactor);
-        await recorder.RecordAsync("recorder_start").ConfigureAwait(false);
-        await recorder.RecordAsync("scope_launch_begin").ConfigureAwait(false);
+            redactor,
+            request.RecorderPersistence ?? (static (path, json, token) =>
+                File.WriteAllTextAsync(path, json, token)));
+        await recorder.RecordAsync("recorder_start", cancellationToken: cancellationToken).ConfigureAwait(false);
+        await recorder.RecordAsync("scope_launch_begin", cancellationToken: cancellationToken).ConfigureAwait(false);
         return recorder;
     }
 
@@ -95,10 +102,39 @@ internal sealed class FlightRecorder
         int? pid = null,
         DateTimeOffset? startTimeUtc = null,
         int? exitCode = null,
-        string? detail = null)
+        string? detail = null,
+        CancellationToken cancellationToken = default)
     {
         RecordInMemory(eventName, pid, startTimeUtc, exitCode, detail);
-        await PersistAsync().ConfigureAwait(false);
+        await PersistAsync(cancellationToken).ConfigureAwait(false);
+    }
+
+    public async Task RecordDiagnosticAsync(
+        string eventName,
+        int? pid = null,
+        DateTimeOffset? startTimeUtc = null,
+        int? exitCode = null,
+        string? detail = null,
+        CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            await RecordAsync(
+                eventName,
+                pid,
+                startTimeUtc,
+                exitCode,
+                detail,
+                cancellationToken).ConfigureAwait(false);
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            RecordInMemory(
+                "recorder_persistence_failed",
+                pid,
+                detail: $"{eventName}: {exception.GetType().Name}: {exception.Message}");
+        }
     }
 
     internal void RecordInMemory(
@@ -214,6 +250,6 @@ internal sealed class FlightRecorder
     private Task PersistAsync(CancellationToken cancellationToken = default)
     {
         var json = JsonSerializer.Serialize(report, JsonOptions);
-        return File.WriteAllTextAsync(EvidencePath, json, cancellationToken);
+        return persistReportAsync(EvidencePath, json, cancellationToken);
     }
 }

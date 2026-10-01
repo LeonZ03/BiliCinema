@@ -30,6 +30,7 @@ public sealed class CentralTestRunnerFixtureDispatchTests
                 "fixture-exit-with-pipe-holder",
                 "fixture-hold",
                 "fixture-hold-marker",
+                "fixture-large-launch",
                 "fixture-long-line",
                 "fixture-pass",
                 "fixture-sensitive-hold",

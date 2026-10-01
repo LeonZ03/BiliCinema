@@ -11,7 +11,8 @@ internal sealed record ProcessExecutionRequest(
     string EvidenceDirectory,
     Func<int, TimeSpan, Task<FinalProcessSnapshot>>? SnapshotCapture = null,
     Func<Process, DateTimeOffset>? RootStartTimeReader = null,
-    TextWriter? ErrorDestination = null);
+    TextWriter? ErrorDestination = null,
+    Func<string, string, CancellationToken, Task>? RecorderPersistence = null);
 
 internal sealed record ProcessExecutionResult(
     int ExitCode,
@@ -30,14 +31,20 @@ internal static class FlightRecorderExecution
         ArgumentException.ThrowIfNullOrWhiteSpace(request.TestIdentity);
         ArgumentException.ThrowIfNullOrWhiteSpace(request.EvidenceDirectory);
 
-        var recorder = await FlightRecorder.CreateAsync(request).ConfigureAwait(false);
+        var recorder = await FlightRecorder.CreateAsync(request, cancellationToken).ConfigureAwait(false);
         var standardOutput = new TailBuffer(8192);
         var standardError = new TailBuffer(8192);
         var scopeStarted = false;
 
         try
         {
-            using var scope = await OwnedProcessScope.StartAsync(request.StartInfo, cancellationToken)
+            using var scope = await OwnedProcessScope.StartAsync(
+                    request.StartInfo,
+                    cancellationToken,
+                    phase => recorder.RecordDiagnosticAsync(
+                        "scope_launch_phase",
+                        detail: phase,
+                        cancellationToken: cancellationToken))
                 .ConfigureAwait(false);
             scopeStarted = true;
             var process = scope.Host;
@@ -65,10 +72,11 @@ internal static class FlightRecorderExecution
             }
 
             recorder.SetRootIdentity(rootPid, rootStartTime);
-            recorder.RecordInMemory(
+            await recorder.RecordDiagnosticAsync(
                 "process_start",
                 pid: rootPid,
-                startTimeUtc: rootStartTime);
+                startTimeUtc: rootStartTime,
+                cancellationToken: cancellationToken).ConfigureAwait(false);
             TracePhase(recorder, rootPid, "process_wait_begin");
 
             try
@@ -180,7 +188,10 @@ internal static class FlightRecorderExecution
         catch (Exception exception) when (!scopeStarted &&
                                           exception is InvalidOperationException or System.ComponentModel.Win32Exception or TimeoutException or IOException)
         {
-            await recorder.RecordAsync("process_start_failed", detail: exception.Message).ConfigureAwait(false);
+            await recorder.RecordAsync(
+                "process_start_failed",
+                detail: exception.Message,
+                cancellationToken: CancellationToken.None).ConfigureAwait(false);
             await recorder.CaptureFinalSnapshotOnceAsync().ConfigureAwait(false);
             await recorder.FinalizeFailureAsync("start_failed", standardOutput, standardError).ConfigureAwait(false);
             return new ProcessExecutionResult(2, 0, default, recorder.EvidencePath, recorder);
