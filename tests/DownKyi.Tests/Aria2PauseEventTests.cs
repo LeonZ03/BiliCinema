@@ -500,7 +500,7 @@ public sealed class Aria2PauseEventTests
                     socket.Emit(notificationMethod, gid);
                     await socket.WaitForReceiveAttemptAsync(
                         receiveAttempt + 1,
-                        cancellationToken).ConfigureAwait(false);
+                        TestContext.Current.CancellationToken).ConfigureAwait(false);
                     pauseRpcCompleted.TrySetResult();
                     return CreateResponse(gid);
                 case "aria2.removeDownloadResult":
