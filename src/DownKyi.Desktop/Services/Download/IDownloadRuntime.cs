@@ -12,6 +12,13 @@ internal interface IDownloadTaskQueue
     Task<bool> CancelAsync(DownloadTaskId taskId);
 }
 
+internal interface IDownloadSchedulerControl
+{
+    Task PauseAllAsync(CancellationToken cancellationToken = default);
+
+    Task ResumeAllAsync(CancellationToken cancellationToken = default);
+}
+
 internal interface IDownloadRuntimeAvailability
 {
     void EnsureAcceptingTasks();
@@ -69,7 +76,7 @@ internal sealed class DownloadRuntimeUnavailableException : InvalidOperationExce
     }
 }
 
-internal interface IDownloadRuntime : IDownloadTaskQueue, IDisposable
+internal interface IDownloadRuntime : IDownloadTaskQueue, IDownloadSchedulerControl, IDisposable
 {
     Task StartAsync(CancellationToken cancellationToken = default);
 

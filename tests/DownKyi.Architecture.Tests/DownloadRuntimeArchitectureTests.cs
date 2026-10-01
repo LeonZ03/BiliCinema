@@ -149,6 +149,34 @@ public sealed class DownloadRuntimeArchitectureTests
     }
 
     [Fact]
+    public void SchedulerPauseGateHasOneRuntimeOwner()
+    {
+        var directory = Path.Combine(
+            RepositoryRoot,
+            "src", "DownKyi.Desktop",
+            "Services", "Download");
+        var orchestratorSource = File.ReadAllText(Path.Combine(
+            directory,
+            "DownloadOrchestrator.cs"));
+        var coordinatorSource = File.ReadAllText(Path.Combine(
+            directory,
+            "DownloadManagerCoordinator.cs"));
+        var gatewaySource = File.ReadAllText(Path.Combine(
+            directory,
+            "DownloadTaskQueueGateway.cs"));
+
+        Assert.Contains("BeginPauseIntent", orchestratorSource, StringComparison.Ordinal);
+        Assert.Contains("WaitForExecutionAdmissionAsync", orchestratorSource, StringComparison.Ordinal);
+        Assert.Contains("_pauseOwnedTasks", orchestratorSource, StringComparison.Ordinal);
+        Assert.Contains("_schedulerControl.PauseAllAsync", coordinatorSource, StringComparison.Ordinal);
+        Assert.Contains("_schedulerControl.ResumeAllAsync", coordinatorSource, StringComparison.Ordinal);
+        Assert.DoesNotContain("_dispatchBlocked", coordinatorSource, StringComparison.Ordinal);
+        Assert.DoesNotContain("_pauseOwnedTasks", coordinatorSource, StringComparison.Ordinal);
+        Assert.DoesNotContain("_dispatchBlocked", gatewaySource, StringComparison.Ordinal);
+        Assert.DoesNotContain("_pauseOwnedTasks", gatewaySource, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void DownloadArtifactsAndTaskStateHaveDedicatedOwners()
     {
         var directory = Path.Combine(RepositoryRoot, "src", "DownKyi.Desktop", "Services", "Download");
