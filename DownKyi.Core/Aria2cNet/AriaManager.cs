@@ -35,6 +35,17 @@ public sealed record AriaDownloadStatus(
     string? ErrorCode,
     string? ErrorMessage);
 
+public enum AriaDownloadState
+{
+    Active,
+    Waiting,
+    Paused,
+    Complete,
+    Error,
+    Removed,
+    Unknown
+}
+
 public class AriaManager
 {
     private const int PollDelayMilliseconds = 500;
@@ -107,7 +118,9 @@ public class AriaManager
         {
             cancellationToken.ThrowIfCancellationRequested();
 
-            var status = await _ariaClient.TellStatus(gid).ConfigureAwait(false);
+            var status = await _ariaClient
+                .TellStatus(gid, cancellationToken)
+                .ConfigureAwait(false);
             if (status?.Result == null)
             {
                 if (status?.Error is { } rpcError)
@@ -152,19 +165,54 @@ public class AriaManager
                 await statusCallback(cancellationToken).ConfigureAwait(false);
             }
 
-            if (result.Status == "complete")
+            var terminalStatus = await ResolveTerminalStatusAsync(
+                gid,
+                result,
+                filePath,
+                cancellationToken).ConfigureAwait(false);
+            if (terminalStatus != null)
             {
-                OnDownloadFinish(true, filePath, gid, null);
+                return terminalStatus;
+            }
+
+            await Task.Delay(PollDelayMilliseconds, cancellationToken).ConfigureAwait(false);
+        }
+    }
+
+    public async Task<AriaDownloadStatus?> ResolveTerminalStatusAsync(
+        string gid,
+        AriaTellStatusResult result,
+        string? lastKnownFilePath,
+        CancellationToken cancellationToken)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(gid);
+        ArgumentNullException.ThrowIfNull(result);
+        switch (ClassifyStatus(result))
+        {
+            case AriaDownloadState.Complete:
+                var completedFilePath = result.Files?.Count >= 1
+                    ? result.Files[0].Path
+                    : lastKnownFilePath;
+                OnDownloadFinish(true, completedFilePath, gid, null);
                 return new AriaDownloadStatus(
                     DownloadResult.SUCCESS,
                     null,
                     null);
-            }
 
-            if (!string.IsNullOrEmpty(result.ErrorCode) && result.ErrorCode != "0")
-            {
+            case AriaDownloadState.Removed:
+                OnDownloadFinish(false, null, gid, result.ErrorMessage);
+                return new AriaDownloadStatus(
+                    DownloadResult.ABORT,
+                    "removed",
+                    result.ErrorMessage);
+
+            case AriaDownloadState.Error:
+                var errorCode = string.IsNullOrEmpty(result.ErrorCode)
+                    || result.ErrorCode == "0"
+                        ? "unknown-error"
+                        : result.ErrorCode;
                 _logger.LogErrorMessage(
-                    $"aria2 reported a download failure; errorCode={result.ErrorCode}.");
+                    $"aria2 reported a download failure; errorCode={errorCode}.");
 
                 var ariaRemove = await _ariaClient
                     .RemoveDownloadResultAsync(gid, cancellationToken)
@@ -177,12 +225,40 @@ public class AriaManager
                 OnDownloadFinish(false, null, gid, result.ErrorMessage);
                 return new AriaDownloadStatus(
                     DownloadResult.FAILED,
-                    result.ErrorCode,
+                    errorCode,
                     result.ErrorMessage);
-            }
 
-            await Task.Delay(PollDelayMilliseconds, cancellationToken).ConfigureAwait(false);
+            default:
+                return null;
         }
+    }
+
+    public static AriaDownloadState ClassifyStatus(AriaTellStatusResult result)
+    {
+        ArgumentNullException.ThrowIfNull(result);
+        if (string.Equals(result.Status, "complete", StringComparison.Ordinal))
+        {
+            return AriaDownloadState.Complete;
+        }
+
+        if (string.Equals(result.Status, "removed", StringComparison.Ordinal))
+        {
+            return AriaDownloadState.Removed;
+        }
+
+        if (string.Equals(result.Status, "error", StringComparison.Ordinal)
+            || !string.IsNullOrEmpty(result.ErrorCode) && result.ErrorCode != "0")
+        {
+            return AriaDownloadState.Error;
+        }
+
+        return result.Status switch
+        {
+            "active" => AriaDownloadState.Active,
+            "waiting" => AriaDownloadState.Waiting,
+            "paused" => AriaDownloadState.Paused,
+            _ => AriaDownloadState.Unknown
+        };
     }
 
     /// <summary>

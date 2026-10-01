@@ -18,6 +18,13 @@ public sealed partial class AriaClient
     private readonly Uri _rpcUri;
     private readonly string _token;
 
+    public Uri WebSocketUri => new UriBuilder(_rpcUri)
+    {
+        Scheme = string.Equals(_rpcUri.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase)
+            ? "wss"
+            : "ws"
+    }.Uri;
+
     public AriaClient(
         string host,
         int listenPort,

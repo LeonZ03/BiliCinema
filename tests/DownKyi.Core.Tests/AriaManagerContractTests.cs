@@ -1,3 +1,5 @@
+using System.Reflection;
+using System.Runtime.CompilerServices;
 using DownKyi.Core.Aria2cNet;
 using DownKyi.Core.Aria2cNet.Client;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -6,6 +8,38 @@ namespace DownKyi.Core.Tests;
 
 public sealed class AriaManagerContractTests
 {
+    [Fact]
+    public void PauseEventCrossAssemblySurfaceIsExplicitAndNarrow()
+    {
+        var websocketEndpoint = typeof(AriaClient).GetProperty(
+            nameof(AriaClient.WebSocketUri),
+            BindingFlags.Instance | BindingFlags.Public | BindingFlags.DeclaredOnly);
+        var classifyStatus = Assert.Single(
+            typeof(AriaManager).GetMethods(
+                BindingFlags.Static | BindingFlags.Public | BindingFlags.DeclaredOnly),
+            method => string.Equals(
+                method.Name,
+                nameof(AriaManager.ClassifyStatus),
+                StringComparison.Ordinal));
+        var resolveTerminalStatus = Assert.Single(
+            typeof(AriaManager).GetMethods(
+                BindingFlags.Instance | BindingFlags.Public | BindingFlags.DeclaredOnly),
+            method => string.Equals(
+                method.Name,
+                nameof(AriaManager.ResolveTerminalStatusAsync),
+                StringComparison.Ordinal));
+        var friendAssemblies = typeof(AriaManager).Assembly
+            .GetCustomAttributes<InternalsVisibleToAttribute>()
+            .Select(attribute => attribute.AssemblyName);
+
+        Assert.NotNull(websocketEndpoint);
+        Assert.True(websocketEndpoint.GetMethod?.IsPublic);
+        Assert.Equal(typeof(AriaDownloadState), classifyStatus.ReturnType);
+        Assert.Equal(typeof(Task<AriaDownloadStatus?>), resolveTerminalStatus.ReturnType);
+        Assert.True(typeof(AriaDownloadState).IsPublic);
+        Assert.DoesNotContain("DownKyi.Desktop", friendAssemblies);
+    }
+
     [Fact]
     public async Task RpcRejectionFailsImmediatelyWithMachineReadableCode()
     {

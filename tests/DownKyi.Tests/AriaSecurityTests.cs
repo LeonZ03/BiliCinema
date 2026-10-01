@@ -331,7 +331,7 @@ public sealed class AriaSecurityTests
     }
 
     [Fact]
-    public async Task DownKyiCompatibleCustomAriaPassesCapabilityProbe()
+    public async Task DownKyiCompatibleCustomAriaPassesCapabilityProbeWithoutWebSocket()
     {
         var directory = Path.Combine(
             Path.GetTempPath(),
@@ -340,6 +340,7 @@ public sealed class AriaSecurityTests
         try
         {
             using var settings = new SettingsStore(Path.Combine(directory, "settings.json"));
+            var socketFactoryCalls = 0;
             var client = new AriaClient(
                 "https://aria.example",
                 6800,
@@ -354,9 +355,17 @@ public sealed class AriaSecurityTests
                 new AriaServer(NullLoggerFactory.Instance),
                 NullLogger<Aria2RuntimeLifecycle>.Instance,
                 ownsAriaServer: false,
-                localEndpoint: null);
+                localEndpoint: null,
+                notificationSocketFactory: () =>
+                {
+                    Interlocked.Increment(ref socketFactoryCalls);
+                    throw new InvalidOperationException(
+                        "Custom aria2 must not create a notification socket.");
+                });
 
             await lifecycle.StartAsync(TestContext.Current.CancellationToken);
+
+            Assert.Equal(0, Volatile.Read(ref socketFactoryCalls));
         }
         finally
         {
