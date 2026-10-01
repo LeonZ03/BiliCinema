@@ -6,6 +6,7 @@ using DownKyi.Application.Desktop;
 using DownKyi.Application.Diagnostics;
 using DownKyi.Commands;
 using DownKyi.Models;
+using DownKyi.Services;
 using DownKyi.Utils;
 using Microsoft.Extensions.Logging;
 
@@ -13,7 +14,6 @@ namespace DownKyi.ViewModels.Dialogs;
 
 internal sealed partial class DownloadRuntimeFailureDialogViewModel : BaseDialogViewModel
 {
-    private const int MaximumIssueUriLength = 8_000;
     private const string IssueTitle = "Download system failed to initialize";
     private const string TruncatedDiagnosticSuffix =
         "\n\n[Diagnostic text truncated to keep the pre-filled issue URL within a safe length. " +
@@ -76,56 +76,14 @@ internal sealed partial class DownloadRuntimeFailureDialogViewModel : BaseDialog
 
     internal async Task CreateGitHubIssueAsync()
     {
-        var issueUri = CreateGitHubIssueUri(DiagnosticText);
+        var issueUri = GitHubIssueUriBuilder.Create(
+            IssueTitle,
+            DiagnosticText,
+            TruncatedDiagnosticSuffix);
         if (!await _platformLauncher.OpenUriAsync(issueUri).ConfigureAwait(true))
         {
             _notifications.Show(DictionaryResource.GetString("OpenGitHubIssueFailed"));
         }
-    }
-
-    private static Uri CreateGitHubIssueUri(string diagnosticText)
-    {
-        var prefix =
-            $"https://github.com/{AppConstant.RepoOwner}/{AppConstant.RepoName}/issues/new" +
-            $"?title={Uri.EscapeDataString(IssueTitle)}&body=";
-        var encodedDiagnostic = Uri.EscapeDataString(diagnosticText);
-        if (prefix.Length + encodedDiagnostic.Length <= MaximumIssueUriLength)
-        {
-            return new Uri(prefix + encodedDiagnostic);
-        }
-
-        var low = 0;
-        var high = diagnosticText.Length;
-        var bestLength = 0;
-        while (low <= high)
-        {
-            var midpoint = low + ((high - low) / 2);
-            var candidateLength = GetSafePrefixLength(diagnosticText, midpoint);
-            var candidateBody = diagnosticText[..candidateLength] + TruncatedDiagnosticSuffix;
-            if (prefix.Length + Uri.EscapeDataString(candidateBody).Length <= MaximumIssueUriLength)
-            {
-                bestLength = Math.Max(bestLength, candidateLength);
-                low = midpoint + 1;
-            }
-            else
-            {
-                high = midpoint - 1;
-            }
-        }
-
-        var body = diagnosticText[..bestLength] + TruncatedDiagnosticSuffix;
-        return new Uri(prefix + Uri.EscapeDataString(body));
-    }
-
-    private static int GetSafePrefixLength(string text, int length)
-    {
-        if (length > 0 && length < text.Length &&
-            char.IsHighSurrogate(text[length - 1]) && char.IsLowSurrogate(text[length]))
-        {
-            return length - 1;
-        }
-
-        return length;
     }
 
     [GeneratedRegex(

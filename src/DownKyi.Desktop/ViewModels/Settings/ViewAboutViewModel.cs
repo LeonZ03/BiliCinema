@@ -1,6 +1,10 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
+using System.Linq;
 using System.Net.Http;
+using System.Runtime.InteropServices;
+using System.Text;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
@@ -21,6 +25,10 @@ namespace DownKyi.ViewModels.Settings;
 internal class ViewAboutViewModel : ViewModelBase
 {
     public const string Tag = "PageSettingsAbout";
+    private const int MaximumFeedbackEventCount = 20;
+    private const string FeedbackIssueTitle = "[Bug] 用户反馈";
+    private const string TruncatedFeedbackSuffix =
+        "\n\n[自动诊断信息过长，已截断。可使用应用内的“导出诊断日志”取得完整的近期日志。]";
 
     private readonly ISettingsStore _settingsStore;
     private readonly IApplicationLogService _logService;
@@ -181,9 +189,14 @@ internal class ViewAboutViewModel : ViewModelBase
     /// <summary>
     /// 意见反馈事件
     /// </summary>
-    private async Task ExecuteFeedbackCommand()
+    internal async Task ExecuteFeedbackCommand()
     {
-        await OpenUriAsync($"https://github.com/{AppConstant.RepoOwner}/{AppConstant.RepoName}/issues").ConfigureAwait(true);
+        var issueBody = CreateFeedbackIssueBody();
+        var issueUri = GitHubIssueUriBuilder.Create(
+            FeedbackIssueTitle,
+            issueBody,
+            TruncatedFeedbackSuffix);
+        await OpenUriAsync(issueUri).ConfigureAwait(true);
     }
 
     // 打开日志目录事件
@@ -266,9 +279,77 @@ internal class ViewAboutViewModel : ViewModelBase
         PublishTip(isSucceed);
     }
 
-    private async Task OpenUriAsync(string value)
+    private string CreateFeedbackIssueBody()
     {
-        if (!await _platformLauncher.OpenUriAsync(new Uri(value)).ConfigureAwait(true))
+        var diagnosticText = CreateFeedbackDiagnosticText();
+        return $"""
+            ## 发生什么
+
+            <!-- 请描述实际发生了什么。 -->
+
+            ## 如何复现
+
+            <!-- 请按顺序列出可以复现问题的步骤。 -->
+
+            <details>
+            <summary>自动诊断信息（已脱敏）</summary>
+
+            ```text
+            {diagnosticText}
+            ```
+            </details>
+            """;
+    }
+
+    private string CreateFeedbackDiagnosticText()
+    {
+        var builder = new StringBuilder();
+        builder.Append("DownKyi version: ").AppendLine(AppVersion);
+        builder.Append("Operating system: ").AppendLine(RuntimeInformation.OSDescription);
+        builder.Append("Architecture: ").AppendLine(RuntimeInformation.OSArchitecture.ToString());
+        builder.AppendLine("Recent warnings and errors (newest first):");
+
+        var events = _logService
+            .GetRecentEvents()
+            .Where(static record =>
+                record.Level >= LogLevel.Warning && record.Level < LogLevel.None)
+            .TakeLast(MaximumFeedbackEventCount)
+            .Reverse()
+            .ToArray();
+        if (events.Length == 0)
+        {
+            builder.AppendLine("None captured.");
+        }
+        else
+        {
+            foreach (var record in events)
+            {
+                builder
+                    .Append(record.Timestamp.ToUniversalTime().ToString("O", CultureInfo.InvariantCulture))
+                    .Append(" [")
+                    .Append(record.Level)
+                    .Append("] ")
+                    .Append(record.Category)
+                    .Append(": ")
+                    .AppendLine(record.Message);
+                if (!string.IsNullOrWhiteSpace(record.ExceptionText))
+                {
+                    builder.AppendLine(record.ExceptionText);
+                }
+            }
+        }
+
+        return _logService.RedactDiagnosticText(builder.ToString().TrimEnd());
+    }
+
+    private Task OpenUriAsync(string value)
+    {
+        return OpenUriAsync(new Uri(value));
+    }
+
+    private async Task OpenUriAsync(Uri uri)
+    {
+        if (!await _platformLauncher.OpenUriAsync(uri).ConfigureAwait(true))
         {
             Notifications.Show("无法打开网页");
         }
