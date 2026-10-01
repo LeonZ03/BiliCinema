@@ -27,6 +27,33 @@ public sealed class BilibiliApiClientTests
     }
 
     [Fact]
+    public async Task CredentialRequestReplacesExistingBuvidCookies()
+    {
+        string? cookieHeader = null;
+        using var factory = new TestHttpClientFactory(
+            (request, _) =>
+            {
+                cookieHeader = Assert.Single(request.Headers.GetValues("Cookie"));
+                return BilibiliTestResponses.CompletedJson();
+            });
+        var client = CreateClient(
+            factory,
+            new StaticCookieProvider(
+                "SESSDATA=fixture-session; buvid3=stale-3; BUVID4=stale-4; "
+                + "buvid3=older-3; bili_jct=fixture-csrf"),
+            new StubBuvidProvider());
+
+        await client.GetStringAsync(
+            new BilibiliHttpRequest("https://example.invalid/api"),
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(
+            "SESSDATA=fixture-session; bili_jct=fixture-csrf; "
+            + "buvid3=synthetic-3; buvid4=synthetic-4",
+            cookieHeader);
+    }
+
+    [Fact]
     public async Task DownloadRemovesPartialTemporaryFileWhenContentIsTruncated()
     {
         var server = new LoopbackHttpServer(_ =>
@@ -71,5 +98,10 @@ public sealed class BilibiliApiClientTests
             TimeProvider.System,
             static (_, _) => Task.CompletedTask);
         return new BilibiliApiClient(transport, cookieProvider, buvidProvider);
+    }
+
+    private sealed class StaticCookieProvider(string cookieHeader) : IBilibiliCookieProvider
+    {
+        public string GetCookieHeader() => cookieHeader;
     }
 }

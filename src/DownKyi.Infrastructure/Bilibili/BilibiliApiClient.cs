@@ -100,8 +100,10 @@ internal sealed class BilibiliApiClient : IBilibiliApiClient
         }
 
         var buvid = await _buvidProvider.GetAsync(cancellationToken).ConfigureAwait(false);
-        return AppendCookie(cookieHeader, "buvid3", buvid.Buvid3)
-            + $"; buvid4={HttpUtility.UrlEncode(buvid.Buvid4)}";
+        return SetCookie(
+            SetCookie(cookieHeader, "buvid3", buvid.Buvid3),
+            "buvid4",
+            buvid.Buvid4);
     }
 
     private static HttpRequestMessage BuildRequest(
@@ -126,12 +128,23 @@ internal sealed class BilibiliApiClient : IBilibiliApiClient
         return message;
     }
 
-    private static string AppendCookie(string cookieHeader, string name, string value)
+    private static string SetCookie(string cookieHeader, string name, string value)
     {
         var encoded = HttpUtility.UrlEncode(value);
-        return string.IsNullOrWhiteSpace(cookieHeader)
-            ? $"{name}={encoded}"
-            : $"{cookieHeader}; {name}={encoded}";
+        var cookies = cookieHeader
+            .Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Where(cookie => !HasName(cookie, name))
+            .Append($"{name}={encoded}");
+        return string.Join("; ", cookies);
+    }
+
+    private static bool HasName(string cookie, string name)
+    {
+        var separator = cookie.IndexOf('=', StringComparison.Ordinal);
+        return separator > 0
+               && cookie.AsSpan(0, separator).Trim().Equals(
+                   name,
+                   StringComparison.OrdinalIgnoreCase);
     }
 
     private static void DeleteTemporaryFileBestEffort(string path)
