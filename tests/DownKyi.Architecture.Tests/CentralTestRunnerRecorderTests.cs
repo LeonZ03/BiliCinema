@@ -567,9 +567,47 @@ public sealed class CentralTestRunnerRecorderTests
             cancellation.Token);
 
         var fixturePid = await WaitForProcessMarkerAsync(markerPath).ConfigureAwait(false);
+        await WaitForProcessStartAsync(evidenceDirectory, fixturePid).ConfigureAwait(false);
         await cancellation.CancelAsync().ConfigureAwait(false);
         var result = await run.WaitAsync(TestContext.Current.CancellationToken).ConfigureAwait(false);
         return (result, fixturePid);
+    }
+
+    private static async Task WaitForProcessStartAsync(string evidenceDirectory, int fixturePid)
+    {
+        while (true)
+        {
+            foreach (var evidencePath in Directory.EnumerateFiles(evidenceDirectory, "*.json"))
+            {
+                try
+                {
+                    using var report = JsonDocument.Parse(await File.ReadAllTextAsync(
+                        evidencePath,
+                        TestContext.Current.CancellationToken).ConfigureAwait(false));
+                    if (report.RootElement.TryGetProperty("RootProcess", out var rootProcess) &&
+                        rootProcess.GetProperty("Pid").GetInt32() == fixturePid &&
+                        report.RootElement.GetProperty("Events")
+                            .EnumerateArray()
+                            .Any(item => string.Equals(
+                                item.GetProperty("Event").GetString(),
+                                "process_start",
+                                StringComparison.Ordinal)))
+                    {
+                        return;
+                    }
+                }
+                catch (IOException)
+                {
+                    // The recorder is writing the report while this readiness probe reads it.
+                }
+                catch (JsonException)
+                {
+                    // The recorder has not finished writing the report yet.
+                }
+            }
+
+            await Task.Delay(20, TestContext.Current.CancellationToken).ConfigureAwait(false);
+        }
     }
 
     private static async Task<int> WaitForProcessMarkerAsync(string markerPath)

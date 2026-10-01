@@ -37,7 +37,10 @@ internal static class FlightRecorderExecution
 
         try
         {
-            using var scope = await OwnedProcessScope.StartAsync(request.StartInfo, cancellationToken)
+            using var scope = await OwnedProcessScope.StartAsync(
+                    request.StartInfo,
+                    cancellationToken,
+                    phase => recorder.RecordAsync("scope_launch_phase", detail: phase))
                 .ConfigureAwait(false);
             scopeStarted = true;
             var process = scope.Host;
@@ -65,10 +68,10 @@ internal static class FlightRecorderExecution
             }
 
             recorder.SetRootIdentity(rootPid, rootStartTime);
-            recorder.RecordInMemory(
+            await recorder.RecordAsync(
                 "process_start",
                 pid: rootPid,
-                startTimeUtc: rootStartTime);
+                startTimeUtc: rootStartTime).ConfigureAwait(false);
             TracePhase(recorder, rootPid, "process_wait_begin");
 
             try

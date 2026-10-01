@@ -76,6 +76,71 @@ public sealed class OwnedProcessScopePlatformTests
         }
     }
 
+    [Fact]
+    public async Task WindowsLargeLaunchPayloadCompletesScopeStartup()
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
+        const int launchPayloadLength = 8 * 1024 * 1024;
+        var directory = Path.Combine(Path.GetTempPath(), $"downkyi-large-launch-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(directory);
+        using var fixture = new Process
+        {
+            StartInfo = CreateLargeLaunchFixtureStartInfo(directory, launchPayloadLength)
+        };
+        try
+        {
+            Assert.True(fixture.Start());
+            await fixture.WaitForExitAsync(TestContext.Current.CancellationToken).ConfigureAwait(true);
+            var standardOutput = await fixture.StandardOutput.ReadToEndAsync(
+                TestContext.Current.CancellationToken).ConfigureAwait(true);
+            var standardError = await fixture.StandardError.ReadToEndAsync(
+                TestContext.Current.CancellationToken).ConfigureAwait(true);
+            Assert.True(
+                fixture.ExitCode == 0,
+                $"Large-launch fixture exited with {fixture.ExitCode}.{Environment.NewLine}" +
+                $"stdout:{Environment.NewLine}{standardOutput}{Environment.NewLine}" +
+                $"stderr:{Environment.NewLine}{standardError}");
+
+            var evidencePath = Assert.Single(Directory.GetFiles(directory, "*.json"));
+            using var report = JsonDocument.Parse(await File.ReadAllTextAsync(
+                evidencePath,
+                TestContext.Current.CancellationToken).ConfigureAwait(true));
+            var events = report.RootElement.GetProperty("Events").EnumerateArray().ToArray();
+            var startupPhases = events
+                .Where(item => item.GetProperty("Event").GetString() == "scope_launch_phase")
+                .Select(item => item.GetProperty("Detail").GetString() ?? string.Empty)
+                .ToArray();
+            Assert.Equal(
+                [
+                    "host_started",
+                    "launch_payload_write_begin",
+                    "launch_payload_write_completed",
+                    "control_connection_wait_begin",
+                    "control_connected",
+                    "handshake_read_begin",
+                    "handshake_received"
+                ],
+                startupPhases);
+            Assert.Contains(
+                events,
+                item => item.GetProperty("Event").GetString() == "process_start");
+        }
+        finally
+        {
+            if (fixture is { HasExited: false })
+            {
+                fixture.Kill(entireProcessTree: true);
+                await fixture.WaitForExitAsync(TestContext.Current.CancellationToken).ConfigureAwait(true);
+            }
+
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
     [Theory]
     [MemberData(nameof(OwnershipStressIterations))]
     [SuppressMessage(
@@ -394,6 +459,31 @@ public sealed class OwnedProcessScopePlatformTests
     }
 
     private static int GetProcessGroup(int pid) => NativeMethods.GetProcessGroup(pid);
+
+    private static ProcessStartInfo CreateLargeLaunchFixtureStartInfo(
+        string evidenceDirectory,
+        int payloadLength)
+    {
+        var runtimeConfig = Path.Combine(
+            AppContext.BaseDirectory,
+            $"{Path.GetFileNameWithoutExtension(typeof(OwnedProcessScopePlatformTests).Assembly.Location)}.runtimeconfig.json");
+        var startInfo = new ProcessStartInfo("dotnet")
+        {
+            UseShellExecute = false,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            CreateNoWindow = true
+        };
+        startInfo.ArgumentList.Add("exec");
+        startInfo.ArgumentList.Add("--runtimeconfig");
+        startInfo.ArgumentList.Add(runtimeConfig);
+        startInfo.ArgumentList.Add(typeof(FlightRecorderExecution).Assembly.Location);
+        startInfo.ArgumentList.Add("fixture-large-launch");
+        startInfo.ArgumentList.Add(runtimeConfig);
+        startInfo.ArgumentList.Add(evidenceDirectory);
+        startInfo.ArgumentList.Add(payloadLength.ToString(CultureInfo.InvariantCulture));
+        return startInfo;
+    }
 
     private static void AssertStopped(int pid)
     {

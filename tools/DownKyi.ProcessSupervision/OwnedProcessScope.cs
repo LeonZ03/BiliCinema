@@ -31,7 +31,8 @@ internal sealed class OwnedProcessScope : IDisposable
 
     internal static async Task<OwnedProcessScope> StartAsync(
         ProcessStartInfo testStartInfo,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        Func<string, Task>? recordStartupPhaseAsync = null)
     {
         cancellationToken.ThrowIfCancellationRequested();
 
@@ -66,15 +67,28 @@ internal sealed class OwnedProcessScope : IDisposable
             {
                 throw new InvalidOperationException("The ownership host did not start.");
             }
+            if (recordStartupPhaseAsync is not null)
+            {
+                await recordStartupPhaseAsync("host_started").ConfigureAwait(false);
+            }
 
             var launch = new ScopeLaunch(
                 testStartInfo.FileName,
                 [.. testStartInfo.ArgumentList],
                 testStartInfo.WorkingDirectory,
                 new Dictionary<string, string?>(testStartInfo.Environment));
+            if (recordStartupPhaseAsync is not null)
+            {
+                await recordStartupPhaseAsync("launch_payload_write_begin").ConfigureAwait(false);
+            }
             await host.StandardInput.WriteLineAsync(
                 JsonSerializer.Serialize(launch).AsMemory(), cancellationToken).ConfigureAwait(false);
             host.StandardInput.Close();
+            if (recordStartupPhaseAsync is not null)
+            {
+                await recordStartupPhaseAsync("launch_payload_write_completed").ConfigureAwait(false);
+                await recordStartupPhaseAsync("control_connection_wait_begin").ConfigureAwait(false);
+            }
             using var connectionCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
             var connectionTask = control.WaitForConnectionAsync(connectionCancellation.Token);
             var hostExitTask = host.WaitForExitAsync(CancellationToken.None);
@@ -95,12 +109,21 @@ internal sealed class OwnedProcessScope : IDisposable
             }
 
             await connectionTask.ConfigureAwait(false);
+            if (recordStartupPhaseAsync is not null)
+            {
+                await recordStartupPhaseAsync("control_connected").ConfigureAwait(false);
+                await recordStartupPhaseAsync("handshake_read_begin").ConfigureAwait(false);
+            }
             using var reader = new StreamReader(control);
             var line = await reader.ReadLineAsync(cancellationToken).ConfigureAwait(false);
             var handshake = line is null ? null : JsonSerializer.Deserialize<ScopeHandshake>(line);
             if (handshake is null || handshake.Error is not null || handshake.Pid <= 0)
             {
                 throw new InvalidOperationException($"The ownership scope did not launch the test: {handshake?.Error ?? "no handshake"}");
+            }
+            if (recordStartupPhaseAsync is not null)
+            {
+                await recordStartupPhaseAsync("handshake_received").ConfigureAwait(false);
             }
 
             var scope = new OwnedProcessScope(host, job, handshake);

@@ -27,6 +27,7 @@ internal static class FixtureHost
             "fixture-sensitive-hold" => await RunSensitiveHoldAsync(args).ConfigureAwait(false),
             "fixture-long-line" => await RunLongLineAsync(args).ConfigureAwait(false),
             "fixture-dual-output" => await RunDualOutputAsync().ConfigureAwait(false),
+            "fixture-large-launch" => await RunLargeLaunchAsync(args).ConfigureAwait(false),
             "fixture-windows-process-snapshot" => RunWindowsProcessSnapshot(),
             _ => null
         };
@@ -234,6 +235,34 @@ internal static class FixtureHost
         await Console.Out.WriteAsync(payload).ConfigureAwait(false);
         await Console.Error.WriteAsync(payload).ConfigureAwait(false);
         return 0;
+    }
+
+    private static async Task<int?> RunLargeLaunchAsync(string[] args)
+    {
+        if (args.Length <= 3 ||
+            !int.TryParse(
+                args[3],
+                System.Globalization.NumberStyles.None,
+                System.Globalization.CultureInfo.InvariantCulture,
+                out var payloadLength) ||
+            payloadLength <= 0)
+        {
+            return null;
+        }
+
+        var startInfo = CreateFixtureChild(args[1], "fixture-pass");
+        startInfo.RedirectStandardOutput = true;
+        startInfo.RedirectStandardError = true;
+        startInfo.Environment["DOWNKYI_LARGE_LAUNCH_PAYLOAD"] = new string('x', payloadLength);
+        var result = await FlightRecorderExecution.RunAsync(
+            new ProcessExecutionRequest(
+                "scope.large-launch",
+                "large-launch-payload",
+                startInfo,
+                TimeSpan.FromSeconds(5),
+                args[2]),
+            CancellationToken.None).ConfigureAwait(false);
+        return result.ExitCode;
     }
 
     private static ProcessStartInfo CreateFixtureChild(string runtimeConfig, string mode, params string[] arguments)
