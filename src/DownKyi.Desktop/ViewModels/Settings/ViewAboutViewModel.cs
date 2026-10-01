@@ -339,7 +339,8 @@ internal class ViewAboutViewModel : ViewModelBase
             }
         }
 
-        return _logService.RedactDiagnosticText(builder.ToString().TrimEnd());
+        var resourceRedacted = ExternalResourceRedactor.Redact(builder.ToString().TrimEnd());
+        return _logService.RedactDiagnosticText(resourceRedacted);
     }
 
     private Task OpenUriAsync(string value)

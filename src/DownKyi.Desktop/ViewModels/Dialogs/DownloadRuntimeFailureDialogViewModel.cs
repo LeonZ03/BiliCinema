@@ -1,6 +1,5 @@
 using System;
 using System.Runtime.InteropServices;
-using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using DownKyi.Application.Desktop;
 using DownKyi.Application.Diagnostics;
@@ -12,7 +11,7 @@ using Microsoft.Extensions.Logging;
 
 namespace DownKyi.ViewModels.Dialogs;
 
-internal sealed partial class DownloadRuntimeFailureDialogViewModel : BaseDialogViewModel
+internal sealed class DownloadRuntimeFailureDialogViewModel : BaseDialogViewModel
 {
     private const string IssueTitle = "Download system failed to initialize";
     private const string TruncatedDiagnosticSuffix =
@@ -86,14 +85,6 @@ internal sealed partial class DownloadRuntimeFailureDialogViewModel : BaseDialog
         }
     }
 
-    [GeneratedRegex(
-        "(^|[^\\w])(?:[a-z][a-z0-9+.-]*://|[a-z]:[\\\\/]|[\\\\/])[^\\r\\n]*",
-        RegexOptions.IgnoreCase |
-        RegexOptions.Multiline |
-        RegexOptions.CultureInvariant |
-        RegexOptions.NonBacktracking)]
-    private static partial Regex ExternalResourceLineRegex();
-
     private string CreateDiagnosticText(Exception failure)
     {
         var exceptionText = RedactDiagnosticText(failure.ToString());
@@ -111,9 +102,7 @@ internal sealed partial class DownloadRuntimeFailureDialogViewModel : BaseDialog
 
     private string RedactDiagnosticText(string? text)
     {
-        var resourceRedacted = ExternalResourceLineRegex().Replace(
-            text ?? string.Empty,
-            "$1[resource redacted]");
+        var resourceRedacted = ExternalResourceRedactor.Redact(text);
         return _logService.RedactDiagnosticText(resourceRedacted);
     }
 }

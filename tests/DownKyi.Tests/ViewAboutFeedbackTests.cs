@@ -16,9 +16,12 @@ public sealed class ViewAboutFeedbackTests
         [
             CreateRecord(LogLevel.Information, "informational context"),
             CreateRecord(
+                LogLevel.Warning,
+                "signed media https://media.example.test/video.m4s?signature=private-signature"),
+            CreateRecord(
                 LogLevel.Error,
                 "request failed with secret-token",
-                "InvalidOperationException: secret-token")
+                "InvalidOperationException: callback https://callback.example.test/user/42")
         ]);
         var launcher = new RecordingPlatformLauncher();
         using var settings = new TestSettingsStore();
@@ -48,8 +51,11 @@ public sealed class ViewAboutFeedbackTests
         Assert.Contains("Operating system:", body, StringComparison.Ordinal);
         Assert.Contains("Architecture:", body, StringComparison.Ordinal);
         Assert.Contains("request failed with [redacted]", body, StringComparison.Ordinal);
-        Assert.Contains("InvalidOperationException: [redacted]", body, StringComparison.Ordinal);
+        Assert.Equal(2, CountOccurrences(body, "[resource redacted]"));
         Assert.DoesNotContain("secret-token", body, StringComparison.Ordinal);
+        Assert.DoesNotContain("media.example.test", body, StringComparison.Ordinal);
+        Assert.DoesNotContain("private-signature", body, StringComparison.Ordinal);
+        Assert.DoesNotContain("callback.example.test", body, StringComparison.Ordinal);
         Assert.DoesNotContain("informational context", body, StringComparison.Ordinal);
         Assert.False(logs.ExportCalled);
     }
