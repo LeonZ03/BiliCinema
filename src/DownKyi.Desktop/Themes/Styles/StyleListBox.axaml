@@ -6,35 +6,24 @@
     <ControlTheme x:Key="LeftTabHeaderItemStyle" TargetType="{x:Type ListBoxItem}" x:DataType="vmp:TabHeader">
         <Setter Property="Cursor" Value="Hand" />
         <Setter Property="HorizontalContentAlignment" Value="Stretch" />
-        <Setter Property="Margin" Value="8,2" />
-        <Setter Property="MinHeight" Value="44" />
+        <Setter Property="Margin" Value="12,2" />
+        <Setter Property="MinHeight" Value="40" />
         <Setter Property="Padding" Value="0" />
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="{x:Type ListBoxItem}">
                     <Border
                         x:Name="SelectionBackground"
-                        MinHeight="44"
+                        MinHeight="40"
                         Background="Transparent"
                         BorderBrush="Transparent"
                         BorderThickness="1"
                         CornerRadius="{DynamicResource DownKyiRadiusMedium}"
                         ToolTip.Tip="{Binding Title}">
-                        <Grid ColumnDefinitions="4,Auto,*,Auto">
-                            <Border
-                                x:Name="SelectionIndicator"
-                                Grid.Column="0"
-                                Width="3"
-                                Height="18"
-                                HorizontalAlignment="Left"
-                                VerticalAlignment="Center"
-                                Background="{DynamicResource BrushPrimary}"
-                                CornerRadius="2"
-                                IsHitTestVisible="False"
-                                Opacity="0" />
+                        <Grid ColumnDefinitions="Auto,*,Auto">
                             <ContentControl
                                 x:Name="ContentControl"
-                                Grid.Column="1"
+                                Grid.Column="0"
                                 Width="20"
                                 Height="20"
                                 Margin="12,0,8,0"
@@ -44,27 +33,27 @@
                                     Width="{Binding Image.Width}"
                                     Height="{Binding Image.Height}"
                                     Data="{Binding Image.Data}"
-                                    Fill="{Binding Image.Fill}"
+                                    Fill="{DynamicResource BrushTextSecondary}"
                                     Stretch="UniformToFill" />
                             </ContentControl>
                             <TextBlock
                                 x:Name="text"
-                                Grid.Column="2"
+                                Grid.Column="1"
                                 Margin="12,0"
                                 HorizontalAlignment="Left"
                                 VerticalAlignment="Center"
                                 FontSize="{DynamicResource DownKyiFontSizeBody}"
-                                Foreground="{DynamicResource BrushTextDark}"
+                                Foreground="{DynamicResource BrushTextPrimary}"
                                 Text="{Binding Title}"
                                 TextTrimming="CharacterEllipsis" />
                             <TextBlock
                                 x:Name="sub"
-                                Grid.Column="3"
+                                Grid.Column="2"
                                 Margin="8,0,12,0"
                                 HorizontalAlignment="Right"
                                 VerticalAlignment="Center"
                                 FontSize="{DynamicResource DownKyiFontSizeCaption}"
-                                Foreground="{DynamicResource BrushTextGrey2}"
+                                Foreground="{DynamicResource BrushTextSecondary}"
                                 Text="{Binding SubTitle}" />
                         </Grid>
                     </Border>
@@ -72,28 +61,28 @@
             </Setter.Value>
         </Setter>
         <Style Selector="^:pointerover /template/ Border#SelectionBackground">
-            <Setter Property="Background" Value="{DynamicResource BrushBackgroundGreyTranslucent3}" />
+            <Setter Property="Background" Value="{DynamicResource BrushControlFillHover}" />
+        </Style>
+        <Style Selector="^:pointerover /template/ Path#image">
+            <Setter Property="Fill" Value="{DynamicResource BrushTextPrimary}" />
         </Style>
         <Style Selector="^:focus-visible /template/ Border#SelectionBackground">
-            <Setter Property="BorderBrush" Value="{DynamicResource BrushPrimary}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource BrushControlStrokeFocus}" />
         </Style>
         <Style Selector="^:selected /template/ Border#SelectionBackground">
-            <Setter Property="Background" Value="{DynamicResource BrushPrimaryTranslucent3}" />
-        </Style>
-        <Style Selector="^:selected /template/ Border#SelectionIndicator">
-            <Setter Property="Opacity" Value="1" />
+            <Setter Property="Background" Value="{DynamicResource BrushSelectionFill}" />
         </Style>
         <Style Selector="^:selected /template/ TextBlock#text">
             <Setter Property="FontWeight" Value="SemiBold" />
         </Style>
         <Style Selector="^:selected /template/ Path#image">
-            <Setter Property="Fill" Value="{DynamicResource BrushPrimary}" />
+            <Setter Property="Fill" Value="{DynamicResource BrushTextPrimary}" />
         </Style>
     </ControlTheme>
 
     <ControlTheme x:Key="LeftTabHeaderStyle" TargetType="{x:Type ListBox}">
-        <Setter Property="Background" Value="{DynamicResource BrushTabHeaderGrey}" />
-        <Setter Property="Padding" Value="4,8" />
+        <Setter Property="Background" Value="{DynamicResource BrushSurfaceBase}" />
+        <Setter Property="Padding" Value="0,8" />
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="{x:Type ListBox}">
@@ -101,8 +90,7 @@
                         x:Name="NavigationSurface"
                         Padding="{TemplateBinding Padding}"
                         Background="{TemplateBinding Background}"
-                        BorderBrush="{DynamicResource BrushBorderTranslucent}"
-                        BorderThickness="0,0,1,0">
+                        BorderThickness="0">
                         <ScrollViewer Focusable="False">
                             <ItemsPresenter ItemsPanel="{TemplateBinding ItemsPanel}" />
                         </ScrollViewer>

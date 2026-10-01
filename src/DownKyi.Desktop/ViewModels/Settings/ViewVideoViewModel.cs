@@ -68,7 +68,8 @@ internal partial class ViewVideoViewModel : ViewModelBase
             PublishTip(isSucceed);
         };
 
-        foreach (var item in Enum.GetValues<FileNamePart>())
+        foreach (var item in Enum.GetValues<FileNamePart>()
+                     .Where(item => item != FileNamePart.None))
         {
             var display = DisplayFileNamePart(item);
             OptionalFields.Add(new DisplayFileNamePart { Id = item, Title = display });

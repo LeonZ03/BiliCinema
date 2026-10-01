@@ -236,10 +236,11 @@ internal sealed class ViewVideoDetailViewModel : ViewModelBase
     {
         if (UiState.VideoInfoView == null)
         {
-            PublishAddedCount(0);
+            PublishAddedCount(0, false);
             return;
         }
 
+        var hasDownloadCandidate = HasDownloadCandidate(isAll);
         var operation = _workflow.StartOperation();
         try
         {
@@ -251,7 +252,7 @@ internal sealed class ViewVideoDetailViewModel : ViewModelBase
                 operation.CancellationToken).ConfigureAwait(true);
             if (addedCount is { } count && _workflow.IsCurrent(operation))
             {
-                PublishAddedCount(count);
+                PublishAddedCount(count, hasDownloadCandidate);
             }
         }
         catch (OperationCanceledException) when (operation.CancellationToken.IsCancellationRequested)
@@ -259,6 +260,9 @@ internal sealed class ViewVideoDetailViewModel : ViewModelBase
             return;
         }
     }
+
+    private bool HasDownloadCandidate(bool isAll) => VideoSections.SelectMany(section => section.VideoPages)
+        .Any(page => (isAll || page.IsSelected) && page.PlayUrl != null);
 
     private void ResetView()
     {
@@ -297,12 +301,12 @@ internal sealed class ViewVideoDetailViewModel : ViewModelBase
         }
     }
 
-    private void PublishAddedCount(int count)
+    private void PublishAddedCount(int count, bool hasDownloadCandidate)
     {
-        var message = count <= 0
-            ? DictionaryResource.GetString("TipAddDownloadingZero")
-            : $"{DictionaryResource.GetString("TipAddDownloadingFinished1")}{count}{DictionaryResource.GetString("TipAddDownloadingFinished2")}";
-        Notifications.Show(message);
+        if (count <= 0 && hasDownloadCandidate) return;
+        Notifications.Show(count > 0
+            ? $"{DictionaryResource.GetString("TipAddDownloadingFinished1")}{count}{DictionaryResource.GetString("TipAddDownloadingFinished2")}"
+            : DictionaryResource.GetString("TipAddDownloadingZero"));
     }
 
     private void HandleOperationError(

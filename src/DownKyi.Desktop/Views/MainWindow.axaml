@@ -5,6 +5,7 @@
         x:DataType="vm:MainWindowViewModel"
         MinWidth="800"
         MinHeight="550"
+        Background="{DynamicResource BrushSurfaceBase}"
         Title="{DynamicResource AppName}"
         Icon="/Resources/favicon.ico">
 

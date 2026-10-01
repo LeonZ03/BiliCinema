@@ -59,29 +59,31 @@
             x:Name="NameVideoPages"
             Grid.Row="2"
             VerticalAlignment="Stretch"
+            Background="{DynamicResource BrushSurfaceSunken}"
             BorderThickness="1"
-            BorderBrush="Gray"
+            BorderBrush="{DynamicResource BrushBorderSubtle}"
             CanUserResizeColumns="True"
             IsReadOnly="True"
             ItemsSource="{ReflectionBinding ElementName=NameVideoSections, Path=SelectedItem.VideoPages, Mode=TwoWay}"
             SelectionMode="Extended"
             SelectedItem="{Binding UiState.SelectedVideoPage, Mode=TwoWay}">
+            <DataGrid.Resources>
+                <SolidColorBrush x:Key="DataGridRowHoveredBackgroundColor"
+                                 Color="{DynamicResource ColorControlFillHover}" />
+                <SolidColorBrush x:Key="DataGridRowSelectedBackgroundBrush"
+                                 Color="{DynamicResource ColorSelectionFill}" />
+                <SolidColorBrush x:Key="DataGridRowSelectedHoveredBackgroundBrush"
+                                 Color="{DynamicResource ColorControlFillPressed}" />
+                <SolidColorBrush x:Key="DataGridRowSelectedUnfocusedBackgroundBrush"
+                                 Color="{DynamicResource ColorSelectionFill}" />
+                <SolidColorBrush x:Key="DataGridRowSelectedHoveredUnfocusedBackgroundBrush"
+                                 Color="{DynamicResource ColorControlFillPressed}" />
+                <x:Double x:Key="DataGridRowSelectedBackgroundOpacity">1</x:Double>
+                <x:Double x:Key="DataGridRowSelectedHoveredBackgroundOpacity">1</x:Double>
+                <x:Double x:Key="DataGridRowSelectedUnfocusedBackgroundOpacity">1</x:Double>
+                <x:Double x:Key="DataGridRowSelectedHoveredUnfocusedBackgroundOpacity">1</x:Double>
+            </DataGrid.Resources>
             <DataGrid.Styles>
-                <Style Selector="DataGridRow /template/ Rectangle#BackgroundRectangle">
-                    <Setter Property="IsVisible" Value="False" />
-                    <Setter Property="Fill" Value="{DynamicResource BrushDataGridHighlight}" />
-                </Style>
-
-                <Style Selector="DataGridRow:pointerover /template/ Rectangle#BackgroundRectangle">
-                    <Setter Property="IsVisible" Value="True" />
-                    <Setter Property="Opacity" Value="0.3" />
-                </Style>
-
-                <Style Selector="DataGridRow:selected /template/ Rectangle#BackgroundRectangle">
-                    <Setter Property="IsVisible" Value="True" />
-                    <Setter Property="Opacity" Value="1" />
-                </Style>
-
                 <Style Selector="DataGridCell:focus-within:not(:focus) /template/ Grid#FocusVisual">
                     <Setter Property="IsVisible" Value="False" />
                 </Style>
@@ -92,7 +94,8 @@
                     <Setter Property="VerticalContentAlignment" Value="Center" />
                     <Setter Property="Height" Value="30" />
                     <Setter Property="Padding" Value="4" />
-                    <Setter Property="Background" Value="Transparent" />
+                    <Setter Property="Background" Value="{DynamicResource BrushSurfaceRaised}" />
+                    <Setter Property="Foreground" Value="{DynamicResource BrushTextPrimary}" />
                     <Setter Property="Template">
                         <ControlTemplate TargetType="{x:Type DataGridColumnHeader}">
                             <Border
@@ -132,7 +135,7 @@
                                                     <Setter Property="Height"
                                                             Value="{Binding Bounds.Size.Height, RelativeSource={RelativeSource TemplatedParent}}" />
                                                     <Setter Property="Padding" Value="0" />
-                                                    <Setter Property="Background" Value="White" />
+                                                    <Setter Property="Background" Value="{DynamicResource BrushBorderSubtle}" />
                                                     <Setter Property="Template">
                                                         <Setter.Value>
                                                             <ControlTemplate TargetType="{x:Type Thumb}">

@@ -12,7 +12,8 @@
                     <Border
                         Background="{TemplateBinding Background}"
                         BorderBrush="{TemplateBinding BorderBrush}"
-                        BorderThickness="{TemplateBinding BorderThickness}">
+                        BorderThickness="{TemplateBinding BorderThickness}"
+                        CornerRadius="{DynamicResource DownKyiRadiusPill}">
                         <ContentPresenter
                             Name="content"
                             Content="{TemplateBinding Content}"
@@ -22,6 +23,16 @@
                 </ControlTemplate>
             </Setter.Value>
         </Setter>
+        <Style Selector="^:pointerover">
+            <Setter Property="Background" Value="{DynamicResource BrushControlFillHover}" />
+        </Style>
+        <Style Selector="^:pressed">
+            <Setter Property="Background" Value="{DynamicResource BrushControlFillPressed}" />
+        </Style>
+        <Style Selector="^:focus-visible">
+            <Setter Property="BorderBrush" Value="{DynamicResource BrushControlStrokeFocus}" />
+            <Setter Property="BorderThickness" Value="1" />
+        </Style>
     </ControlTheme>
 
 </ResourceDictionary>

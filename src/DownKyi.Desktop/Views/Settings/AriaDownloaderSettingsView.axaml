@@ -4,11 +4,19 @@
              x:Class="DownKyi.Views.Settings.AriaDownloaderSettingsView"
              x:DataType="vms:ViewNetworkViewModel">
     <StackPanel x:Name="NameAria" IsVisible="{Binding Aria2C}">
-        <StackPanel Margin="0,20,0,0" Orientation="Horizontal">
+        <TextBlock
+            Name="NameAriaParametersTitle"
+            Margin="0,28,0,0"
+            FontSize="{DynamicResource DownKyiFontSizeBody}"
+            FontWeight="SemiBold"
+            Foreground="{DynamicResource BrushTextPrimary}"
+            Text="{DynamicResource AriaParametersSection}" />
+
+        <StackPanel Margin="0,12,0,0" Orientation="Horizontal">
             <TextBlock
                 Width="100"
                 VerticalAlignment="Center"
-                FontSize="12"
+                FontSize="{DynamicResource DownKyiFontSizeBody}"
                 Foreground="{DynamicResource BrushTextDark}"
                 Text="{DynamicResource AriaLogLevel}" />
             <ComboBox
@@ -26,11 +34,11 @@
             </ComboBox>
         </StackPanel>
 
-        <StackPanel Margin="0,20,0,0" Orientation="Horizontal">
+        <StackPanel Margin="0,14,0,0" Orientation="Horizontal">
             <TextBlock
                 Width="100"
                 VerticalAlignment="Center"
-                FontSize="12"
+                FontSize="{DynamicResource DownKyiFontSizeBody}"
                 Foreground="{DynamicResource BrushTextDark}"
                 Text="{DynamicResource AriaMaxConcurrentDownloads}" />
             <ComboBox
@@ -48,11 +56,11 @@
             </ComboBox>
         </StackPanel>
 
-        <StackPanel Margin="0,20,0,0" Orientation="Horizontal">
+        <StackPanel Margin="0,14,0,0" Orientation="Horizontal">
             <TextBlock
                 Width="100"
                 VerticalAlignment="Center"
-                FontSize="12"
+                FontSize="{DynamicResource DownKyiFontSizeBody}"
                 Foreground="{DynamicResource BrushTextDark}"
                 Text="{DynamicResource AriaSplit}" />
             <ComboBox
@@ -70,11 +78,11 @@
             </ComboBox>
         </StackPanel>
 
-        <StackPanel Margin="0,20,0,0" Orientation="Horizontal">
+        <StackPanel Margin="0,14,0,0" Orientation="Horizontal">
             <TextBlock
                 Width="150"
                 VerticalAlignment="Center"
-                FontSize="12"
+                FontSize="{DynamicResource DownKyiFontSizeBody}"
                 Foreground="{DynamicResource BrushTextDark}"
                 Text="{DynamicResource AriaMaxConnectionPerServer}" />
             <ComboBox
@@ -92,11 +100,11 @@
             </ComboBox>
         </StackPanel>
 
-        <StackPanel Margin="0,20,0,0" Orientation="Horizontal">
+        <StackPanel Margin="0,14,0,0" Orientation="Horizontal">
             <TextBlock
                 Width="150"
                 VerticalAlignment="Center"
-                FontSize="12"
+                FontSize="{DynamicResource DownKyiFontSizeBody}"
                 Foreground="{DynamicResource BrushTextDark}"
                 Text="{DynamicResource AriaMinSplitSize}" />
             <ComboBox
@@ -114,82 +122,120 @@
             </ComboBox>
         </StackPanel>
 
-        <HeaderedContentControl
-            Margin="0,20,0,0"
-            Padding="10,5"
-            HorizontalAlignment="Left"
-            FontSize="12"
-            Background="LightGray"
-            Foreground="{DynamicResource BrushTextDark}"
-            Header="{DynamicResource AriaDownloadLimit}">
-            <StackPanel Margin="10">
-                <StackPanel Margin="0,10,0,0" Orientation="Horizontal">
+        <Border
+            Name="NameAriaSpeedLimitSection"
+            Margin="0,28,0,0"
+            BorderBrush="{DynamicResource BrushBorder}"
+            BorderThickness="0,1,0,1">
+            <StackPanel>
+                <Grid Margin="0,12,0,10" ColumnDefinitions="*,Auto">
                     <TextBlock
-                        Width="300"
-                        VerticalAlignment="Center"
-                        FontSize="12"
-                        Foreground="{DynamicResource BrushTextDark}"
-                        Text="{DynamicResource AriaMaxOverallDownloadLimit}" />
-                    <TextBox
-                        Name="NameAriaMaxOverallDownloadLimit"
-                        Width="100"
-                        VerticalContentAlignment="Center"
-                        Text="{Binding AriaMaxOverallDownloadLimit}"
-                        ToolTip.Tip="{DynamicResource PressEnterToApplySettingTip}">
-                        <TextBox.KeyBindings>
-                            <KeyBinding
-                                Command="{Binding AriaMaxOverallDownloadLimitCommand}"
-                                CommandParameter="{Binding #NameAriaMaxOverallDownloadLimit.Text}"
-                                Gesture="Enter" />
-                        </TextBox.KeyBindings>
-                    </TextBox>
-                </StackPanel>
-                <StackPanel Margin="0,10,0,5" Orientation="Horizontal">
+                        Name="NameAriaSpeedLimitTitle"
+                        FontSize="{DynamicResource DownKyiFontSizeBody}"
+                        FontWeight="SemiBold"
+                        Foreground="{DynamicResource BrushTextPrimary}"
+                        Text="{DynamicResource AriaDownloadLimit}" />
                     <TextBlock
-                        Width="300"
+                        Name="NameAriaSpeedLimitHint"
+                        Grid.Column="1"
                         VerticalAlignment="Center"
-                        FontSize="12"
-                        Foreground="{DynamicResource BrushTextDark}"
-                        Text="{DynamicResource AriaMaxDownloadLimit}" />
-                    <TextBox
-                        Name="NameAriaMaxDownloadLimit"
-                        Width="100"
-                        VerticalContentAlignment="Center"
-                        Text="{Binding AriaMaxDownloadLimit}"
-                        ToolTip.Tip="{DynamicResource PressEnterToApplySettingTip}">
-                        <TextBox.KeyBindings>
-                            <KeyBinding
-                                Command="{Binding AriaMaxDownloadLimitCommand}"
-                                CommandParameter="{Binding #NameAriaMaxDownloadLimit.Text}"
-                                Gesture="Enter" />
-                        </TextBox.KeyBindings>
-                    </TextBox>
-                </StackPanel>
+                        FontSize="{DynamicResource DownKyiFontSizeCaption}"
+                        Foreground="{DynamicResource BrushTextSecondary}"
+                        Text="{DynamicResource ZeroMeansUnlimited}" />
+                </Grid>
+
+                <Border
+                    BorderBrush="{DynamicResource BrushBorder}"
+                    BorderThickness="0,1,0,0">
+                    <Grid MinHeight="64" ColumnDefinitions="*,180">
+                        <StackPanel VerticalAlignment="Center">
+                            <TextBlock
+                                FontSize="{DynamicResource DownKyiFontSizeBody}"
+                                Foreground="{DynamicResource BrushTextPrimary}"
+                                Text="{DynamicResource AriaMaxOverallDownloadLimit}" />
+                            <TextBlock
+                                Margin="0,3,0,0"
+                                FontSize="{DynamicResource DownKyiFontSizeCaption}"
+                                Foreground="{DynamicResource BrushTextSecondary}"
+                                Text="{DynamicResource AriaMaxOverallDownloadLimitDescription}" />
+                        </StackPanel>
+                        <TextBox
+                            Name="NameAriaMaxOverallDownloadLimit"
+                            Grid.Column="1"
+                            Width="180"
+                            HorizontalAlignment="Right"
+                            VerticalAlignment="Center"
+                            VerticalContentAlignment="Center"
+                            Text="{Binding AriaMaxOverallDownloadLimit}"
+                            ToolTip.Tip="{DynamicResource PressEnterToApplySettingTip}">
+                            <TextBox.KeyBindings>
+                                <KeyBinding
+                                    Command="{Binding AriaMaxOverallDownloadLimitCommand}"
+                                    CommandParameter="{Binding #NameAriaMaxOverallDownloadLimit.Text}"
+                                    Gesture="Enter" />
+                            </TextBox.KeyBindings>
+                        </TextBox>
+                    </Grid>
+                </Border>
+
+                <Border
+                    BorderBrush="{DynamicResource BrushBorder}"
+                    BorderThickness="0,1,0,0">
+                    <Grid MinHeight="64" ColumnDefinitions="*,180">
+                        <StackPanel VerticalAlignment="Center">
+                            <TextBlock
+                                FontSize="{DynamicResource DownKyiFontSizeBody}"
+                                Foreground="{DynamicResource BrushTextPrimary}"
+                                Text="{DynamicResource AriaMaxDownloadLimit}" />
+                            <TextBlock
+                                Margin="0,3,0,0"
+                                FontSize="{DynamicResource DownKyiFontSizeCaption}"
+                                Foreground="{DynamicResource BrushTextSecondary}"
+                                Text="{DynamicResource AriaMaxDownloadLimitDescription}" />
+                        </StackPanel>
+                        <TextBox
+                            Name="NameAriaMaxDownloadLimit"
+                            Grid.Column="1"
+                            Width="180"
+                            HorizontalAlignment="Right"
+                            VerticalAlignment="Center"
+                            VerticalContentAlignment="Center"
+                            Text="{Binding AriaMaxDownloadLimit}"
+                            ToolTip.Tip="{DynamicResource PressEnterToApplySettingTip}">
+                            <TextBox.KeyBindings>
+                                <KeyBinding
+                                    Command="{Binding AriaMaxDownloadLimitCommand}"
+                                    CommandParameter="{Binding #NameAriaMaxDownloadLimit.Text}"
+                                    Gesture="Enter" />
+                            </TextBox.KeyBindings>
+                        </TextBox>
+                    </Grid>
+                </Border>
             </StackPanel>
-        </HeaderedContentControl>
+        </Border>
 
         <CheckBox
             Name="NameIsAriaHttpsDownloadProxy"
-            Margin="0,20,0,0"
+            Margin="0,28,0,0"
             HorizontalAlignment="Left"
             VerticalAlignment="Top"
             Command="{Binding IsAriaHttpProxyCommand}"
             Content="{DynamicResource IsAriaHttpsDownloadProxy}"
-            FontSize="12"
+            FontSize="{DynamicResource DownKyiFontSizeBody}"
             Foreground="{DynamicResource BrushTextDark}"
             IsChecked="{Binding IsAriaHttpProxy, Mode=TwoWay}"
             ToolTip.Tip="{DynamicResource AriaHttpsDownloadProxyTip}" />
 
         <StackPanel
             Name="NameAriaHttpsDownloadProxyPanel"
-            Margin="0,20,0,0"
+            Margin="28,12,0,0"
             Orientation="Horizontal"
             ToolTip.Tip="{DynamicResource PressEnterToApplySettingTip}"
             IsVisible="{Binding ElementName=NameIsAriaHttpsDownloadProxy,Path=IsChecked}">
             <StackPanel Orientation="Horizontal">
                 <TextBlock
                     VerticalAlignment="Center"
-                    FontSize="12"
+                    FontSize="{DynamicResource DownKyiFontSizeBody}"
                     Foreground="{DynamicResource BrushTextDark}"
                     Text="{DynamicResource AriaHttpsDownloadProxyHost}" />
                 <TextBox
@@ -209,7 +255,7 @@
             <StackPanel Margin="30,0,0,0" Orientation="Horizontal">
                 <TextBlock
                     VerticalAlignment="Center"
-                    FontSize="12"
+                    FontSize="{DynamicResource DownKyiFontSizeBody}"
                     Foreground="{DynamicResource BrushTextDark}"
                     Text="{DynamicResource HttpProxyPort}" />
                 <TextBox
@@ -231,12 +277,12 @@
             <TextBlock
                 Width="100"
                 VerticalAlignment="Center"
-                FontSize="12"
+                FontSize="{DynamicResource DownKyiFontSizeBody}"
                 Foreground="{DynamicResource BrushTextDark}"
                 Text="{DynamicResource AriaFileAllocation}" />
             <ComboBox
                 Name="NameAriaFileAllocations"
-                MinWidth="100"
+                MinWidth="180"
                 VerticalContentAlignment="Center"
                 ItemsSource="{Binding AriaFileAllocations}"
                 SelectedValue="{Binding SelectedAriaFileAllocation}">

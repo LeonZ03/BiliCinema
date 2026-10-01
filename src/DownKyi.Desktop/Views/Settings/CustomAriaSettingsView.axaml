@@ -5,80 +5,97 @@
              x:DataType="vms:ViewNetworkViewModel">
     <StackPanel x:Name="NameCustomAria" IsVisible="{Binding CustomAria2C}">
         <TextBlock
-            MaxWidth="520"
-            HorizontalAlignment="Left"
-            Foreground="{DynamicResource BrushTextDark}"
-            Text="{DynamicResource CustomAriaCompatibilityRequirement}"
-            TextWrapping="Wrap" />
-        <StackPanel
-            Margin="0,20,0,0"
-            Orientation="Horizontal"
-            ToolTip.Tip="{DynamicResource PressEnterToApplySettingTip}">
+            Name="NameCustomAriaTitle"
+            Margin="0,28,0,0"
+            FontSize="{DynamicResource DownKyiFontSizeBody}"
+            FontWeight="SemiBold"
+            Foreground="{DynamicResource BrushTextPrimary}"
+            Text="{DynamicResource CustomAriaSection}" />
+
+        <StackPanel Name="NameCompatibilityRequirement" Margin="0,12,0,0">
             <TextBlock
-                Width="100"
-                VerticalAlignment="Center"
-                FontSize="12"
-                Foreground="{DynamicResource BrushTextDark}"
-                Text="{DynamicResource AriaServerHost}" />
-            <TextBox
-                Name="NameAriaHost"
-                Width="300"
-                VerticalContentAlignment="Center"
-                Text="{Binding AriaHost}">
-                <TextBox.KeyBindings>
-                    <KeyBinding
-                        Command="{Binding AriaHostCommand}"
-                        CommandParameter="{Binding #NameAriaHost.Text}"
-                        Gesture="Enter" />
-                </TextBox.KeyBindings>
-            </TextBox>
-        </StackPanel>
-        <StackPanel
-            Margin="0,20,0,0"
-            Orientation="Horizontal"
-            ToolTip.Tip="{DynamicResource PressEnterToApplySettingTip}">
+                Name="NameCompatibilityRequirementTitle"
+                FontSize="{DynamicResource DownKyiFontSizeBody}"
+                FontWeight="SemiBold"
+                Foreground="{DynamicResource BrushTextPrimary}"
+                Text="{DynamicResource CompatibilityRequirementTitle}" />
             <TextBlock
-                Width="100"
-                VerticalAlignment="Center"
-                FontSize="12"
-                Foreground="{DynamicResource BrushTextDark}"
-                Text="{DynamicResource AriaServerPort}" />
-            <TextBox
-                Name="NameAriaPort"
-                Width="100"
-                VerticalContentAlignment="Center"
-                Text="{Binding AriaListenPort}">
-                <TextBox.KeyBindings>
-                    <KeyBinding
-                        Command="{Binding AriaListenPortCommand}"
-                        CommandParameter="{Binding #NameAriaPort.Text}"
-                        Gesture="Enter" />
-                </TextBox.KeyBindings>
-            </TextBox>
+                Name="NameCompatibilityRequirementText"
+                MaxWidth="620"
+                Margin="0,4,0,0"
+                HorizontalAlignment="Left"
+                FontSize="{DynamicResource DownKyiFontSizeCaption}"
+                Foreground="{DynamicResource BrushTextSecondary}"
+                Text="{DynamicResource CustomAriaCompatibilityRequirement}"
+                TextWrapping="Wrap" />
         </StackPanel>
-        <StackPanel
-            Margin="0,20,0,0"
-            Orientation="Horizontal"
+
+        <Grid
+            Margin="0,16,0,0"
+            ColumnDefinitions="*,24,180"
+            RowDefinitions="Auto,16,Auto"
             ToolTip.Tip="{DynamicResource PressEnterToApplySettingTip}">
-            <TextBlock
-                Width="100"
-                VerticalAlignment="Center"
-                FontSize="12"
-                Foreground="{DynamicResource BrushTextDark}"
-                Text="{DynamicResource AriaServerToken}" />
-            <TextBox
-                Name="NameAriaToken"
-                Width="100"
-                PasswordChar="*"
-                VerticalContentAlignment="Center"
-                Text="{Binding AriaToken}">
-                <TextBox.KeyBindings>
-                    <KeyBinding
-                        Command="{Binding AriaTokenCommand}"
-                        CommandParameter="{Binding #NameAriaToken.Text}"
-                        Gesture="Enter" />
-                </TextBox.KeyBindings>
-            </TextBox>
-        </StackPanel>
+            <StackPanel Grid.Row="0" Grid.Column="0">
+                <TextBlock
+                    FontSize="{DynamicResource DownKyiFontSizeBody}"
+                    Foreground="{DynamicResource BrushTextDark}"
+                    Text="{DynamicResource AriaServerHost}" />
+                <TextBox
+                    Name="NameAriaHost"
+                    Margin="0,6,0,0"
+                    HorizontalAlignment="Stretch"
+                    VerticalContentAlignment="Center"
+                    Text="{Binding AriaHost}">
+                    <TextBox.KeyBindings>
+                        <KeyBinding
+                            Command="{Binding AriaHostCommand}"
+                            CommandParameter="{Binding #NameAriaHost.Text}"
+                            Gesture="Enter" />
+                    </TextBox.KeyBindings>
+                </TextBox>
+            </StackPanel>
+
+            <StackPanel Grid.Row="0" Grid.Column="2">
+                <TextBlock
+                    FontSize="{DynamicResource DownKyiFontSizeBody}"
+                    Foreground="{DynamicResource BrushTextDark}"
+                    Text="{DynamicResource AriaServerPort}" />
+                <TextBox
+                    Name="NameAriaPort"
+                    Margin="0,6,0,0"
+                    HorizontalAlignment="Stretch"
+                    VerticalContentAlignment="Center"
+                    Text="{Binding AriaListenPort}">
+                    <TextBox.KeyBindings>
+                        <KeyBinding
+                            Command="{Binding AriaListenPortCommand}"
+                            CommandParameter="{Binding #NameAriaPort.Text}"
+                            Gesture="Enter" />
+                    </TextBox.KeyBindings>
+                </TextBox>
+            </StackPanel>
+
+            <StackPanel Grid.Row="2" Grid.Column="0">
+                <TextBlock
+                    FontSize="{DynamicResource DownKyiFontSizeBody}"
+                    Foreground="{DynamicResource BrushTextDark}"
+                    Text="{DynamicResource AriaServerToken}" />
+                <TextBox
+                    Name="NameAriaToken"
+                    Width="220"
+                    Margin="0,6,0,0"
+                    HorizontalAlignment="Left"
+                    PasswordChar="*"
+                    VerticalContentAlignment="Center"
+                    Text="{Binding AriaToken}">
+                    <TextBox.KeyBindings>
+                        <KeyBinding
+                            Command="{Binding AriaTokenCommand}"
+                            CommandParameter="{Binding #NameAriaToken.Text}"
+                            Gesture="Enter" />
+                    </TextBox.KeyBindings>
+                </TextBox>
+            </StackPanel>
+        </Grid>
     </StackPanel>
 </UserControl>

@@ -13,12 +13,29 @@
     
     <Color x:Key="ColorWarning">#FFFF4D3C</Color>
     
-    <Color x:Key="ColorPrimary">#FF00A1D6</Color>
-    <Color x:Key="ColorPrimaryTranslucent">#C800A1D6</Color>
-    <Color x:Key="ColorPrimaryTranslucent2">#7F00A1D6</Color>
-    <Color x:Key="ColorPrimaryTranslucent3">#3300A1D6</Color>
+    <Color x:Key="ColorPrimary">#FF065FD4</Color>
+    <Color x:Key="ColorPrimaryTranslucent">#C8065FD4</Color>
+    <Color x:Key="ColorPrimaryTranslucent2">#7F065FD4</Color>
+    <Color x:Key="ColorPrimaryTranslucent3">#33065FD4</Color>
     
     <Color x:Key="ColorSecond">#FFFB7299</Color>
+
+    <Color x:Key="ColorSurfaceBase">#FFFFFFFF</Color>
+    <Color x:Key="ColorSurfaceRaised">#FFF2F2F2</Color>
+    <Color x:Key="ColorSurfaceSunken">#FFF8F8F8</Color>
+    <Color x:Key="ColorSurfaceOverlay">#FFFFFFFF</Color>
+    <Color x:Key="ColorMediaCanvas">#FF181818</Color>
+    <Color x:Key="ColorTextPrimary">#FF0F0F0F</Color>
+    <Color x:Key="ColorTextSecondary">#FF606060</Color>
+    <Color x:Key="ColorBorderSubtle">#FFD0D0D0</Color>
+    <Color x:Key="ColorControlFill">#0D000000</Color>
+    <Color x:Key="ColorControlFillHover">#14000000</Color>
+    <Color x:Key="ColorControlFillPressed">#1A000000</Color>
+    <Color x:Key="ColorControlStroke">#33000000</Color>
+    <Color x:Key="ColorControlStrokeFocus">#FF065FD4</Color>
+    <Color x:Key="ColorSelectionFill">#1A000000</Color>
+    <Color x:Key="ColorToggleTrack">#FF767676</Color>
+    <Color x:Key="ColorToggleThumbOff">#FF5F6368</Color>
     
     <Color x:Key="ColorForeground">#FF00A1D6</Color>
     <Color x:Key="ColorBackground">#FFFFFFFF</Color>

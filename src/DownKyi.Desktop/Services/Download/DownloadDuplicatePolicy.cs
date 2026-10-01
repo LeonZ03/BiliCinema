@@ -101,8 +101,7 @@ internal sealed class DownloadDuplicatePolicy
                 continue;
             }
 
-            _notificationService.Show(
-                $"{page.Name}{DictionaryResource.GetString("TipAlreadyToAddDownloading")}");
+            _notificationService.Show(DictionaryResource.GetString("TipAlreadyToAddDownloading"));
             return true;
         }
 

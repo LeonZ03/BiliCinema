@@ -24,8 +24,8 @@
                 <ResourceInclude Source="/Resources/Bilibili/ZoneImages.axaml" />
                 <ResourceInclude Source="/Resources/Bilibili/BilibiliImages.axaml" />
             </ResourceDictionary.MergedDictionaries>
-            <FontFamily x:Key="DefaultFont">Simsun,微软雅黑,Microsoft YaHei,苹方-简,宋体-简,$Default</FontFamily>
-            <FontFamily x:Key="ProgramFont">Simsun,微软雅黑,Microsoft YaHei,苹方-简,宋体-简,$Default</FontFamily>
+            <FontFamily x:Key="DefaultFont">Segoe UI Variable Text,Segoe UI,Microsoft JhengHei UI,Microsoft YaHei UI,苹方-简,$Default</FontFamily>
+            <FontFamily x:Key="ProgramFont">Segoe UI Variable Text,Segoe UI,Microsoft JhengHei UI,Microsoft YaHei UI,苹方-简,$Default</FontFamily>
         </ResourceDictionary>
     </Application.Resources>
     <Application.DataTemplates>
@@ -68,6 +68,8 @@
         <StyleInclude Source="/Themes/Styles/download-preparation-status.axaml" />
         <Style Selector="Window">
             <Setter Property="FontFamily" Value="{DynamicResource ProgramFont}" />
+            <Setter Property="Background" Value="{DynamicResource BrushSurfaceBase}" />
+            <Setter Property="Foreground" Value="{DynamicResource BrushTextPrimary}" />
         </Style>
         <Style Selector="TemplatedControl">
             <Setter Property="FontFamily" Value="{DynamicResource ProgramFont}" />
@@ -75,10 +77,47 @@
         <Style Selector="TextBox">
             <Setter Property="MinHeight" Value="{DynamicResource DownKyiControlMinHeight}" />
             <Setter Property="CornerRadius" Value="{DynamicResource DownKyiRadiusSmall}" />
+            <Setter Property="Background" Value="{DynamicResource BrushSurfaceSunken}" />
+            <Setter Property="Foreground" Value="{DynamicResource BrushTextPrimary}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource BrushControlStroke}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="FontSize" Value="{DynamicResource DownKyiFontSizeBody}" />
+        </Style>
+        <Style Selector="TextBox:pointerover">
+            <Setter Property="BorderBrush" Value="{DynamicResource BrushBorderSubtle}" />
+        </Style>
+        <Style Selector="TextBox:focus">
+            <Setter Property="BorderBrush" Value="{DynamicResource BrushControlStrokeFocus}" />
         </Style>
         <Style Selector="ComboBox">
             <Setter Property="MinHeight" Value="{DynamicResource DownKyiControlMinHeight}" />
+            <Setter Property="MinWidth" Value="120" />
             <Setter Property="CornerRadius" Value="{DynamicResource DownKyiRadiusSmall}" />
+            <Setter Property="Background" Value="{DynamicResource BrushSurfaceSunken}" />
+            <Setter Property="Foreground" Value="{DynamicResource BrushTextPrimary}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource BrushControlStroke}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="FontSize" Value="{DynamicResource DownKyiFontSizeBody}" />
+        </Style>
+        <Style Selector="ComboBox:pointerover">
+            <Setter Property="BorderBrush" Value="{DynamicResource BrushBorderSubtle}" />
+        </Style>
+        <Style Selector="ComboBox:focus">
+            <Setter Property="BorderBrush" Value="{DynamicResource BrushControlStrokeFocus}" />
+        </Style>
+        <Style Selector="ComboBoxItem:pointerover">
+            <Setter Property="Background" Value="{DynamicResource BrushControlFillHover}" />
+        </Style>
+        <Style Selector="ComboBoxItem:selected">
+            <Setter Property="Background" Value="{DynamicResource BrushSelectionFill}" />
+        </Style>
+        <Style Selector="CheckBox">
+            <Setter Property="FontSize" Value="{DynamicResource DownKyiFontSizeBody}" />
+            <Setter Property="Foreground" Value="{DynamicResource BrushTextPrimary}" />
+        </Style>
+        <Style Selector="RadioButton">
+            <Setter Property="FontSize" Value="{DynamicResource DownKyiFontSizeBody}" />
+            <Setter Property="Foreground" Value="{DynamicResource BrushTextPrimary}" />
         </Style>
         <Style Selector="ProgressBar">
             <Setter Property="Height" Value="{DynamicResource DownKyiProgressThickness}" />
@@ -87,15 +126,18 @@
             <Setter Property="FontSize" Value="{DynamicResource DownKyiFontSizeBody}" />
         </Style>
         <Style Selector="HeaderedContentControl">
+            <Setter Property="Background" Value="{DynamicResource BrushSurfaceRaised}" />
+            <Setter Property="Foreground" Value="{DynamicResource BrushTextPrimary}" />
+            <Setter Property="FontSize" Value="{DynamicResource DownKyiFontSizeBody}" />
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate>
                         <Grid RowDefinitions="Auto,*" ColumnDefinitions="Auto,*">
                             <Border
                                 ZIndex="1"
-                                CornerRadius="{DynamicResource DownKyiRadiusSmall}"
+                                CornerRadius="{DynamicResource DownKyiRadiusMedium}"
                                 Padding="{DynamicResource DownKyiHeaderPadding}"
-                                Background="{DynamicResource ThemeBackgroundBrush}"
+                                Background="{DynamicResource BrushSurfaceBase}"
                                 Margin="{DynamicResource DownKyiHeaderMargin}">
                                 <TextBlock
                                     Text="{TemplateBinding Header}"
@@ -106,8 +148,10 @@
                                 Grid.RowSpan="2"
                                 Grid.ColumnSpan="2"
                                 Margin="0,10,0,0"
-                                BorderBrush="{TemplateBinding Background}"
-                                BorderThickness="1">
+                                Background="{TemplateBinding Background}"
+                                BorderBrush="{DynamicResource BrushBorderSubtle}"
+                                BorderThickness="1"
+                                CornerRadius="{DynamicResource DownKyiRadiusMedium}">
                                 <ContentPresenter Content="{TemplateBinding Content}" />
                             </Border>
                         </Grid>

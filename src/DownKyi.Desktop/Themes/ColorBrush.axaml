@@ -13,12 +13,42 @@
 
     <SolidColorBrush x:Key="BrushWarning" Color="{DynamicResource ColorWarning}" />
 
+    <SolidColorBrush x:Key="BrushBrand" Color="{DynamicResource ColorBrand}" />
     <SolidColorBrush x:Key="BrushPrimary" Color="{DynamicResource ColorPrimary}" />
     <SolidColorBrush x:Key="BrushPrimaryTranslucent" Color="{DynamicResource ColorPrimaryTranslucent}" />
     <SolidColorBrush x:Key="BrushPrimaryTranslucent2" Color="{DynamicResource ColorPrimaryTranslucent2}" />
     <SolidColorBrush x:Key="BrushPrimaryTranslucent3" Color="{DynamicResource ColorPrimaryTranslucent3}" />
 
     <SolidColorBrush x:Key="BrushSecond" Color="{DynamicResource ColorSecond}" />
+
+    <SolidColorBrush x:Key="BrushSurfaceBase" Color="{DynamicResource ColorSurfaceBase}" />
+    <SolidColorBrush x:Key="BrushSurfaceRaised" Color="{DynamicResource ColorSurfaceRaised}" />
+    <SolidColorBrush x:Key="BrushSurfaceSunken" Color="{DynamicResource ColorSurfaceSunken}" />
+    <SolidColorBrush x:Key="BrushSurfaceOverlay" Color="{DynamicResource ColorSurfaceOverlay}" />
+    <SolidColorBrush x:Key="BrushMediaCanvas" Color="{DynamicResource ColorMediaCanvas}" />
+    <SolidColorBrush x:Key="BrushTextPrimary" Color="{DynamicResource ColorTextPrimary}" />
+    <SolidColorBrush x:Key="BrushTextSecondary" Color="{DynamicResource ColorTextSecondary}" />
+    <SolidColorBrush x:Key="BrushBorderSubtle" Color="{DynamicResource ColorBorderSubtle}" />
+    <SolidColorBrush x:Key="BrushControlFill" Color="{DynamicResource ColorControlFill}" />
+    <SolidColorBrush x:Key="BrushControlFillHover" Color="{DynamicResource ColorControlFillHover}" />
+    <SolidColorBrush x:Key="BrushControlFillPressed" Color="{DynamicResource ColorControlFillPressed}" />
+    <SolidColorBrush x:Key="BrushControlStroke" Color="{DynamicResource ColorControlStroke}" />
+    <SolidColorBrush x:Key="BrushControlStrokeFocus" Color="{DynamicResource ColorControlStrokeFocus}" />
+    <SolidColorBrush x:Key="BrushSelectionFill" Color="{DynamicResource ColorSelectionFill}" />
+    <SolidColorBrush x:Key="BrushToggleTrack" Color="{DynamicResource ColorToggleTrack}" />
+    <SolidColorBrush x:Key="BrushToggleThumbOff" Color="{DynamicResource ColorToggleThumbOff}" />
+
+    <!-- Fluent ComboBox template resources are redirected to the same neutral interaction owner. -->
+    <SolidColorBrush x:Key="ComboBoxDropDownBackground" Color="{DynamicResource ColorSurfaceOverlay}" />
+    <SolidColorBrush x:Key="ComboBoxDropDownBorderBrush" Color="{DynamicResource ColorBorderSubtle}" />
+    <SolidColorBrush x:Key="ComboBoxItemBackgroundPointerOver" Color="{DynamicResource ColorControlFillHover}" />
+    <SolidColorBrush x:Key="ComboBoxItemBackgroundPressed" Color="{DynamicResource ColorControlFillPressed}" />
+    <SolidColorBrush x:Key="ComboBoxItemBackgroundSelected" Color="{DynamicResource ColorSelectionFill}" />
+    <SolidColorBrush x:Key="ComboBoxItemBackgroundSelectedPointerOver" Color="{DynamicResource ColorControlFillPressed}" />
+    <SolidColorBrush x:Key="ComboBoxItemBackgroundSelectedPressed" Color="{DynamicResource ColorControlFillPressed}" />
+    <SolidColorBrush x:Key="ComboBoxItemForegroundSelected" Color="{DynamicResource ColorTextPrimary}" />
+    <SolidColorBrush x:Key="ComboBoxItemForegroundSelectedPointerOver" Color="{DynamicResource ColorTextPrimary}" />
+    <SolidColorBrush x:Key="ComboBoxItemForegroundSelectedPressed" Color="{DynamicResource ColorTextPrimary}" />
 
     <SolidColorBrush x:Key="BrushForeground" Color="{DynamicResource ColorForeground}" />
     <SolidColorBrush x:Key="BrushBackground" Color="{DynamicResource ColorBackground}" />

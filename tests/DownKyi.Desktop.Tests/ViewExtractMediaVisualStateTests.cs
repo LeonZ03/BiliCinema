@@ -44,11 +44,16 @@ public sealed class ViewExtractMediaVisualStateTests
                     window.MouseMove(new Point(1, 1));
                     window.UpdateLayout();
 
+                    Assert.True(application.TryGetResource("BrushSurfaceSunken", theme, out var background));
+                    var expectedBackground = Assert.IsAssignableFrom<ISolidColorBrush>(background).Color;
+                    Assert.True(application.TryGetResource("BrushTextPrimary", theme, out var foreground));
+                    var expectedForeground = Assert.IsAssignableFrom<ISolidColorBrush>(foreground).Color;
+
                     var outputBorder = Assert.Single(
                         output.GetVisualDescendants().OfType<Border>(),
                         border => border.Name == "PART_BorderElement");
                     Assert.Equal(
-                        Colors.Black,
+                        expectedBackground,
                         Assert.IsAssignableFrom<ISolidColorBrush>(outputBorder.Background).Color);
 
                     window.MouseMove(pointerTarget.Value);
@@ -56,10 +61,10 @@ public sealed class ViewExtractMediaVisualStateTests
 
                     Assert.True(output.IsPointerOver);
                     Assert.Equal(
-                        Colors.Black,
+                        expectedBackground,
                         Assert.IsAssignableFrom<ISolidColorBrush>(outputBorder.Background).Color);
                     Assert.Equal(
-                        Colors.White,
+                        expectedForeground,
                         Assert.IsAssignableFrom<ISolidColorBrush>(output.Foreground).Color);
                 }
             }

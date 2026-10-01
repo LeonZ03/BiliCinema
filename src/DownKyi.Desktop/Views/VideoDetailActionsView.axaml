@@ -6,61 +6,70 @@
              x:Class="DownKyi.Views.VideoDetailActionsView"
              x:DataType="vm:ViewVideoDetailViewModel"
              mc:Ignorable="d">
-    <Grid ColumnDefinitions="60,80,140,*,100,100">
-        <CheckBox
-            Grid.Column="0"
-            HorizontalAlignment="Left"
-            VerticalAlignment="Top"
-            Command="{Binding SelectAllCommand}"
-            Content="{DynamicResource SelectAll}"
-            Foreground="{DynamicResource BrushTextDark}"
-            IsChecked="{Binding UiState.IsSelectAll, Mode=TwoWay}" />
-        <Button
-            Grid.Column="1"
-            HorizontalAlignment="Left"
-            VerticalAlignment="Top"
-            Command="{Binding ClearSelectionCommand}"
-            Content="{DynamicResource ClearSelection}"
-            FontSize="12"
-            Theme="{StaticResource BtnStyle}"
-            Foreground="{DynamicResource BrushText}" />
-        <Label
-            Grid.Column="3"
-            Margin="9,0,0,0"
-            HorizontalAlignment="Left"
-            VerticalAlignment="Top"
-            Content="{DynamicResource Search}" />
-        <TextBox
-            Grid.Column="3"
-            Width="200"
-            Margin="48,0,0,0"
-            HorizontalAlignment="Left"
-            VerticalAlignment="Top"
-            VerticalContentAlignment="Center"
-            PlaceholderText="{DynamicResource SearchVideoByName}"
-            Text="{Binding Path=UiState.InputSearchText, UpdateSourceTrigger=PropertyChanged, Mode=TwoWay}"
-            TextWrapping="Wrap">
-            <TextBox.KeyBindings>
-                <KeyBinding Command="{Binding InputSearchCommand}" Gesture="Enter" />
-            </TextBox.KeyBindings>
-        </TextBox>
-        <Button
-            Grid.Column="4"
-            HorizontalAlignment="Right"
-            VerticalAlignment="Top"
-            Command="{Binding ParseAllVideoCommand}"
-            Content="{DynamicResource ParseVideo}"
-            FontSize="12"
-            Theme="{StaticResource BtnStyle}"
-            Foreground="{DynamicResource BrushText}" />
-        <Button
-            Grid.Column="5"
-            HorizontalAlignment="Right"
-            VerticalAlignment="Top"
-            Command="{Binding AddToDownloadCommand}"
-            Content="{DynamicResource DownloadSelected}"
-            FontSize="12"
-            Theme="{StaticResource BtnStyle}"
-            Foreground="{DynamicResource BrushText}" />
-    </Grid>
+    <Border Padding="8"
+            Background="{DynamicResource BrushSurfaceRaised}"
+            BorderBrush="{DynamicResource BrushBorderSubtle}"
+            BorderThickness="1"
+            CornerRadius="{DynamicResource DownKyiRadiusMedium}">
+        <Grid ColumnDefinitions="Auto,Auto,32,*,Auto,Auto">
+            <CheckBox
+                Grid.Column="0"
+                VerticalAlignment="Center"
+                Command="{Binding SelectAllCommand}"
+                Content="{DynamicResource SelectAll}"
+                Foreground="{DynamicResource BrushTextPrimary}"
+                IsChecked="{Binding UiState.IsSelectAll, Mode=TwoWay}" />
+            <Button
+                Grid.Column="1"
+                MinWidth="88"
+                Margin="8,0,0,0"
+                VerticalAlignment="Center"
+                Command="{Binding ClearSelectionCommand}"
+                Content="{DynamicResource ClearSelection}"
+                FontSize="12"
+                Theme="{StaticResource BtnBorderStyle}"
+                Foreground="{DynamicResource BrushTextPrimary}" />
+            <Grid Grid.Column="3"
+                  Width="260"
+                  HorizontalAlignment="Center"
+                  ColumnDefinitions="Auto,*">
+                <Label
+                    Grid.Column="0"
+                    Margin="0,0,8,0"
+                    VerticalAlignment="Center"
+                    Content="{DynamicResource Search}"
+                    Foreground="{DynamicResource BrushTextPrimary}" />
+                <TextBox
+                    Grid.Column="1"
+                    VerticalAlignment="Center"
+                    VerticalContentAlignment="Center"
+                    PlaceholderText="{DynamicResource SearchVideoByName}"
+                    Text="{Binding Path=UiState.InputSearchText, UpdateSourceTrigger=PropertyChanged, Mode=TwoWay}">
+                    <TextBox.KeyBindings>
+                        <KeyBinding Command="{Binding InputSearchCommand}" Gesture="Enter" />
+                    </TextBox.KeyBindings>
+                </TextBox>
+            </Grid>
+            <Button
+                Grid.Column="4"
+                MinWidth="96"
+                Margin="8,0,0,0"
+                VerticalAlignment="Center"
+                Command="{Binding ParseAllVideoCommand}"
+                Content="{DynamicResource ParseVideo}"
+                FontSize="12"
+                Theme="{StaticResource BtnBorderStyle}"
+                Foreground="{DynamicResource BrushTextPrimary}" />
+            <Button
+                Grid.Column="5"
+                MinWidth="96"
+                Margin="8,0,0,0"
+                VerticalAlignment="Center"
+                Command="{Binding AddToDownloadCommand}"
+                Content="{DynamicResource DownloadSelected}"
+                FontSize="12"
+                Theme="{StaticResource BtnStyle}"
+                Foreground="{DynamicResource BrushTextPrimary}" />
+        </Grid>
+    </Border>
 </UserControl>

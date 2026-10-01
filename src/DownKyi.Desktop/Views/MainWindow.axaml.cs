@@ -58,6 +58,63 @@ internal partial class MainWindow : Window
         }
     }
 
+    protected override void OnOpened(EventArgs e)
+    {
+        EnsureWindowFitsWorkingArea();
+        base.OnOpened(e);
+    }
+
+    private void EnsureWindowFitsWorkingArea()
+    {
+        var screen = Screens.ScreenFromWindow(this)
+            ?? Screens.ScreenFromPoint(Position)
+            ?? Screens.Primary;
+        if (screen is null || FrameSize is not { } frameSize)
+        {
+            return;
+        }
+
+        var placement = ConstrainRestoredPlacement(
+            Position,
+            ClientSize,
+            frameSize,
+            screen.WorkingArea,
+            screen.Scaling);
+        Width = placement.ClientSize.Width;
+        Height = placement.ClientSize.Height;
+        Position = placement.Position;
+    }
+
+    internal static (PixelPoint Position, Size ClientSize) ConstrainRestoredPlacement(
+        PixelPoint position,
+        Size clientSize,
+        Size frameSize,
+        PixelRect workingArea,
+        double scaling)
+    {
+        ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(scaling, 0);
+
+        var decorationWidth = Math.Max(0, frameSize.Width - clientSize.Width);
+        var decorationHeight = Math.Max(0, frameSize.Height - clientSize.Height);
+        var maxClientWidth = Math.Max(0, workingArea.Width / scaling - decorationWidth);
+        var maxClientHeight = Math.Max(0, workingArea.Height / scaling - decorationHeight);
+        var constrainedClientSize = new Size(
+            Math.Min(clientSize.Width, maxClientWidth),
+            Math.Min(clientSize.Height, maxClientHeight));
+        var frameWidthInPixels = (int)Math.Ceiling(
+            (constrainedClientSize.Width + decorationWidth) * scaling);
+        var frameHeightInPixels = (int)Math.Ceiling(
+            (constrainedClientSize.Height + decorationHeight) * scaling);
+        var maxX = Math.Max(workingArea.X, workingArea.Right - frameWidthInPixels);
+        var maxY = Math.Max(workingArea.Y, workingArea.Bottom - frameHeightInPixels);
+
+        return (
+            new PixelPoint(
+                Math.Clamp(position.X, workingArea.X, maxX),
+                Math.Clamp(position.Y, workingArea.Y, maxY)),
+            constrainedClientSize);
+    }
+
     protected override void OnClosing(WindowClosingEventArgs e)
     {
         if (Design.IsDesignMode || _closeConfirmed)

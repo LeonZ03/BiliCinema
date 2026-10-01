@@ -11,9 +11,16 @@
              x:Class="DownKyi.Views.ViewIndex">
     <UserControl.Styles>
         <Style Selector="TextBox.index-search-input /template/ Border#PART_BorderElement">
-            <Setter Property="Background" Value="{x:Null}" />
-            <Setter Property="BorderBrush" Value="{x:Null}" />
-            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Background" Value="{DynamicResource BrushSurfaceSunken}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource BrushControlStroke}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CornerRadius" Value="{DynamicResource DownKyiRadiusPill}" />
+        </Style>
+        <Style Selector="TextBox.index-search-input:focus /template/ Border#PART_BorderElement">
+            <Setter Property="BorderBrush" Value="{DynamicResource BrushControlStrokeFocus}" />
+        </Style>
+        <Style Selector="StackPanel.index-action:pointerover Border.index-action-icon">
+            <Setter Property="Background" Value="{DynamicResource BrushControlFillHover}" />
         </Style>
     </UserControl.Styles>
     <Grid RowDefinitions="60,200,100,230,*,50">
@@ -67,27 +74,28 @@
             HorizontalAlignment="Center"
             VerticalAlignment="Bottom">
             <Path
+                x:Name="IndexWordmark"
                 Width="{Binding TextLogo.Width}"
                 Height="{Binding TextLogo.Height}"
                 Data="{Binding TextLogo.Data}"
-                Fill="{DynamicResource BrushPrimary}"
+                Fill="{DynamicResource BrushBrand}"
                 Stretch="UniformToFill" />
         </ContentControl>
         <Grid Grid.Row="2" ColumnDefinitions="150*,600*,150*">
             <Border
                 x:Name="IndexSearchBorder"
+                Classes="index-search-surface"
                 Grid.Column="1"
                 Height="40"
-                BorderBrush="{DynamicResource BrushPrimary}"
-                BorderThickness="2"
-                CornerRadius="20">
+                BorderThickness="0"
+                CornerRadius="{DynamicResource DownKyiRadiusPill}">
                 <TextBox
                     x:Name="NameInputUrl"
                     Classes="index-search-input"
-                    Height="35"
-                    Margin="20,0,40,0"
+                    Height="40"
+                    Padding="20,0,40,0"
                     VerticalContentAlignment="Center"
-                    BorderThickness="0"
+                    CornerRadius="{DynamicResource DownKyiRadiusPill}"
                     FontSize="16"
                     PlaceholderText="{DynamicResource IndexHintText}"
                     Text="{Binding InputText,Mode=TwoWay}">
@@ -98,9 +106,9 @@
             </Border>
             <Button
                 Grid.Column="1"
-                Width="20"
-                Height="20"
-                Margin="0,0,15,0"
+                Width="40"
+                Height="40"
+                Margin="0,0,4,0"
                 Command="{Binding InputCommand}"
                 HorizontalAlignment="Right"
                 Theme="{StaticResource ImageBtnStyle}">
@@ -108,7 +116,7 @@
                     Width="{Binding GeneralSearch.Width}"
                     Height="{Binding GeneralSearch.Height}"
                     Data="{Binding GeneralSearch.Data}"
-                    Fill="{DynamicResource BrushPrimary}"
+                    Fill="{DynamicResource BrushTextSecondary}"
                     Stretch="UniformToFill" />
             </Button>
 
@@ -119,6 +127,7 @@
             <Grid Grid.Column="1" RowDefinitions="*,*" ColumnDefinitions="*,*,*">
 
                 <StackPanel
+                    Classes="index-action"
                     Grid.Row="0"
                     Grid.Column="0"
                     HorizontalAlignment="Center"
@@ -131,29 +140,36 @@
                         </EventTriggerBehavior>
                     </Interaction.Behaviors>
                     <Border
+                        Classes="index-action-icon"
                         Width="64"
                         Height="64"
                         Margin="0,0,0,5"
-                        Background="{DynamicResource BrushImageBackground}"
+                        Background="{DynamicResource BrushControlFill}"
                         CornerRadius="32">
                         <ContentControl
                             HorizontalAlignment="Center"
                             VerticalAlignment="Center">
                             <Path
+                                x:Name="IndexSettingsIcon"
                                 Width="{Binding Settings.Width}"
                                 Height="{Binding Settings.Height}"
                                 Data="{Binding Settings.Data}"
-                                Fill="{DynamicResource BrushPrimary}"
+                                Fill="Transparent"
+                                Stroke="{DynamicResource BrushBrand}"
+                                StrokeLineCap="Round"
+                                StrokeJoin="Round"
+                                StrokeThickness="1.75"
                                 Stretch="UniformToFill" />
                         </ContentControl>
                     </Border>
                     <TextBlock
                         HorizontalAlignment="Center"
                         FontSize="14"
-                        Foreground="{DynamicResource BrushPrimary}"
+                        Foreground="{DynamicResource BrushTextPrimary}"
                         Text="{DynamicResource Settings}" />
                 </StackPanel>
                 <StackPanel
+                    Classes="index-action"
                     Grid.Row="0"
                     Grid.Column="1"
                     HorizontalAlignment="Center"
@@ -166,29 +182,32 @@
                         </EventTriggerBehavior>
                     </Interaction.Behaviors>
                     <Border
+                        Classes="index-action-icon"
                         Width="64"
                         Height="64"
                         Margin="0,0,0,5"
-                        Background="{DynamicResource BrushImageBackground}"
+                        Background="{DynamicResource BrushControlFill}"
                         CornerRadius="32">
                         <ContentControl
                             HorizontalAlignment="Center"
                             VerticalAlignment="Center">
                             <Path
+                                x:Name="IndexDownloadManagerIcon"
                                 Width="{Binding DownloadManager.Width}"
                                 Height="{Binding DownloadManager.Height}"
                                 Data="{Binding DownloadManager.Data}"
-                                Fill="{DynamicResource BrushPrimary}"
+                                Fill="{DynamicResource BrushBrand}"
                                 Stretch="UniformToFill" />
                         </ContentControl>
                     </Border>
                     <TextBlock
                         HorizontalAlignment="Center"
                         FontSize="14"
-                        Foreground="{DynamicResource BrushPrimary}"
+                        Foreground="{DynamicResource BrushTextPrimary}"
                         Text="{DynamicResource DownloadManager}" />
                 </StackPanel>
                 <StackPanel
+                    Classes="index-action"
                     Grid.Row="0"
                     Grid.Column="2"
                     HorizontalAlignment="Center"
@@ -201,26 +220,28 @@
                         </EventTriggerBehavior>
                     </Interaction.Behaviors>
                     <Border
+                        Classes="index-action-icon"
                         Width="64"
                         Height="64"
                         Margin="0,0,0,5"
-                        Background="{DynamicResource BrushImageBackground}"
+                        Background="{DynamicResource BrushControlFill}"
                         CornerRadius="32">
                         <ContentControl
                             HorizontalAlignment="Center"
                             VerticalAlignment="Center">
                             <Path
+                                x:Name="IndexToolboxIcon"
                                 Width="{Binding Toolbox.Width}"
                                 Height="{Binding Toolbox.Height}"
                                 Data="{Binding Toolbox.Data}"
-                                Fill="{DynamicResource BrushPrimary}"
+                                Fill="{DynamicResource BrushBrand}"
                                 Stretch="UniformToFill" />
                         </ContentControl>
                     </Border>
                     <TextBlock
                         HorizontalAlignment="Center"
                         FontSize="14"
-                        Foreground="{DynamicResource BrushPrimary}"
+                        Foreground="{DynamicResource BrushTextPrimary}"
                         Text="{DynamicResource Toolbox}" />
                 </StackPanel>
             </Grid>

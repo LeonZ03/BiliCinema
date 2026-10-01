@@ -5,7 +5,7 @@
              x:DataType="vms:ViewAboutViewModel">
     <UserControl.Styles>
         <Style Selector="Button.link">
-            <Setter Property="Foreground" Value="Blue" />
+            <Setter Property="Foreground" Value="{DynamicResource BrushPrimary}" />
             <Setter Property="Padding" Value="0" />
             <Setter Property="Cursor" Value="Hand" />
             <Setter Property="BorderThickness" Value="0" />
@@ -24,18 +24,26 @@
                 </ControlTemplate>
             </Setter>
         </Style>
+        <Style Selector="TextBlock.disclaimer-item">
+            <Setter Property="Margin" Value="0,0,0,8" />
+            <Setter Property="FontSize" Value="{DynamicResource DownKyiFontSizeBody}" />
+            <Setter Property="Foreground" Value="{DynamicResource BrushTextSecondary}" />
+            <Setter Property="LineHeight" Value="22" />
+            <Setter Property="TextWrapping" Value="WrapWithOverflow" />
+        </Style>
     </UserControl.Styles>
 
     <ScrollViewer HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
         <StackPanel Margin="50,0" Orientation="Vertical">
             <StackPanel Margin="0,20,0,0" Orientation="Horizontal">
                 <TextBlock
-                    FontSize="18"
-                    Foreground="{DynamicResource BrushTextDark}"
+                    FontSize="{DynamicResource DownKyiFontSizeTitle}"
+                    FontWeight="SemiBold"
+                    Foreground="{DynamicResource BrushTextPrimary}"
                     Text="{DynamicResource About}" />
                 <TextBlock
                     Cursor="Hand"
-                    FontSize="18"
+                    FontSize="{DynamicResource DownKyiFontSizeTitle}"
                     Foreground="{DynamicResource BrushPrimary}"
                     Text="{Binding AppName}">
                     <Interaction.Behaviors>
@@ -45,58 +53,83 @@
                     </Interaction.Behaviors>
                 </TextBlock>
             </StackPanel>
-            <StackPanel Margin="0,20,0,0" Orientation="Horizontal">
+            <StackPanel Margin="0,24,0,0" Orientation="Vertical">
                 <TextBlock
-                    VerticalAlignment="Center"
-                    FontSize="12"
-                    Foreground="{DynamicResource BrushTextDark}"
-                    Text="{DynamicResource CurrentAppVersion}" />
-                <TextBlock
-                    VerticalAlignment="Center"
-                    FontSize="12"
-                    Foreground="{DynamicResource BrushTextDark}"
-                    Text="{Binding AppVersion}" />
-                <Button
-                    Width="75"
-                    Margin="30,0,0,0"
-                    Command="{Binding CheckUpdateCommand}"
-                    Content="{DynamicResource CheckUpdate}"
-                    FontSize="12"
-                    Theme="{StaticResource BtnBorderStyle}" />
-                <Button
-                    Width="75"
-                    Margin="20,0,0,0"
-                    Command="{Binding FeedbackCommand}"
-                    Content="{DynamicResource Feedback}"
-                    FontSize="12"
-                    Theme="{StaticResource BtnBorderStyle}" />
-            </StackPanel>
-            <StackPanel Margin="0,20,0,0" Orientation="Vertical">
-                <TextBlock
-                    Margin="0,0,0,8"
-                    FontSize="14"
-                    FontWeight="Bold"
-                    Foreground="{DynamicResource BrushTextDark}"
-                    Text="{DynamicResource Diagnostics}" />
-                <StackPanel Orientation="Horizontal">
+                    x:Name="NameVersionInformationTitle"
+                    FontSize="{DynamicResource DownKyiFontSizeSectionTitle}"
+                    FontWeight="SemiBold"
+                    Foreground="{DynamicResource BrushTextPrimary}"
+                    Text="{DynamicResource VersionInformation}" />
+                <StackPanel
+                    x:Name="NameVersionActions"
+                    Margin="0,10,0,0"
+                    Orientation="Horizontal">
+                    <TextBlock
+                        VerticalAlignment="Center"
+                        FontSize="{DynamicResource DownKyiFontSizeBody}"
+                        Foreground="{DynamicResource BrushTextDark}"
+                        Text="{DynamicResource CurrentAppVersion}" />
+                    <TextBlock
+                        VerticalAlignment="Center"
+                        FontSize="{DynamicResource DownKyiFontSizeBody}"
+                        Foreground="{DynamicResource BrushTextDark}"
+                        Text="{Binding AppVersion}" />
                     <Button
-                        Width="100"
+                        x:Name="NameCheckUpdateButton"
+                        MinWidth="96"
+                        Margin="16,0,0,0"
+                        Command="{Binding CheckUpdateCommand}"
+                        Content="{DynamicResource CheckUpdate}"
+                        FontSize="{DynamicResource DownKyiFontSizeBody}"
+                        Theme="{StaticResource BtnStyle}" />
+                </StackPanel>
+            </StackPanel>
+            <StackPanel Margin="0,24,0,0" Orientation="Vertical">
+                <TextBlock
+                    x:Name="NameFeedbackAndDiagnosticsTitle"
+                    FontSize="{DynamicResource DownKyiFontSizeSectionTitle}"
+                    FontWeight="SemiBold"
+                    Foreground="{DynamicResource BrushTextPrimary}"
+                    Text="{DynamicResource FeedbackAndDiagnostics}" />
+                <TextBlock
+                    x:Name="NameFeedbackSupportTip"
+                    Margin="0,6,0,0"
+                    FontSize="{DynamicResource DownKyiFontSizeBody}"
+                    Foreground="{DynamicResource BrushTextSecondary}"
+                    Text="{DynamicResource FeedbackSupportTip}"
+                    TextWrapping="WrapWithOverflow" />
+                <StackPanel
+                    x:Name="NameFeedbackActions"
+                    Margin="0,10,0,0"
+                    Orientation="Horizontal">
+                    <Button
+                        x:Name="NameFeedbackButton"
+                        MinWidth="96"
+                        Command="{Binding FeedbackCommand}"
+                        Content="{DynamicResource FeedbackProblem}"
+                        FontSize="{DynamicResource DownKyiFontSizeBody}"
+                        Theme="{StaticResource BtnStyle}" />
+                    <Button
+                        x:Name="NameOpenLogsButton"
+                        MinWidth="100"
+                        Margin="12,0,0,0"
                         Command="{Binding OpenLogsCommand}"
                         Content="{DynamicResource OpenLogs}"
-                        FontSize="12"
+                        FontSize="{DynamicResource DownKyiFontSizeBody}"
                         Theme="{StaticResource BtnBorderStyle}" />
                     <Button
-                        Width="120"
-                        Margin="20,0,0,0"
+                        x:Name="NameExportDiagnosticLogButton"
+                        MinWidth="120"
+                        Margin="12,0,0,0"
                         Command="{Binding ExportDiagnosticLogCommand}"
                         Content="{DynamicResource ExportDiagnosticLog}"
-                        FontSize="12"
+                        FontSize="{DynamicResource DownKyiFontSizeBody}"
                         Theme="{StaticResource BtnBorderStyle}" />
                 </StackPanel>
                 <TextBlock
                     Margin="0,8,0,0"
-                    FontSize="12"
-                    Foreground="{DynamicResource BrushTextDark}"
+                    FontSize="{DynamicResource DownKyiFontSizeBody}"
+                    Foreground="{DynamicResource BrushTextSecondary}"
                     Text="{DynamicResource DiagnosticLogTip}"
                     TextWrapping="WrapWithOverflow" />
             </StackPanel>
@@ -118,43 +151,27 @@
                 Foreground="{DynamicResource BrushTextDark}"
                 IsChecked="{Binding AutoUpdateWhenLaunch, Mode=TwoWay}" />
             <!--  免责申明  -->
-            <StackPanel Margin="0,20,0,0" Orientation="Vertical">
+            <StackPanel
+                x:Name="NameDisclaimerSection"
+                MaxWidth="880"
+                Margin="0,28,0,0"
+                HorizontalAlignment="Left"
+                Orientation="Vertical">
                 <TextBlock
-                    Margin="0,0,0,10"
+                    x:Name="NameDisclaimerTitle"
+                    Margin="0,0,0,12"
                     FontSize="14"
-                    FontWeight="Bold"
-                    Foreground="{DynamicResource BrushTextDark}"
+                    FontWeight="SemiBold"
+                    Foreground="{DynamicResource BrushTextPrimary}"
                     Text="{DynamicResource Disclaimer}" />
-                <TextBlock
-                    FontSize="12"
-                    Foreground="{DynamicResource BrushTextDark}"
-                    Text="{DynamicResource Disclaimer1}"
-                    TextWrapping="WrapWithOverflow" />
-                <TextBlock
-                    FontSize="12"
-                    Foreground="{DynamicResource BrushTextDark}"
-                    Text="{DynamicResource Disclaimer2}"
-                    TextWrapping="WrapWithOverflow" />
-                <TextBlock
-                    FontSize="12"
-                    Foreground="{DynamicResource BrushTextDark}"
-                    Text="{DynamicResource Disclaimer3}"
-                    TextWrapping="WrapWithOverflow" />
-                <TextBlock
-                    FontSize="12"
-                    Foreground="{DynamicResource BrushTextDark}"
-                    Text="{DynamicResource Disclaimer4}"
-                    TextWrapping="WrapWithOverflow" />
-                <TextBlock
-                    FontSize="12"
-                    Foreground="{DynamicResource BrushTextDark}"
-                    Text="{DynamicResource Disclaimer5}"
-                    TextWrapping="WrapWithOverflow" />
-                <TextBlock
-                    FontSize="12"
-                    Foreground="{DynamicResource BrushTextDark}"
-                    Text="{DynamicResource Disclaimer6}"
-                    TextWrapping="WrapWithOverflow" />
+                <StackPanel x:Name="NameDisclaimerItems">
+                    <TextBlock Classes="disclaimer-item" Text="{DynamicResource Disclaimer1}" />
+                    <TextBlock Classes="disclaimer-item" Text="{DynamicResource Disclaimer2}" />
+                    <TextBlock Classes="disclaimer-item" Text="{DynamicResource Disclaimer3}" />
+                    <TextBlock Classes="disclaimer-item" Text="{DynamicResource Disclaimer4}" />
+                    <TextBlock Classes="disclaimer-item" Text="{DynamicResource Disclaimer5}" />
+                    <TextBlock Classes="disclaimer-item" Text="{DynamicResource Disclaimer6}" />
+                </StackPanel>
             </StackPanel>
             <StackPanel Margin="10" />
 

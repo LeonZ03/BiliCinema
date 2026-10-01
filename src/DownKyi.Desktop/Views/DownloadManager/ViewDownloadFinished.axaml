@@ -1,36 +1,50 @@
-﻿<UserControl xmlns="https://github.com/avaloniaui"
+<UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              x:Class="DownKyi.Views.DownloadManager.ViewDownloadFinished"
+             xmlns:images="clr-namespace:DownKyi.Images"
              xmlns:vmdm="clr-namespace:DownKyi.ViewModels.DownloadManager"
              x:DataType="vmdm:ViewDownloadFinishedViewModel">
     <UserControl.Resources>
         <ControlTheme x:Key="DownloadedStyle" TargetType="{x:Type ListBoxItem}" x:DataType="vmdm:DownloadedItem">
+            <Setter Property="Background" Value="Transparent" />
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="{x:Type ListBoxItem}">
-                        <Grid
+                        <Border
+                            Name="NameFinishedTaskRow"
                             Width="{Binding RelativeSource={RelativeSource FindAncestor, AncestorType={x:Type ListBox}}, Path=Bounds.Width}"
-                            Height="70">
-                            <Grid ColumnDefinitions="70,*,auto,120,30">
+                            Height="86"
+                            Padding="14,0"
+                            Background="{TemplateBinding Background}"
+                            CornerRadius="{DynamicResource DownKyiRadiusSmall}">
+                            <Grid ColumnDefinitions="52,*,140,136">
 
-                                <Image
+                                <Border
+                                    Name="NameFinishedZoneIconFrame"
                                     Grid.Column="0"
-                                    Width="48"
-                                    Height="48"
-                                    Source="{Binding ZoneImage}" />
+                                    Width="40"
+                                    Height="40"
+                                    HorizontalAlignment="Left"
+                                    VerticalAlignment="Center"
+                                    Background="{DynamicResource BrushPrimaryTranslucent3}"
+                                    CornerRadius="{DynamicResource DownKyiRadiusSmall}">
+                                    <Image
+                                        Width="32"
+                                        Height="32"
+                                        Source="{Binding ZoneImage}" />
+                                </Border>
 
-                                <!--  标题等视频信息  -->
-                                <Grid
+                                <StackPanel
                                     Grid.Column="1"
-                                    Margin="0,0,10,0"
-                                    HorizontalAlignment="Left" RowDefinitions="*,*">
+                                    Margin="0,0,16,0"
+                                    VerticalAlignment="Center"
+                                    Spacing="6">
 
                                     <TextBlock
-                                        Grid.Row="0"
-                                        HorizontalAlignment="Left"
-                                        VerticalAlignment="Center"
+                                        Name="NameFinishedTaskTitle"
                                         FontSize="14"
-                                        Foreground="{DynamicResource BrushTextDark}"
+                                        FontWeight="SemiBold"
+                                        Foreground="{DynamicResource BrushTextPrimary}"
                                         TextTrimming="CharacterEllipsis">
                                         <ToolTip.Tip>
                                             <TextBlock>
@@ -52,99 +66,120 @@
                                     </TextBlock>
 
                                     <TextBlock
-                                        Grid.Row="1"
-                                        HorizontalAlignment="Left"
-                                        VerticalAlignment="Center"
+                                        Name="NameFinishedTaskMetadata"
                                         FontSize="12"
-                                        Foreground="{DynamicResource BrushTextGrey2}">
+                                        Foreground="{DynamicResource BrushTextSecondary}"
+                                        TextTrimming="CharacterEllipsis">
                                         <TextBlock.Text>
-                                            <MultiBinding StringFormat="{}{0} · {1} · {2} · {3} · {4} · {5}">
+                                            <MultiBinding StringFormat="{}{0} · {1} · {2} · {3} · {4}">
                                                 <Binding Path="Duration" />
                                                 <Binding Path="Resolution.Name" />
                                                 <Binding Path="VideoCodecName" />
                                                 <Binding Path="AudioCodec.Name" />
                                                 <Binding Path="FileSize" />
-                                                <Binding Path="MaxSpeedDisplay" />
                                             </MultiBinding>
                                         </TextBlock.Text>
                                     </TextBlock>
-                                </Grid>
+                                </StackPanel>
 
                                 <TextBlock
+                                    Name="NameFinishedTime"
                                     Grid.Column="2"
+                                    Width="124"
+                                    Margin="0,0,12,0"
                                     HorizontalAlignment="Right"
                                     VerticalAlignment="Center"
                                     FontSize="12"
-                                    Foreground="{DynamicResource BrushTextDark}"
+                                    Foreground="{DynamicResource BrushTextSecondary}"
                                     Text="{Binding FinishedTime}" />
 
-                                <!--  控制面板，暂停继续删除  -->
-                                <Grid Grid.Column="3" ColumnDefinitions="*,*,*">
+                                <StackPanel
+                                    Grid.Column="3"
+                                    HorizontalAlignment="Right"
+                                    VerticalAlignment="Center"
+                                    Orientation="Horizontal"
+                                    Spacing="8">
 
                                     <Button
-                                        Grid.Column="0"
-                                        HorizontalAlignment="Right"
-                                        VerticalAlignment="Center"
+                                        Name="NameFinishedOpenFolderButton"
+                                        Width="36"
+                                        Height="36"
+                                        MinWidth="36"
+                                        MinHeight="36"
+                                        Padding="0"
                                         Command="{Binding ElementName=DownloadedList,Path=((vmdm:ViewDownloadFinishedViewModel)DataContext).OpenFolderCommand}"
-                                        CommandParameter="{Binding }"
-                                        Theme="{StaticResource ImageBtnStyle}"
+                                        CommandParameter="{Binding}"
+                                        Theme="{StaticResource BtnStyle}"
                                         ToolTip.Tip="{DynamicResource OpenFolder}">
-                                        <ContentControl Width="20" Height="20">
+                                        <ContentControl Width="18" Height="18">
                                             <Path
                                                 Width="{Binding OpenFolder.Width}"
                                                 Height="{Binding OpenFolder.Height}"
                                                 Data="{Binding OpenFolder.Data}"
-                                                Fill="{DynamicResource BrushPrimary}"
+                                                Fill="{Binding RelativeSource={RelativeSource FindAncestor, AncestorType={x:Type Button}}, Path=Foreground}"
                                                 Stretch="Uniform" />
                                         </ContentControl>
                                     </Button>
 
                                     <Button
-                                        Grid.Column="1"
-                                        HorizontalAlignment="Right"
-                                        VerticalAlignment="Center"
+                                        Name="NameFinishedOpenVideoButton"
+                                        Width="36"
+                                        Height="36"
+                                        MinWidth="36"
+                                        MinHeight="36"
+                                        Padding="0"
                                         Command="{Binding ElementName=DownloadedList,Path=((vmdm:ViewDownloadFinishedViewModel)DataContext).OpenVideoCommand}"
-                                        CommandParameter="{Binding }"
-                                        Theme="{StaticResource ImageBtnStyle}"
+                                        CommandParameter="{Binding}"
+                                        Theme="{StaticResource BtnStyle}"
                                         ToolTip.Tip="{DynamicResource OpenVideo}">
-                                        <ContentControl Width="20" Height="20">
+                                        <ContentControl Width="18" Height="18">
                                             <Path
                                                 Width="{Binding OpenVideo.Width}"
                                                 Height="{Binding OpenVideo.Height}"
                                                 Data="{Binding OpenVideo.Data}"
-                                                Fill="{DynamicResource BrushPrimary}"
+                                                Fill="{Binding RelativeSource={RelativeSource FindAncestor, AncestorType={x:Type Button}}, Path=Foreground}"
                                                 Stretch="Uniform" />
                                         </ContentControl>
                                     </Button>
 
                                     <Button
-                                        Grid.Column="2"
-                                        HorizontalAlignment="Right"
-                                        VerticalAlignment="Center"
+                                        Name="NameFinishedRemoveButton"
+                                        Width="36"
+                                        Height="36"
+                                        MinWidth="36"
+                                        MinHeight="36"
+                                        Padding="0"
                                         Command="{Binding ElementName=DownloadedList,Path=((vmdm:ViewDownloadFinishedViewModel)DataContext).RemoveVideoCommand}"
-                                        CommandParameter="{Binding }"
-                                        Theme="{StaticResource ImageBtnStyle}"
+                                        CommandParameter="{Binding}"
+                                        Foreground="{DynamicResource BrushWarning}"
+                                        Theme="{StaticResource BtnStyle}"
                                         ToolTip.Tip="{DynamicResource DeleteDownload}">
-                                        <ContentControl Width="20" Height="20">
+                                        <ContentControl Width="18" Height="18">
                                             <Path
                                                 Width="{Binding RemoveVideo.Width}"
                                                 Height="{Binding RemoveVideo.Height}"
                                                 Data="{Binding RemoveVideo.Data}"
-                                                Fill="{DynamicResource BrushWarning}"
+                                                Fill="{Binding RelativeSource={RelativeSource FindAncestor, AncestorType={x:Type Button}}, Path=Foreground}"
                                                 Stretch="Uniform" />
                                         </ContentControl>
                                     </Button>
-                                </Grid>
-
+                                </StackPanel>
                             </Grid>
-                        </Grid>
+                        </Border>
                     </ControlTemplate>
                 </Setter.Value>
             </Setter>
+            <Style Selector="^:pointerover">
+                <Setter Property="Background" Value="{DynamicResource BrushSurfaceRaised}" />
+            </Style>
         </ControlTheme>
     </UserControl.Resources>
     <Grid>
-        <Grid RowDefinitions="*,1,50">
+        <Grid
+            Name="NameDownloadedContent"
+            Height="{Binding RelativeSource={RelativeSource FindAncestor, AncestorType={x:Type UserControl}}, Path=Bounds.Height}"
+            RowDefinitions="*,1,58"
+            IsVisible="{Binding DownloadedList.Count}">
 
             <ListBox
                 Name="DownloadedList"
@@ -171,7 +206,9 @@
                                             Focusable="False"
                                             HorizontalScrollBarVisibility="Hidden"
                                             VerticalScrollBarVisibility="Auto">
-                                            <ItemsPresenter ItemsPanel="{TemplateBinding ItemsPanel}" />
+                                            <ItemsPresenter ItemsPanel="{TemplateBinding ItemsPanel}"
+                                                            Width="{TemplateBinding Width}"
+                                                            Height="{TemplateBinding Height}" />
                                         </ScrollViewer>
                                     </Border>
                                 </ControlTemplate>
@@ -183,63 +220,97 @@
 
             <TextBlock Grid.Row="1" Background="{DynamicResource BrushBorderTranslucent}" />
 
-            <Grid Grid.Row="2" ColumnDefinitions="*,130,110">
-
-                <StackPanel
-                    Grid.Column="0"
-                    Margin="10,0,0,0"
-                    HorizontalAlignment="Left"
-                    VerticalAlignment="Center"
-                    Orientation="Horizontal">
-                    <TextBlock
+            <Border
+                Name="NameFinishedActionBar"
+                Grid.Row="2"
+                Padding="16,0"
+                Background="{DynamicResource BrushSurfaceRaised}">
+                <Grid ColumnDefinitions="*,Auto">
+                    <StackPanel
+                        Name="NameFinishedSummary"
+                        Grid.Column="0"
+                        HorizontalAlignment="Left"
                         VerticalAlignment="Center"
-                        FontSize="14"
-                        Text="{DynamicResource TotalDownloaded1}" />
-                    <TextBlock
-                        Margin="3,0"
-                        VerticalAlignment="Center"
-                        FontSize="14"
-                        Foreground="{DynamicResource BrushPrimary}"
-                        Text="{Binding DownloadedList.Count}" />
-                    <TextBlock
-                        VerticalAlignment="Center"
-                        FontSize="14"
-                        Text="{DynamicResource TotalDownloaded2}" />
-                </StackPanel>
+                        Orientation="Horizontal">
+                        <TextBlock
+                            VerticalAlignment="Center"
+                            FontSize="14"
+                            Foreground="{DynamicResource BrushTextPrimary}"
+                            Text="{DynamicResource TotalDownloaded1}" />
+                        <TextBlock
+                            Name="NameDownloadedCount"
+                            Margin="4,0"
+                            VerticalAlignment="Center"
+                            FontSize="14"
+                            FontWeight="SemiBold"
+                            Foreground="{DynamicResource BrushTextPrimary}"
+                            Text="{Binding DownloadedList.Count}" />
+                        <TextBlock
+                            VerticalAlignment="Center"
+                            FontSize="14"
+                            Foreground="{DynamicResource BrushTextPrimary}"
+                            Text="{DynamicResource TotalDownloaded2}" />
+                    </StackPanel>
 
-                <ComboBox
-                    Name="NameFinishedSort"
-                    Grid.Column="1"
-                    Width="120"
-                    HorizontalAlignment="Left"
-                    VerticalAlignment="Center"
-                    SelectedIndex="{Binding FinishedSortBy}">
-                    <Interaction.Behaviors>
-                        <EventTriggerBehavior EventName="SelectionChanged">
-                            <InvokeCommandAction Command="{Binding FinishedSortCommand}"
-                                                 CommandParameter="{Binding ElementName=NameFinishedSort, Path=SelectedIndex}" />
-                        </EventTriggerBehavior>
-                    </Interaction.Behaviors>
-                    <ComboBoxItem Content="{DynamicResource DownloadedSortByTimeAsc}" />
-                    <ComboBoxItem Content="{DynamicResource DownloadedSortByTimeDesc}" />
-                    <ComboBoxItem Content="{DynamicResource DownloadedSortByOrder}" />
-                </ComboBox>
+                    <StackPanel
+                        Grid.Column="1"
+                        HorizontalAlignment="Right"
+                        VerticalAlignment="Center"
+                        Orientation="Horizontal"
+                        Spacing="10">
+                        <ComboBox
+                            Name="NameFinishedSort"
+                            Width="120"
+                            VerticalAlignment="Center"
+                            SelectedIndex="{Binding FinishedSortBy}">
+                            <Interaction.Behaviors>
+                                <EventTriggerBehavior EventName="SelectionChanged">
+                                    <InvokeCommandAction Command="{Binding FinishedSortCommand}"
+                                                         CommandParameter="{Binding ElementName=NameFinishedSort, Path=SelectedIndex}" />
+                                </EventTriggerBehavior>
+                            </Interaction.Behaviors>
+                            <ComboBoxItem Content="{DynamicResource DownloadedSortByTimeAsc}" />
+                            <ComboBoxItem Content="{DynamicResource DownloadedSortByTimeDesc}" />
+                            <ComboBoxItem Content="{DynamicResource DownloadedSortByOrder}" />
+                        </ComboBox>
 
-                <Button
-                    Grid.Column="2"
-                    Width="100"
-                    HorizontalAlignment="Left"
-                    VerticalAlignment="Center"
-                    Command="{Binding ClearAllDownloadedCommand}"
-                    Content="{DynamicResource ClearAllDownloaded}"
-                    FontSize="12"
-                    Theme="{StaticResource BtnBorderStyle}" />
-            </Grid>
+                        <Border
+                            Name="NameFinishedClearDivider"
+                            Width="1"
+                            Height="24"
+                            VerticalAlignment="Center"
+                            Background="{DynamicResource BrushBorderSubtle}" />
+
+                        <Button
+                            Name="NameClearAllDownloadedButton"
+                            MinWidth="104"
+                            Background="{DynamicResource BrushControlFill}"
+                            Command="{Binding ClearAllDownloadedCommand}"
+                            FontSize="12"
+                            Foreground="{DynamicResource BrushWarning}"
+                            Theme="{StaticResource BtnStyle}">
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <Path
+                                    Width="16"
+                                    Height="16"
+                                    Data="{Binding Trash.Data, Source={x:Static images:ButtonIcon.Current}}"
+                                    Fill="{Binding RelativeSource={RelativeSource FindAncestor, AncestorType={x:Type Button}}, Path=Foreground}"
+                                    Stretch="Uniform" />
+                                <TextBlock
+                                    VerticalAlignment="Center"
+                                    Text="{DynamicResource ClearAllDownloaded}" />
+                            </StackPanel>
+                        </Button>
+                    </StackPanel>
+                </Grid>
+            </Border>
         </Grid>
+
         <!--  TODO 没有数据时显示图片或文字  -->
         <Image
             Width="256"
             Height="256"
-            Source="/Resources/nodata02.png" IsVisible="{Binding !DownloadedList.Count}" />
+            Source="/Resources/nodata02.png"
+            IsVisible="{Binding !DownloadedList.Count}" />
     </Grid>
 </UserControl>
