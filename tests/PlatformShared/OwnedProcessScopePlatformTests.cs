@@ -157,6 +157,8 @@ public sealed class OwnedProcessScopePlatformTests
         int? childPid = null;
         int? grandchildPid = null;
         using var cancellation = new CancellationTokenSource();
+        var startupReady = new TaskCompletionSource<ProcessExecutionStartup>(
+            TaskCreationOptions.RunContinuationsAsynchronously);
         Task<ProcessExecutionResult>? run = null;
         await FailurePreservingTestCleanup.RunAsync(
             async () =>
@@ -181,11 +183,14 @@ public sealed class OwnedProcessScopePlatformTests
                     new ProcessExecutionRequest(
                         $"scope.snapshot-failure.{iteration}", "root-child-grandchild", startInfo,
                         TimeSpan.FromSeconds(5), directory,
-                        (_, _) => Task.FromException<FinalProcessSnapshot>(new IOException("snapshot unavailable"))),
+                        (_, _) => Task.FromException<FinalProcessSnapshot>(new IOException("snapshot unavailable")),
+                        StartupReady: startup => startupReady.TrySetResult(startup)),
                     cancellation.Token);
 
-                rootPid = await ReadMarkerAsync(
-                    Path.Combine(directory, "root.pid")).ConfigureAwait(true);
+                var firstCompletion = await Task.WhenAny(startupReady.Task, run).ConfigureAwait(true);
+                Assert.Same(startupReady.Task, firstCompletion);
+                var startup = await startupReady.Task.ConfigureAwait(true);
+                rootPid = startup.RootPid;
                 childPid = await ReadMarkerAsync(childMarker).ConfigureAwait(true);
                 grandchildPid = await ReadMarkerAsync(grandchildMarker).ConfigureAwait(true);
                 if (!OperatingSystem.IsWindows())
@@ -205,8 +210,13 @@ public sealed class OwnedProcessScopePlatformTests
                 AssertStopped(grandchildPid.Value);
                 using var report = JsonDocument.Parse(await File.ReadAllTextAsync(
                     result.EvidencePath, TestContext.Current.CancellationToken).ConfigureAwait(true));
-                Assert.Contains(report.RootElement.GetProperty("Events").EnumerateArray(),
-                    item => item.GetProperty("Event").GetString() == "final_snapshot_failed");
+                var events = report.RootElement.GetProperty("Events")
+                    .EnumerateArray()
+                    .Select(item => item.GetProperty("Event").GetString())
+                    .ToArray();
+                var processStartIndex = Array.IndexOf(events, "process_start");
+                var snapshotFailureIndex = Array.IndexOf(events, "final_snapshot_failed");
+                Assert.InRange(processStartIndex, 0, snapshotFailureIndex - 1);
             },
             async () =>
             {
