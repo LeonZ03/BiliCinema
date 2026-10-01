@@ -10,81 +10,89 @@
             <Setter Property="Background" Value="{DynamicResource BrushSurfaceSunken}" />
         </Style>
     </UserControl.Styles>
-    <ScrollViewer HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Disabled">
-        <Grid Margin="50,0" RowDefinitions="200,*">
-            <StackPanel Grid.Row="0" Orientation="Vertical">
-                <StackPanel Margin="0,20,0,0" Orientation="Horizontal">
-                    <TextBlock
-                        FontSize="18"
-                        Foreground="{DynamicResource BrushTextPrimary}"
-                        Text="{DynamicResource ExtractMedia}" />
-                </StackPanel>
+    <ScrollViewer HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
+        <Grid Margin="48,28,48,32" RowDefinitions="Auto,Auto,Auto">
+            <TextBlock
+                Name="NameExtractMediaTitle"
+                FontSize="{DynamicResource DownKyiFontSizeTitle}"
+                FontWeight="SemiBold"
+                Foreground="{DynamicResource BrushTextPrimary}"
+                Text="{DynamicResource ExtractMedia}" />
 
-                <Grid
-                    Margin="0,20,0,0"
-                    VerticalAlignment="Center"
-                    ColumnDefinitions="Auto,*,Auto">
-                    <TextBlock
-                        Grid.Column="0"
-                        VerticalAlignment="Center"
-                        Text="{DynamicResource VideoFilePath}" />
-                    <TextBox
-                        Grid.Column="1"
-                        Height="65"
-                        Margin="0,10,10,10"
-                        VerticalContentAlignment="Top"
-                        IsReadOnly="True"
-                        Text="{Binding VideoPathsStr, Mode=TwoWay}" />
-
-                    <Button
-                        Name="NameSelectVideoButton"
-                        Grid.Column="2"
-                        Margin="20,0,0,0"
-                        VerticalAlignment="Center"
-                        Command="{Binding SelectVideoCommand}"
-                        Content="{DynamicResource SelectVideo}"
-                        Theme="{StaticResource BtnBorderStyle}" />
-                </Grid>
-                <Grid Margin="0,20,0,0" ColumnDefinitions="200,200">
-
-                    <Button
-                        Grid.Column="0"
-                        Width="90"
-                        Margin="30,0,0,0"
-                        VerticalAlignment="Center"
-                        Command="{Binding ExtractAudioCommand}"
-                        Content="{DynamicResource ExtractAudio}"
-                        Theme="{StaticResource BtnBorderStyle}" />
-                    <Button
-                        Grid.Column="1"
-                        Width="90"
-                        Margin="30,0,0,0"
-                        VerticalAlignment="Center"
-                        Command="{Binding ExtractVideoCommand}"
-                        Content="{DynamicResource ExtractVideo}"
-                        Theme="{StaticResource BtnBorderStyle}" />
-                </Grid>
-            </StackPanel>
-            <Grid
+            <Border
+                Name="NameExtractionWorkflow"
                 Grid.Row="1"
-                Margin="0,20"
-                HorizontalAlignment="Stretch"
-                VerticalAlignment="Stretch" RowDefinitions="20,*">
+                Margin="0,24,0,0"
+                Padding="20"
+                Background="{DynamicResource BrushSurfaceRaised}"
+                BorderBrush="{DynamicResource BrushBorderSubtle}"
+                BorderThickness="1"
+                CornerRadius="{DynamicResource DownKyiRadiusMedium}">
+                <StackPanel>
+                    <TextBlock
+                        Foreground="{DynamicResource BrushTextPrimary}"
+                        Text="{DynamicResource VideoFilePath}" />
+                    <Grid Margin="0,8,0,0" ColumnDefinitions="*,Auto">
+                        <TextBox
+                            Name="NameVideoPaths"
+                            Grid.Column="0"
+                            Height="72"
+                            Padding="12,8"
+                            VerticalContentAlignment="Top"
+                            IsReadOnly="True"
+                            ScrollViewer.VerticalScrollBarVisibility="Auto"
+                            Text="{Binding VideoPathsStr, Mode=TwoWay}" />
+                        <Button
+                            Name="NameSelectVideoButton"
+                            Grid.Column="1"
+                            Height="36"
+                            MinWidth="112"
+                            Margin="12,0,0,0"
+                            VerticalAlignment="Center"
+                            Command="{Binding SelectVideoCommand}"
+                            Content="{DynamicResource SelectVideo}"
+                            Theme="{StaticResource BtnStyle}" />
+                    </Grid>
+                    <Grid
+                        Name="NameExtractActions"
+                        Margin="0,16,0,0"
+                        ColumnDefinitions="*,12,*">
+                        <Button
+                            Name="NameExtractAudioButton"
+                            Grid.Column="0"
+                            Height="40"
+                            HorizontalAlignment="Stretch"
+                            Command="{Binding ExtractAudioCommand}"
+                            Content="{DynamicResource ExtractAudio}"
+                            Theme="{StaticResource BtnStyle}" />
+                        <Button
+                            Name="NameExtractVideoButton"
+                            Grid.Column="2"
+                            Height="40"
+                            HorizontalAlignment="Stretch"
+                            Command="{Binding ExtractVideoCommand}"
+                            Content="{DynamicResource ExtractVideo}"
+                            Theme="{StaticResource BtnStyle}" />
+                    </Grid>
+                </StackPanel>
+            </Border>
+
+            <StackPanel Grid.Row="2" Margin="0,24,0,0">
                 <TextBlock
-                    Grid.Row="0"
-                    VerticalAlignment="Bottom"
+                    Foreground="{DynamicResource BrushTextPrimary}"
                     Text="{DynamicResource OutputInfo}" />
                 <TextBox
                     Name="NameStatus"
                     Classes="extract-media-output"
-                    Grid.Row="1"
+                    Height="200"
+                    Margin="0,8,0,0"
                     Background="{DynamicResource BrushSurfaceSunken}"
                     BorderBrush="{DynamicResource BrushBorderSubtle}"
                     Foreground="{DynamicResource BrushTextPrimary}"
-                    ScrollViewer.HorizontalScrollBarVisibility="Visible"
                     IsReadOnly="True"
-                    Text="{Binding Status, Mode=TwoWay}"
-                    ScrollViewer.VerticalScrollBarVisibility="Visible">
+                    ScrollViewer.HorizontalScrollBarVisibility="Auto"
+                    ScrollViewer.VerticalScrollBarVisibility="Auto"
+                    Text="{Binding Status, Mode=TwoWay}">
                     <Interaction.Behaviors>
                         <EventTriggerBehavior EventName="TextChanged">
                             <InvokeCommandAction
@@ -93,7 +101,7 @@
                         </EventTriggerBehavior>
                     </Interaction.Behaviors>
                 </TextBox>
-            </Grid>
+            </StackPanel>
         </Grid>
     </ScrollViewer>
 </UserControl>

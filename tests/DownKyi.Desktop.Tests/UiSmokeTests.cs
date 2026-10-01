@@ -313,21 +313,23 @@ public sealed class UiSmokeTests
                 window.UpdateLayout();
                 Assert.Equal(Colors.Black, Assert.IsType<SolidColorBrush>(arrow.Fill).Color);
                 Assert.Equal(
-                    Color.Parse("#FF00A1D6"),
+                    Color.Parse("#FF065FD4"),
                     Assert.IsType<SolidColorBrush>(download.Fill).Color);
 
                 application.RequestedThemeVariant = ThemeVariant.Dark;
                 window.UpdateLayout();
-                Assert.Equal(Colors.White, Assert.IsType<SolidColorBrush>(arrow.Fill).Color);
                 Assert.Equal(
-                    Color.Parse("#FF00A1D6"),
+                    Color.Parse("#FFC7C7C7"),
+                    Assert.IsType<SolidColorBrush>(arrow.Fill).Color);
+                Assert.Equal(
+                    Color.Parse("#FF3EA6FF"),
                     Assert.IsType<SolidColorBrush>(download.Fill).Color);
 
                 application.RequestedThemeVariant = ThemeVariant.Light;
                 window.UpdateLayout();
                 Assert.Equal(Colors.Black, Assert.IsType<SolidColorBrush>(arrow.Fill).Color);
                 Assert.Equal(
-                    Color.Parse("#FF00A1D6"),
+                    Color.Parse("#FF065FD4"),
                     Assert.IsType<SolidColorBrush>(download.Fill).Color);
             }
             finally

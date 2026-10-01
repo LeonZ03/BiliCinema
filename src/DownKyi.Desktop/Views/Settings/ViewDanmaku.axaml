@@ -8,15 +8,17 @@
         <StackPanel Margin="50,0" Orientation="Vertical">
             <StackPanel Margin="0,20,0,0" Orientation="Horizontal">
                 <TextBlock
-                    FontSize="18"
-                    Foreground="{DynamicResource BrushTextDark}"
+                    Name="NameDanmakuPageTitle"
+                    FontSize="{DynamicResource DownKyiFontSizeTitle}"
+                    FontWeight="SemiBold"
+                    Foreground="{DynamicResource BrushTextPrimary}"
                     Text="{DynamicResource SettingDanmaku}" />
             </StackPanel>
 
             <StackPanel Margin="0,20,0,0" Orientation="Horizontal">
                 <TextBlock
                     VerticalAlignment="Center"
-                    FontSize="12"
+                    FontSize="{DynamicResource DownKyiFontSizeBody}"
                     Foreground="{DynamicResource BrushTextDark}"
                     Text="{DynamicResource DanmakuOutputFormat}" />
                 <RadioButton
@@ -42,119 +44,156 @@
                     IsChecked="{Binding OutputFormat,Converter={x:Static ObjectConverters.Equal},ConverterParameter={x:Static settings:DanmakuOutputFormat.AssAndXml}}" />
             </StackPanel>
 
-            <HeaderedContentControl
-                Background="LightGray"
-                Margin="0,20,0,0"
-                Padding="20,5"
-                HorizontalAlignment="Left"
-                FontSize="12"
-                Foreground="{DynamicResource BrushTextDark}"
-                Header="{DynamicResource FilterType}">
-                <StackPanel Margin="10">
-                    <StackPanel Orientation="Horizontal">
+            <StackPanel
+                Name="NameDanmakuFilterSection"
+                Width="600"
+                Margin="0,28,0,0"
+                HorizontalAlignment="Left">
+                <TextBlock
+                    Name="NameDanmakuFilterTitle"
+                    FontSize="{DynamicResource DownKyiFontSizeBody}"
+                    FontWeight="SemiBold"
+                    Foreground="{DynamicResource BrushTextPrimary}"
+                    Text="{DynamicResource DanmakuFilterRules}" />
+
+                <TextBlock
+                    Margin="0,16,0,8"
+                    Foreground="{DynamicResource BrushTextDark}"
+                    Text="{DynamicResource FilterType}" />
+                <StackPanel
+                    Name="NameDanmakuTypeFilters"
+                    Orientation="Horizontal">
                         <CheckBox
                             Command="{Binding TopFilterCommand}"
                             Content="{DynamicResource TopFilter}"
                             Foreground="{DynamicResource BrushTextDark}"
                             IsChecked="{Binding TopFilter, Mode=TwoWay}" />
                         <CheckBox
-                            Margin="40,0,0,0"
+                            Margin="32,0,0,0"
                             Command="{Binding BottomFilterCommand}"
                             Content="{DynamicResource BottomFilter}"
                             Foreground="{DynamicResource BrushTextDark}"
                             IsChecked="{Binding BottomFilter, Mode=TwoWay}" />
                         <CheckBox
-                            Margin="40,0,0,0"
+                            Margin="32,0,0,0"
                             Command="{Binding ScrollFilterCommand}"
                             Content="{DynamicResource ScrollFilter}"
                             Foreground="{DynamicResource BrushTextDark}"
                             IsChecked="{Binding ScrollFilter, Mode=TwoWay}" />
                         <CheckBox
-                            Margin="40,0,0,0"
+                            Margin="32,0,0,0"
                             Command="{Binding RemoveEmojiAndSpecialCharactersCommand}"
                             Content="{DynamicResource RemoveEmojiAndSpecialCharacters}"
                             Foreground="{DynamicResource BrushTextDark}"
                             IsChecked="{Binding RemoveEmojiAndSpecialCharacters, Mode=TwoWay}" />
-                    </StackPanel>
-
-                    <TextBlock
-                        Margin="0,16,0,4"
-                        Foreground="{DynamicResource BrushTextDark}"
-                        Text="{DynamicResource BlockedDanmakuKeywords}" />
-                    <TextBox
-                        Height="90"
-                        AcceptsReturn="True"
-                        TextWrapping="Wrap"
-                        Text="{Binding BlockedKeywordsText, Mode=TwoWay}" />
-
-                    <TextBlock
-                        Margin="0,16,0,4"
-                        Foreground="{DynamicResource BrushTextDark}"
-                        Text="{DynamicResource BlockedDanmakuSenderUids}" />
-                    <TextBox
-                        Height="90"
-                        AcceptsReturn="True"
-                        TextWrapping="Wrap"
-                        Text="{Binding BlockedSenderUidsText, Mode=TwoWay}" />
-                    <Button
-                        Width="120"
-                        Margin="0,12,0,0"
-                        HorizontalAlignment="Left"
-                        Command="{Binding SaveCustomFilterListsCommand}"
-                        Content="{DynamicResource SaveDanmakuBlacklists}"
-                        Theme="{StaticResource BtnBorderStyle}" />
                 </StackPanel>
-            </HeaderedContentControl>
 
-
-            <StackPanel
-                Margin="0,20,0,0"
-                Orientation="Horizontal">
                 <TextBlock
+                    Margin="0,20,0,8"
+                    Foreground="{DynamicResource BrushTextDark}"
+                    Text="{DynamicResource BlockedDanmakuKeywords}" />
+                <TextBox
+                    Name="NameBlockedDanmakuKeywords"
+                    Height="84"
+                    AcceptsReturn="True"
+                    TextWrapping="Wrap"
+                    Text="{Binding BlockedKeywordsText, Mode=TwoWay}" />
+
+                <TextBlock
+                    Margin="0,20,0,8"
+                    Foreground="{DynamicResource BrushTextDark}"
+                    Text="{DynamicResource BlockedDanmakuSenderUids}" />
+                <TextBox
+                    Name="NameBlockedDanmakuSenderUids"
+                    Height="84"
+                    AcceptsReturn="True"
+                    TextWrapping="Wrap"
+                    Text="{Binding BlockedSenderUidsText, Mode=TwoWay}" />
+                <Button
+                    Name="NameSaveDanmakuBlacklistsButton"
+                    Width="120"
+                    Margin="0,12,0,0"
+                    HorizontalAlignment="Left"
+                    Command="{Binding SaveCustomFilterListsCommand}"
+                    Content="{DynamicResource SaveDanmakuBlacklists}"
+                    Theme="{StaticResource BtnBorderStyle}" />
+            </StackPanel>
+
+            <TextBlock
+                Name="NameDanmakuDisplaySettingsTitle"
+                Margin="0,28,0,0"
+                FontSize="{DynamicResource DownKyiFontSizeBody}"
+                FontWeight="SemiBold"
+                Foreground="{DynamicResource BrushTextPrimary}"
+                Text="{DynamicResource DanmakuDisplaySettings}" />
+
+            <Grid
+                Name="NameDanmakuDisplaySettingsGrid"
+                Width="600"
+                Margin="0,16,0,0"
+                HorizontalAlignment="Left"
+                ColumnDefinitions="120,*"
+                RowDefinitions="Auto,Auto,Auto,Auto,Auto">
+                <TextBlock
+                    Grid.Row="0"
+                    Grid.Column="0"
+                    Margin="0,0,16,16"
                     VerticalAlignment="Center"
-                    FontSize="12"
+                    FontSize="{DynamicResource DownKyiFontSizeBody}"
                     Foreground="{DynamicResource BrushTextDark}"
                     Text="{DynamicResource Resolution}" />
-                <TextBox
-                    Name="NameScreenWidth"
-                    Width="95"
-                    VerticalContentAlignment="Center"
-                    Text="{Binding ScreenWidth, Mode=TwoWay}">
-                    <TextBox.KeyBindings>
-                        <KeyBinding
-                            Command="{Binding ScreenWidthCommand}"
-                            CommandParameter="{Binding #NameScreenWidth.Text}"
-                            Gesture="Enter" />
-                    </TextBox.KeyBindings>
-                </TextBox>
+                <StackPanel
+                    Grid.Row="0"
+                    Grid.Column="1"
+                    Margin="0,0,0,16"
+                    Orientation="Horizontal">
+                    <TextBox
+                        Name="NameScreenWidth"
+                        Width="95"
+                        VerticalContentAlignment="Center"
+                        Text="{Binding ScreenWidth, Mode=TwoWay}">
+                        <TextBox.KeyBindings>
+                            <KeyBinding
+                                Command="{Binding ScreenWidthCommand}"
+                                CommandParameter="{Binding #NameScreenWidth.Text}"
+                                Gesture="Enter" />
+                        </TextBox.KeyBindings>
+                    </TextBox>
+                    <TextBlock
+                        Margin="8,0"
+                        VerticalAlignment="Center"
+                        FontSize="{DynamicResource DownKyiFontSizeBody}"
+                        Foreground="{DynamicResource BrushTextDark}"
+                        Text="×" />
+                    <TextBox
+                        Name="NameScreenHeight"
+                        Width="95"
+                        VerticalContentAlignment="Center"
+                        Text="{Binding ScreenHeight, Mode=TwoWay}">
+                        <TextBox.KeyBindings>
+                            <KeyBinding
+                                Command="{Binding ScreenHeightCommand}"
+                                CommandParameter="{Binding #NameScreenHeight.Text}"
+                                Gesture="Enter" />
+                        </TextBox.KeyBindings>
+                    </TextBox>
+                </StackPanel>
+
                 <TextBlock
-                    Margin="5,0"
+                    Grid.Row="1"
+                    Grid.Column="0"
+                    Margin="0,0,16,16"
                     VerticalAlignment="Center"
-                    FontSize="12"
-                    Foreground="{DynamicResource BrushTextDark}"
-                    Text="×" />
-                <TextBox
-                    Name="NameScreenHeight"
-                    Width="95"
-                    VerticalContentAlignment="Center"
-                    Text="{Binding ScreenHeight, Mode=TwoWay}">
-                    <TextBox.KeyBindings>
-                        <KeyBinding
-                            Command="{Binding ScreenHeightCommand}"
-                            CommandParameter="{Binding #NameScreenHeight.Text}"
-                            Gesture="Enter" />
-                    </TextBox.KeyBindings>
-                </TextBox>
-            </StackPanel>
-            <StackPanel Margin="0,20,0,0" Orientation="Horizontal">
-                <TextBlock
-                    VerticalAlignment="Center"
-                    FontSize="12"
+                    FontSize="{DynamicResource DownKyiFontSizeBody}"
                     Foreground="{DynamicResource BrushTextDark}"
                     Text="{DynamicResource FontName}" />
                 <ComboBox
                     Name="NameFonts"
-                    Width="200"
+                    Grid.Row="1"
+                    Grid.Column="1"
+                    Width="320"
+                    Margin="0,0,0,16"
+                    HorizontalAlignment="Left"
                     VerticalContentAlignment="Center"
                     ItemsSource="{Binding Fonts}"
                     SelectedValue="{Binding SelectedFont}">
@@ -165,20 +204,23 @@
                                 CommandParameter="{Binding #NameFonts.SelectedValue}" />
                         </EventTriggerBehavior>
                     </Interaction.Behaviors>
-
                 </ComboBox>
-            </StackPanel>
-            <StackPanel
-                Margin="0,20,0,0"
-                Orientation="Horizontal">
+
                 <TextBlock
+                    Grid.Row="2"
+                    Grid.Column="0"
+                    Margin="0,0,16,16"
                     VerticalAlignment="Center"
-                    FontSize="12"
+                    FontSize="{DynamicResource DownKyiFontSizeBody}"
                     Foreground="{DynamicResource BrushTextDark}"
                     Text="{DynamicResource FontSize}" />
                 <TextBox
                     x:Name="NameFontSize"
-                    Width="200"
+                    Grid.Row="2"
+                    Grid.Column="1"
+                    Width="120"
+                    Margin="0,0,0,16"
+                    HorizontalAlignment="Left"
                     VerticalContentAlignment="Center"
                     Text="{Binding FontSize}">
                     <TextBox.KeyBindings>
@@ -188,18 +230,22 @@
                             Gesture="Enter" />
                     </TextBox.KeyBindings>
                 </TextBox>
-            </StackPanel>
-            <StackPanel
-                Margin="0,20,0,0"
-                Orientation="Horizontal">
+
                 <TextBlock
+                    Grid.Row="3"
+                    Grid.Column="0"
+                    Margin="0,0,16,16"
                     VerticalAlignment="Center"
-                    FontSize="12"
+                    FontSize="{DynamicResource DownKyiFontSizeBody}"
                     Foreground="{DynamicResource BrushTextDark}"
                     Text="{DynamicResource LineCount}" />
                 <TextBox
                     Name="NameLineCount"
-                    Width="200"
+                    Grid.Row="3"
+                    Grid.Column="1"
+                    Width="120"
+                    Margin="0,0,0,16"
+                    HorizontalAlignment="Left"
                     VerticalContentAlignment="Center"
                     Text="{Binding LineCount}">
                     <TextBox.KeyBindings>
@@ -209,35 +255,44 @@
                             Gesture="Enter" />
                     </TextBox.KeyBindings>
                 </TextBox>
-            </StackPanel>
-            <StackPanel Margin="0,20,0,0" Orientation="Horizontal">
+
                 <TextBlock
+                    Grid.Row="4"
+                    Grid.Column="0"
+                    Margin="0,0,16,0"
                     VerticalAlignment="Center"
-                    FontSize="12"
+                    FontSize="{DynamicResource DownKyiFontSizeBody}"
                     Foreground="{DynamicResource BrushTextDark}"
                     Text="{DynamicResource LayoutAlgorithm}" />
-                <CheckBox
-                    HorizontalAlignment="Left"
-                    VerticalAlignment="Top"
-                    Command="{Binding LayoutAlgorithmCommand}"
-                    CommandParameter="Sync"
-                    Content="{DynamicResource LayoutAlgorithmSync}"
-                    FontSize="12"
-                    Foreground="{DynamicResource BrushTextDark}"
-                    IsChecked="{Binding Sync, Mode=TwoWay}" />
-                <CheckBox
-                    Margin="20,0,0,0"
-                    HorizontalAlignment="Left"
-                    VerticalAlignment="Top"
-                    Command="{Binding LayoutAlgorithmCommand}"
-                    CommandParameter="Async"
-                    Content="{DynamicResource LayoutAlgorithmAsync}"
-                    FontSize="12"
-                    Foreground="{DynamicResource BrushTextDark}"
-                    IsChecked="{Binding Async, Mode=TwoWay}" />
-            </StackPanel>
+                <StackPanel
+                    Grid.Row="4"
+                    Grid.Column="1"
+                    Orientation="Horizontal">
+                    <CheckBox
+                        Name="NameLayoutAlgorithmSync"
+                        HorizontalAlignment="Left"
+                        VerticalAlignment="Top"
+                        Command="{Binding LayoutAlgorithmCommand}"
+                        CommandParameter="Sync"
+                        Content="{DynamicResource LayoutAlgorithmSync}"
+                        FontSize="{DynamicResource DownKyiFontSizeBody}"
+                        Foreground="{DynamicResource BrushTextDark}"
+                        IsChecked="{Binding Sync, Mode=TwoWay}" />
+                    <CheckBox
+                        Name="NameLayoutAlgorithmAsync"
+                        Margin="24,0,0,0"
+                        HorizontalAlignment="Left"
+                        VerticalAlignment="Top"
+                        Command="{Binding LayoutAlgorithmCommand}"
+                        CommandParameter="Async"
+                        Content="{DynamicResource LayoutAlgorithmAsync}"
+                        FontSize="{DynamicResource DownKyiFontSizeBody}"
+                        Foreground="{DynamicResource BrushTextDark}"
+                        IsChecked="{Binding Async, Mode=TwoWay}" />
+                </StackPanel>
+            </Grid>
 
-            <StackPanel Margin="10" />
+            <StackPanel Margin="0,0,0,32" />
         </StackPanel>
 
     </ScrollViewer>

@@ -55,7 +55,7 @@ internal class ViewSettingsViewModel : ViewModelBase
             new() { Id = 1, Title = DictionaryResource.GetString("Network") },
             new() { Id = 2, Title = DictionaryResource.GetString("Video") },
             new() { Id = 3, Title = DictionaryResource.GetString("SettingDanmaku") },
-            new() { Id = 4, Title = DictionaryResource.GetString("About") }
+            new() { Id = 4, Title = DictionaryResource.GetString("AboutAndFeedback") }
         };
 
         #endregion

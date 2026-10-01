@@ -57,7 +57,7 @@ public sealed class VideoDetailViewArchitectureTests
 
         Assert.Equal(55, Count(source, @"\{(?:Reflection)?Binding\s+([^},]+)"));
         Assert.Equal(12, Count(source, @"(?:x:Name|Name)=""([^""]+)"""));
-        Assert.Equal(49, Count(source, @"\{DynamicResource\s+([^}]+)\}"));
+        Assert.Equal(62, Count(source, @"\{DynamicResource\s+([^}]+)\}"));
         Assert.Equal(8, Count(source, @"\{StaticResource\s+([^}]+)\}"));
         Assert.Equal(
             13,

@@ -4,9 +4,10 @@
     <ControlTheme x:Key="BtnStyle" TargetType="Button">
         <Setter Property="Cursor" Value="Hand" />
         <Setter Property="MinHeight" Value="{DynamicResource DownKyiControlMinHeight}" />
-        <Setter Property="Background" Value="{DynamicResource BrushPrimary}" />
-        <Setter Property="BorderThickness" Value="0" />
-        <Setter Property="BorderBrush" Value="{x:Null}" />
+        <Setter Property="Background" Value="{DynamicResource BrushControlFill}" />
+        <Setter Property="Foreground" Value="{DynamicResource BrushTextPrimary}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="BorderBrush" Value="Transparent" />
         <Setter Property="Template">
             <ControlTemplate TargetType="{x:Type Button}">
                 <Border
@@ -14,7 +15,7 @@
                     Background="{TemplateBinding Background}"
                     BorderBrush="{TemplateBinding BorderBrush}"
                     BorderThickness="{TemplateBinding BorderThickness}"
-                    CornerRadius="{DynamicResource DownKyiRadiusSmall}">
+                    CornerRadius="{DynamicResource DownKyiRadiusPill}">
                     <ContentPresenter
                         Name="content"
                         HorizontalAlignment="Center"
@@ -24,24 +25,34 @@
             </ControlTemplate>
         </Setter>
         <Style Selector="^:pointerover">
-            <Setter Property="Background" Value="{DynamicResource BrushPrimaryTranslucent}" />
+            <Setter Property="Background" Value="{DynamicResource BrushControlFillHover}" />
+        </Style>
+        <Style Selector="^:pressed">
+            <Setter Property="Background" Value="{DynamicResource BrushControlFillPressed}" />
+        </Style>
+        <Style Selector="^:focus-visible">
+            <Setter Property="BorderBrush" Value="{DynamicResource BrushControlStrokeFocus}" />
+        </Style>
+        <Style Selector="^:disabled">
+            <Setter Property="Opacity" Value="0.38" />
         </Style>
     </ControlTheme>
 
     <ControlTheme x:Key="BtnBorderStyle" TargetType="Button">
         <Setter Property="Cursor" Value="Hand" />
         <Setter Property="MinHeight" Value="{DynamicResource DownKyiControlMinHeight}" />
-        <Setter Property="Background" Value="{DynamicResource BrushBackground}" />
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="Foreground" Value="{DynamicResource BrushTextPrimary}" />
         <Setter Property="BorderThickness" Value="1" />
-        <Setter Property="BorderBrush" Value="{x:Null}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource BrushControlStroke}" />
         <Setter Property="Template">
             <ControlTemplate TargetType="{x:Type Button}">
                 <Border
                     Padding="{DynamicResource DownKyiControlPadding}"
                     Background="{TemplateBinding Background}"
-                    BorderBrush="{DynamicResource BrushPrimary}"
+                    BorderBrush="{TemplateBinding BorderBrush}"
                     BorderThickness="{TemplateBinding BorderThickness}"
-                    CornerRadius="{DynamicResource DownKyiRadiusSmall}">
+                    CornerRadius="{DynamicResource DownKyiRadiusPill}">
                     <ContentPresenter
                         Name="content"
                         HorizontalAlignment="Center"
@@ -51,7 +62,16 @@
             </ControlTemplate>
         </Setter>
         <Style Selector="^:pointerover">
-            <Setter Property="Background" Value="{DynamicResource BrushPrimaryTranslucent3}" />
+            <Setter Property="Background" Value="{DynamicResource BrushControlFillHover}" />
+        </Style>
+        <Style Selector="^:pressed">
+            <Setter Property="Background" Value="{DynamicResource BrushControlFillPressed}" />
+        </Style>
+        <Style Selector="^:focus-visible">
+            <Setter Property="BorderBrush" Value="{DynamicResource BrushControlStrokeFocus}" />
+        </Style>
+        <Style Selector="^:disabled">
+            <Setter Property="Opacity" Value="0.38" />
         </Style>
     </ControlTheme>
 </ResourceDictionary>

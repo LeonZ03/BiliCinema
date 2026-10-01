@@ -220,6 +220,90 @@ public sealed class VideoDetailCommandStateTests
     }
 
     [Avalonia.Headless.XUnit.AvaloniaFact]
+    public async Task DuplicateOwnerNotificationIsNotOverwrittenWhenNothingNewIsAdded()
+    {
+        EnsureProductLanguageResources();
+        var settingsPath = Path.Combine(
+            Path.GetTempPath(),
+            $"downkyi-video-detail-duplicate-message-{Guid.NewGuid():N}.json");
+        using var settings = new SettingsStore(settingsPath);
+        using var workflow = new VideoDetailWorkflowCoordinatorStub();
+        var interactions = new DesktopInteractionContextStub();
+        var downloadCoordinator = new VideoDetailDownloadCoordinatorStub
+        {
+            Result = 0,
+            WaitForRelease = true,
+            BeforeReturn = () => interactions.RecordedNotifications.Show(
+                DownKyi.Utils.DictionaryResource.GetString("TipAlreadyToAddDownloading"))
+        };
+        using var viewModel = new ViewVideoDetailViewModel(
+            interactions,
+            new ClipboardServiceStub(),
+            settings,
+            workflow,
+            downloadCoordinator,
+            NullLogger<ViewVideoDetailViewModel>.Instance);
+        viewModel.UiState.VideoInfoView = new DownKyi.Presentation.VideoInfoView();
+        viewModel.VideoSections.Add(new DownKyi.Presentation.VideoSection
+        {
+            VideoPages =
+            [
+                new DownKyi.Presentation.VideoPage
+                {
+                    IsSelected = true,
+                    PlayUrl = new DownKyi.Core.BiliApi.VideoStream.Models.PlayUrl()
+                }
+            ]
+        });
+        var completion = WaitUntilExecutable(viewModel.AddToDownloadCommand);
+
+        viewModel.AddToDownloadCommand.Execute(null);
+        await downloadCoordinator.AddRequested.Task
+            .WaitAsync(TestContext.Current.CancellationToken)
+            .ConfigureAwait(true);
+        downloadCoordinator.ReleaseAdd();
+        await completion.WaitAsync(TestContext.Current.CancellationToken).ConfigureAwait(true);
+
+        Assert.Equal(
+            ["此内容已加入下载队列，无需重复添加。"],
+            interactions.RecordedNotifications.Messages);
+        Assert.Equal(1, downloadCoordinator.AddRequestCount);
+    }
+
+    [Avalonia.Headless.XUnit.AvaloniaFact]
+    public async Task MissingDownloadSelectionStillExplainsWhyNothingWasAdded()
+    {
+        EnsureProductLanguageResources();
+        var settingsPath = Path.Combine(
+            Path.GetTempPath(),
+            $"downkyi-video-detail-empty-selection-{Guid.NewGuid():N}.json");
+        using var settings = new SettingsStore(settingsPath);
+        using var workflow = new VideoDetailWorkflowCoordinatorStub();
+        var interactions = new DesktopInteractionContextStub();
+        var downloadCoordinator = new VideoDetailDownloadCoordinatorStub { Result = 0 };
+        using var viewModel = new ViewVideoDetailViewModel(
+            interactions,
+            new ClipboardServiceStub(),
+            settings,
+            workflow,
+            downloadCoordinator,
+            NullLogger<ViewVideoDetailViewModel>.Instance);
+        viewModel.UiState.VideoInfoView = new DownKyi.Presentation.VideoInfoView();
+        viewModel.VideoSections.Add(new DownKyi.Presentation.VideoSection
+        {
+            VideoPages = [new DownKyi.Presentation.VideoPage { IsSelected = false }]
+        });
+        var notification = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        interactions.RecordedNotifications.NotificationRaised += (_, _) => notification.TrySetResult();
+
+        viewModel.AddToDownloadCommand.Execute(null);
+        await notification.Task.WaitAsync(TestContext.Current.CancellationToken).ConfigureAwait(true);
+
+        Assert.Equal(["没有选中项符合下载要求！"], interactions.RecordedNotifications.Messages);
+        Assert.Equal(1, downloadCoordinator.AddRequestCount);
+    }
+
+    [Avalonia.Headless.XUnit.AvaloniaFact]
     public async Task ParsingSelectorInvalidAcceptedResultFailsBeforeDispatch()
     {
         DesktopTestResources.EnsureProductThemeResources();
@@ -394,6 +478,23 @@ public sealed class VideoDetailCommandStateTests
         Assert.True(viewModel.AddToDownloadCommand.CanExecute(null));
     }
 
+    private static void EnsureProductLanguageResources()
+    {
+        var application = DesktopTestResources.EnsureProductThemeResources();
+        if (!application.TryGetResource(
+                "TipAlreadyToAddDownloading",
+                Avalonia.Styling.ThemeVariant.Default,
+                out _))
+        {
+            application.Resources.MergedDictionaries.Add(
+                new Avalonia.Markup.Xaml.Styling.ResourceInclude(
+                    new Uri("avares://DownKyi.Desktop.Tests/"))
+                {
+                    Source = new Uri("avares://DownKyi.Desktop/Languages/Default.axaml")
+                });
+        }
+    }
+
     private static Task WaitUntilExecutable(DownKyiAsyncDelegateCommand command)
     {
         var completion = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -444,7 +545,9 @@ public sealed class VideoDetailCommandStateTests
             Dialogs = dialogs ?? new DialogServiceStub();
         }
 
-        public IUserNotificationService Notifications { get; } = new NotificationServiceStub();
+        public NotificationServiceStub RecordedNotifications { get; } = new();
+
+        public IUserNotificationService Notifications => RecordedNotifications;
 
         public IAppNavigationService Navigation { get; } = new NavigationServiceStub();
 
@@ -562,6 +665,10 @@ public sealed class VideoDetailCommandStateTests
 
         public DownKyi.Presentation.VideoInfoView? LastVideoInfo { get; private set; }
 
+        public int? Result { get; init; } = 1;
+
+        public Action? BeforeReturn { get; init; }
+
         public async Task<int?> AddAsync(
             string input,
             DownKyi.Presentation.VideoInfoView videoInfoView,
@@ -579,7 +686,8 @@ public sealed class VideoDetailCommandStateTests
                 await _releaseAdd.Task.WaitAsync(cancellationToken).ConfigureAwait(true);
             }
 
-            return 1;
+            BeforeReturn?.Invoke();
+            return Result;
         }
 
         public void ReleaseAdd()
@@ -592,8 +700,11 @@ public sealed class VideoDetailCommandStateTests
     {
         public event EventHandler<UserNotificationEventArgs>? NotificationRaised;
 
+        public List<string> Messages { get; } = [];
+
         public void Show(string message)
         {
+            Messages.Add(message);
             NotificationRaised?.Invoke(this, new UserNotificationEventArgs(message));
         }
     }

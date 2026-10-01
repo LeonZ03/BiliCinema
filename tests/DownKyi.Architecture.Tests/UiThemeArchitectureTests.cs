@@ -49,6 +49,97 @@ public sealed class UiThemeArchitectureTests
     }
 
     [Fact]
+    public void DarkReadingPaletteSeparatesSurfacesTextAndInteractionStates()
+    {
+        var appSource = ReadSource("src", "DownKyi.Desktop", "App.axaml");
+        var windowSource = ReadSource("src", "DownKyi.Desktop", "Views", "MainWindow.axaml");
+        var darkPalette = ReadSource(
+            "src", "DownKyi.Desktop", "Themes", "Colors", "ColorDark.axaml");
+
+        Assert.Contains(
+            "Segoe UI Variable Text,Segoe UI,Microsoft JhengHei UI,Microsoft YaHei UI",
+            appSource,
+            StringComparison.Ordinal);
+        Assert.DoesNotContain(">Simsun,", appSource, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains(
+            "Background=\"{DynamicResource BrushSurfaceBase}\"",
+            windowSource,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "<Color x:Key=\"ColorSurfaceBase\">#FF0F0F0F</Color>",
+            darkPalette,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "<Color x:Key=\"ColorSurfaceRaised\">#FF212121</Color>",
+            darkPalette,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "<Color x:Key=\"ColorSurfaceOverlay\">#FF282828</Color>",
+            darkPalette,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "<Color x:Key=\"ColorTextPrimary\">#FFF1F1F1</Color>",
+            darkPalette,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "<Color x:Key=\"ColorTextSecondary\">#FFAAAAAA</Color>",
+            darkPalette,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "<Color x:Key=\"ColorTextDark\">#FFC7C7C7</Color>",
+            darkPalette,
+            StringComparison.Ordinal);
+        Assert.DoesNotContain(
+            "<Color x:Key=\"ColorTextDark\">white</Color>",
+            darkPalette,
+            StringComparison.OrdinalIgnoreCase);
+        Assert.Contains(
+            "<Color x:Key=\"ColorSelectionFill\">#33FFFFFF</Color>",
+            darkPalette,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "<Color x:Key=\"ColorControlStrokeFocus\">#FF1C62B9</Color>",
+            darkPalette,
+            StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void SharedControlsReserveAccentForFocusLinksAndActiveState()
+    {
+        var buttonTheme = ReadSource(
+            "src", "DownKyi.Desktop", "Themes", "Styles", "StyleBtn.axaml");
+        var navigationTheme = ReadSource(
+            "src", "DownKyi.Desktop", "Themes", "Styles", "StyleListBox.axaml");
+        var indexView = ReadSource("src", "DownKyi.Desktop", "Views", "ViewIndex.axaml");
+
+        Assert.Contains("BrushControlFill", buttonTheme, StringComparison.Ordinal);
+        Assert.Contains("BrushControlStroke", buttonTheme, StringComparison.Ordinal);
+        Assert.DoesNotContain("BrushPrimaryTranslucent", buttonTheme, StringComparison.Ordinal);
+        Assert.Contains("BrushSelectionFill", navigationTheme, StringComparison.Ordinal);
+        Assert.DoesNotContain("SelectionIndicator", navigationTheme, StringComparison.Ordinal);
+        Assert.Contains("BrushControlStrokeFocus", indexView, StringComparison.Ordinal);
+        Assert.Contains("BrushTextSecondary", indexView, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void SettingsUseSemanticSurfacesAndReadableTypography()
+    {
+        var settingsRoot = Path.Combine(
+            RepositoryRoot, "src", "DownKyi.Desktop", "Views", "Settings");
+        var settingsSource = string.Join(
+            Environment.NewLine,
+            Directory.EnumerateFiles(settingsRoot, "*.axaml").Select(File.ReadAllText));
+        var languageSource = ReadSource(
+            "src", "DownKyi.Desktop", "Languages", "Default.axaml");
+
+        Assert.DoesNotContain("Background=\"LightGray\"", settingsSource, StringComparison.Ordinal);
+        Assert.DoesNotContain("FontSize=\"12\"", settingsSource, StringComparison.Ordinal);
+        Assert.Contains("DownKyiFontSizeBody", settingsSource, StringComparison.Ordinal);
+        Assert.Contains("DownKyiFontSizeTitle", settingsSource, StringComparison.Ordinal);
+        Assert.Contains("<system:String x:Key=\"FontName\">弹幕字体：</system:String>", languageSource, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void ToolboxSurfacesUseSemanticThemeResources()
     {
         var toolboxViews = new[]

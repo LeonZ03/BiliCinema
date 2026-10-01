@@ -16,6 +16,7 @@
 
             <Button
                 Grid.Column="0"
+                MinHeight="36"
                 Margin="10,5,0,5"
                 HorizontalAlignment="Left"
                 VerticalAlignment="Center"

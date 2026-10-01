@@ -6,20 +6,42 @@
     <ScrollViewer HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
         <StackPanel Margin="50,0" Orientation="Vertical">
 
-            <StackPanel Margin="0,20,0,0" Orientation="Horizontal">
-                <TextBlock FontSize="18" Text="{DynamicResource Video}" />
-            </StackPanel>
-            <StackPanel Margin="0,20,0,0" Orientation="Horizontal">
+            <TextBlock
+                Name="NameVideoPageTitle"
+                Margin="0,20,0,0"
+                FontSize="{DynamicResource DownKyiFontSizeTitle}"
+                FontWeight="SemiBold"
+                Foreground="{DynamicResource BrushTextPrimary}"
+                Text="{DynamicResource Video}" />
+
+            <TextBlock
+                Name="NameVideoDownloadPreferencesTitle"
+                Margin="0,28,0,0"
+                FontSize="{DynamicResource DownKyiFontSizeBody}"
+                FontWeight="SemiBold"
+                Foreground="{DynamicResource BrushTextPrimary}"
+                Text="{DynamicResource VideoDownloadPreferences}" />
+            <Grid
+                Name="NameVideoDownloadPreferences"
+                Margin="0,12,0,0"
+                ColumnDefinitions="160,320"
+                RowDefinitions="Auto,Auto,Auto,Auto">
                 <TextBlock
+                    Grid.Row="0"
+                    Grid.Column="0"
+                    Margin="0,0,0,12"
                     VerticalAlignment="Center"
-                    FontSize="12"
+                    FontSize="{DynamicResource DownKyiFontSizeBody}"
                     Foreground="{DynamicResource BrushTextDark}"
                     Text="{DynamicResource FirstVideoCodecs}" />
                 <ComboBox
                     Name="NameVideoCodecs"
-                    DisplayMemberBinding="{ReflectionBinding Name}"
-                    Width="120"
+                    Grid.Row="0"
+                    Grid.Column="1"
+                    Margin="0,0,0,12"
+                    HorizontalAlignment="Stretch"
                     VerticalContentAlignment="Center"
+                    DisplayMemberBinding="{ReflectionBinding Name}"
                     ItemsSource="{Binding VideoCodecs}"
                     SelectedValue="{Binding SelectedVideoCodec}">
                     <Interaction.Behaviors>
@@ -29,16 +51,20 @@
                         </EventTriggerBehavior>
                     </Interaction.Behaviors>
                 </ComboBox>
-            </StackPanel>
-            <StackPanel Margin="0,20,0,0" Orientation="Horizontal">
                 <TextBlock
+                    Grid.Row="1"
+                    Grid.Column="0"
+                    Margin="0,0,0,12"
                     VerticalAlignment="Center"
-                    FontSize="12"
+                    FontSize="{DynamicResource DownKyiFontSizeBody}"
                     Foreground="{DynamicResource BrushTextDark}"
                     Text="{DynamicResource FirstVideoQuality}" />
                 <ComboBox
                     Name="NameVideoQualityList"
-                    Width="120"
+                    Grid.Row="1"
+                    Grid.Column="1"
+                    Margin="0,0,0,12"
+                    HorizontalAlignment="Stretch"
                     VerticalContentAlignment="Center"
                     DisplayMemberBinding="{ReflectionBinding Name}"
                     ItemsSource="{Binding VideoQualityList}"
@@ -50,16 +76,20 @@
                         </EventTriggerBehavior>
                     </Interaction.Behaviors>
                 </ComboBox>
-            </StackPanel>
-            <StackPanel Margin="0,20,0,0" Orientation="Horizontal">
                 <TextBlock
+                    Grid.Row="2"
+                    Grid.Column="0"
+                    Margin="0,0,0,12"
                     VerticalAlignment="Center"
-                    FontSize="12"
+                    FontSize="{DynamicResource DownKyiFontSizeBody}"
                     Foreground="{DynamicResource BrushTextDark}"
                     Text="{DynamicResource FirstAudioQuality}" />
                 <ComboBox
                     Name="NameAudioQualityList"
-                    Width="120"
+                    Grid.Row="2"
+                    Grid.Column="1"
+                    Margin="0,0,0,12"
+                    HorizontalAlignment="Stretch"
                     VerticalContentAlignment="Center"
                     DisplayMemberBinding="{ReflectionBinding Name}"
                     ItemsSource="{Binding AudioQualityList}"
@@ -71,16 +101,18 @@
                         </EventTriggerBehavior>
                     </Interaction.Behaviors>
                 </ComboBox>
-            </StackPanel>
-            <StackPanel Margin="0,20,0,0" Orientation="Horizontal">
                 <TextBlock
+                    Grid.Row="3"
+                    Grid.Column="0"
                     VerticalAlignment="Center"
-                    FontSize="12"
+                    FontSize="{DynamicResource DownKyiFontSizeBody}"
                     Foreground="{DynamicResource BrushTextDark}"
                     Text="{DynamicResource VideoParseType}" />
                 <ComboBox
                     Name="NameVideoParseTypeList"
-                    MinWidth="200"
+                    Grid.Row="3"
+                    Grid.Column="1"
+                    HorizontalAlignment="Stretch"
                     VerticalContentAlignment="Center"
                     DisplayMemberBinding="{Binding Name}"
                     ItemsSource="{Binding VideoParseTypeList}"
@@ -92,43 +124,69 @@
                         </EventTriggerBehavior>
                     </Interaction.Behaviors>
                 </ComboBox>
-            </StackPanel>
-            <CheckBox
-                Margin="0,20,0,0"
-                HorizontalAlignment="Left"
-                VerticalAlignment="Center"
-                Command="{Binding IsTranscodingFlvToMp4Command}"
-                Content="{DynamicResource IsTranscodingFlvToMp4}"
-                FontSize="12"
-                Foreground="{DynamicResource BrushTextDark}"
-                IsChecked="{Binding IsTranscodingFlvToMp4, Mode=TwoWay}" />
+            </Grid>
 
-            <CheckBox
-                Margin="0,20,0,0"
-                HorizontalAlignment="Left"
-                VerticalAlignment="Center"
-                Command="{Binding IsTranscodingAacToMp3Command}"
-                Content="{DynamicResource IsTranscodingAacToMp3}"
-                FontSize="12"
-                Foreground="{DynamicResource BrushTextDark}"
-                IsChecked="{Binding IsTranscodingAacToMp3, Mode=TwoWay}" />
-
-            <StackPanel
-                Margin="0,20,0,0"
-                Orientation="Horizontal"
-                ToolTip.Tip="{DynamicResource FfmpegHardwareAccelerationTip}">
-                <TextBlock
+            <TextBlock
+                Name="NameVideoPostProcessingTitle"
+                Margin="0,28,0,0"
+                FontSize="{DynamicResource DownKyiFontSizeBody}"
+                FontWeight="SemiBold"
+                Foreground="{DynamicResource BrushTextPrimary}"
+                Text="{DynamicResource VideoPostProcessing}" />
+            <StackPanel Name="NameVideoPostProcessing" Margin="0,12,0,0">
+                <CheckBox
+                    Name="NameTranscodeFlvToMp4"
+                    HorizontalAlignment="Left"
                     VerticalAlignment="Center"
-                    FontSize="12"
+                    Command="{Binding IsTranscodingFlvToMp4Command}"
+                    Content="{DynamicResource IsTranscodingFlvToMp4}"
+                    FontSize="{DynamicResource DownKyiFontSizeBody}"
                     Foreground="{DynamicResource BrushTextDark}"
-                    Text="{DynamicResource FfmpegHardwareAcceleration}" />
+                    IsChecked="{Binding IsTranscodingFlvToMp4, Mode=TwoWay}" />
+                <CheckBox
+                    Name="NameTranscodeAacToMp3"
+                    Margin="0,12,0,0"
+                    HorizontalAlignment="Left"
+                    VerticalAlignment="Center"
+                    Command="{Binding IsTranscodingAacToMp3Command}"
+                    Content="{DynamicResource IsTranscodingAacToMp3}"
+                    FontSize="{DynamicResource DownKyiFontSizeBody}"
+                    Foreground="{DynamicResource BrushTextDark}"
+                    IsChecked="{Binding IsTranscodingAacToMp3, Mode=TwoWay}" />
+            </StackPanel>
+
+            <TextBlock
+                Name="NameVideoFfmpegTitle"
+                Margin="0,28,0,0"
+                FontSize="{DynamicResource DownKyiFontSizeBody}"
+                FontWeight="SemiBold"
+                Foreground="{DynamicResource BrushTextPrimary}"
+                Text="{DynamicResource VideoFfmpegSettings}" />
+            <Grid
+                Name="NameVideoFfmpegSettings"
+                Margin="0,12,0,0"
+                ColumnDefinitions="160,320"
+                RowDefinitions="Auto,Auto">
+                <TextBlock
+                    Grid.Row="0"
+                    Grid.Column="0"
+                    Margin="0,0,0,12"
+                    VerticalAlignment="Center"
+                    FontSize="{DynamicResource DownKyiFontSizeBody}"
+                    Foreground="{DynamicResource BrushTextDark}"
+                    Text="{DynamicResource FfmpegHardwareAcceleration}"
+                    ToolTip.Tip="{DynamicResource FfmpegHardwareAccelerationTip}" />
                 <ComboBox
                     Name="NameFfmpegHardwareAcceleration"
-                    Width="180"
+                    Grid.Row="0"
+                    Grid.Column="1"
+                    Margin="0,0,0,12"
+                    HorizontalAlignment="Stretch"
                     VerticalContentAlignment="Center"
                     DisplayMemberBinding="{Binding Name}"
                     ItemsSource="{Binding FfmpegHardwareAccelerations}"
-                    SelectedItem="{Binding SelectedFfmpegHardwareAcceleration}">
+                    SelectedItem="{Binding SelectedFfmpegHardwareAcceleration}"
+                    ToolTip.Tip="{DynamicResource FfmpegHardwareAccelerationTip}">
                     <Interaction.Behaviors>
                         <EventTriggerBehavior EventName="SelectionChanged">
                             <InvokeCommandAction Command="{Binding FfmpegHardwareAccelerationCommand}"
@@ -136,23 +194,24 @@
                         </EventTriggerBehavior>
                     </Interaction.Behaviors>
                 </ComboBox>
-            </StackPanel>
-
-            <StackPanel
-                Margin="0,20,0,0"
-                Orientation="Horizontal"
-                ToolTip.Tip="{DynamicResource FfmpegMaxParallelJobsTip}">
                 <TextBlock
+                    Grid.Row="1"
+                    Grid.Column="0"
                     VerticalAlignment="Center"
-                    FontSize="12"
+                    FontSize="{DynamicResource DownKyiFontSizeBody}"
                     Foreground="{DynamicResource BrushTextDark}"
-                    Text="{DynamicResource FfmpegMaxParallelJobs}" />
+                    Text="{DynamicResource FfmpegMaxParallelJobs}"
+                    ToolTip.Tip="{DynamicResource FfmpegMaxParallelJobsTip}" />
                 <ComboBox
                     Name="NameFfmpegMaxParallelJobs"
-                    Width="80"
+                    Grid.Row="1"
+                    Grid.Column="1"
+                    Width="120"
+                    HorizontalAlignment="Left"
                     VerticalContentAlignment="Center"
                     ItemsSource="{Binding FfmpegMaxParallelJobs}"
-                    SelectedValue="{Binding SelectedFfmpegMaxParallelJob}">
+                    SelectedValue="{Binding SelectedFfmpegMaxParallelJob}"
+                    ToolTip.Tip="{DynamicResource FfmpegMaxParallelJobsTip}">
                     <Interaction.Behaviors>
                         <EventTriggerBehavior EventName="SelectionChanged">
                             <InvokeCommandAction Command="{Binding FfmpegMaxParallelJobsCommand}"
@@ -160,21 +219,16 @@
                         </EventTriggerBehavior>
                     </Interaction.Behaviors>
                 </ComboBox>
-            </StackPanel>
-
-            <TextBlock
-                Height="1"
-                Margin="0,20,0,0"
-                Background="{DynamicResource BrushBorder}" />
+            </Grid>
 
             <CheckBox
                 Name="NameIsUseDefaultDirectory"
-                Margin="0,20,0,0"
+                Margin="0,32,0,0"
                 HorizontalAlignment="Left"
                 VerticalAlignment="Center"
                 Command="{Binding IsUseDefaultDirectoryCommand}"
                 Content="{DynamicResource IsUseDefaultDirectory}"
-                FontSize="12"
+                FontSize="{DynamicResource DownKyiFontSizeBody}"
                 Foreground="{DynamicResource BrushTextDark}"
                 IsChecked="{Binding IsUseDefaultDirectory, Mode=TwoWay}" />
 
@@ -186,13 +240,13 @@
                 <StackPanel Orientation="Horizontal">
                     <TextBlock
                         VerticalAlignment="Center"
-                        FontSize="12"
+                        FontSize="{DynamicResource DownKyiFontSizeBody}"
                         Foreground="{DynamicResource BrushTextDark}"
                         Text="{DynamicResource DefaultDirectory}" />
                     <TextBlock
                         Margin="10,0,0,0"
                         VerticalAlignment="Center"
-                        FontSize="12"
+                        FontSize="{DynamicResource DownKyiFontSizeBody}"
                         Foreground="{DynamicResource BrushTextGrey}"
                         Text="{DynamicResource DefaultDirectoryTip}" />
                 </StackPanel>
@@ -200,7 +254,7 @@
                     <TextBlock
                         MaxWidth="600"
                         VerticalAlignment="Center"
-                        FontSize="12"
+                        FontSize="{DynamicResource DownKyiFontSizeBody}"
                         Foreground="{DynamicResource BrushTextDark}"
                         Text="{Binding SaveVideoDirectory}"
                         TextTrimming="CharacterEllipsis"
@@ -210,7 +264,7 @@
                         Margin="30,0,0,0"
                         Command="{Binding ChangeSaveVideoDirectoryCommand}"
                         Content="{DynamicResource ChangeDirectory}"
-                        FontSize="12" />
+                        FontSize="{DynamicResource DownKyiFontSizeBody}" />
                 </StackPanel>
             </StackPanel>
 
@@ -221,18 +275,18 @@
                     Command="{Binding GenerateMovieMetadataCommand }"
                     IsChecked="{Binding GenerateMovieMetadata}"
                     Content="{DynamicResource GenerateVideoMetadata}"
-                    FontSize="12"
+                    FontSize="{DynamicResource DownKyiFontSizeBody}"
                     ToolTip.Tip="nfo"
                     Foreground="{DynamicResource BrushTextDark}" />
             </StackPanel>
 
             <HeaderedContentControl
                 Header="{DynamicResource DownloadContent2}"
-                Background="LightGray"
+                Background="{DynamicResource BrushSurfaceRaised}"
                 Margin="0,20,0,0"
                 Foreground="{DynamicResource BrushTextDark}"
                 CornerRadius="10"
-                FontSize="12">
+                FontSize="{DynamicResource DownKyiFontSizeBody}">
                 <StackPanel Margin="10" Orientation="Horizontal">
                     <CheckBox
                         Margin="0,0,0,0"
@@ -275,16 +329,16 @@
 
             <HeaderedContentControl
                 Header="{DynamicResource FileNameParts}"
-                Background="LightGray"
+                Background="{DynamicResource BrushSurfaceRaised}"
                 Margin="0,20,0,0"
                 Foreground="{DynamicResource BrushTextDark}"
                 CornerRadius="10"
-                FontSize="12">
+                FontSize="{DynamicResource DownKyiFontSizeBody}">
                 <Grid ColumnDefinitions="100,*" RowDefinitions="*,*,*" Margin="10">
                     <TextBlock
                         Grid.Row="0"
                         Grid.Column="0"
-                        FontSize="12"
+                        FontSize="{DynamicResource DownKyiFontSizeBody}"
                         Foreground="{DynamicResource BrushTextDark}"
                         Text="{DynamicResource OptionalFields}" />
                     <ListBox
@@ -308,7 +362,7 @@
                     <TextBlock
                         Grid.Row="1"
                         Grid.Column="0"
-                        FontSize="12"
+                        FontSize="{DynamicResource DownKyiFontSizeBody}"
                         Foreground="{DynamicResource BrushTextDark}"
                         Text="{DynamicResource FileName}" />
                     <ListBox
@@ -340,69 +394,65 @@
                     </ListBox>
 
                     <Grid
+                        Name="NameFileNameEditorOptions"
                         Grid.Row="2"
                         Grid.Column="1"
                         Margin="0,20,0,0"
-                        ColumnDefinitions="*,*,*">
-                        <StackPanel
+                        ColumnDefinitions="Auto,140,24,Auto,140,*,Auto">
+                        <TextBlock
+                            Name="NameFileNamePartTimeFormatLabel"
                             Grid.Column="0"
-                            HorizontalAlignment="Left"
-                            VerticalAlignment="Bottom"
-                            Orientation="Horizontal">
-                            <TextBlock
-                                VerticalAlignment="Center"
-                                FontSize="12"
-                                Foreground="{DynamicResource BrushTextDark}"
-                                Text="{DynamicResource FileNameTimeFormat}" />
-                            <ComboBox
-                                Name="NameFileNamePartTimeFormat"
-                                Width="120"
-                                VerticalAlignment="Center"
-                                VerticalContentAlignment="Center"
-                                ItemsSource="{Binding FileNamePartTimeFormatList}"
-                                SelectedItem="{Binding SelectedFileNamePartTimeFormat}">
-                                <Interaction.Behaviors>
-                                    <EventTriggerBehavior EventName="SelectionChanged">
-                                        <InvokeCommandAction Command="{Binding FileNamePartTimeFormatCommand}"
-                                                             CommandParameter="{Binding ElementName=NameFileNamePartTimeFormat, Path=SelectedItem}" />
-                                    </EventTriggerBehavior>
-                                </Interaction.Behaviors>
-                            </ComboBox>
-                        </StackPanel>
-                        <StackPanel
+                            VerticalAlignment="Center"
+                            FontSize="{DynamicResource DownKyiFontSizeBody}"
+                            Foreground="{DynamicResource BrushTextDark}"
+                            Text="{DynamicResource FileNameTimeFormat}" />
+                        <ComboBox
+                            Name="NameFileNamePartTimeFormat"
                             Grid.Column="1"
-                            HorizontalAlignment="Left"
-                            VerticalAlignment="Bottom"
-                            Orientation="Horizontal">
-                            <TextBlock
-                                VerticalAlignment="Center"
-                                FontSize="12"
-                                Foreground="{DynamicResource BrushTextDark}"
-                                Text="{DynamicResource OrderFormat}" />
-                            <ComboBox
-                                Name="NameOrderFormat"
-                                Width="120"
-                                VerticalAlignment="Center"
-                                VerticalContentAlignment="Center"
-                                DisplayMemberBinding="{Binding Name}"
-                                ItemsSource="{Binding OrderFormatList}"
-                                SelectedItem="{Binding OrderFormatDisplay}">
-                                <Interaction.Behaviors>
-                                    <EventTriggerBehavior EventName="SelectionChanged">
-                                        <InvokeCommandAction Command="{Binding OrderFormatCommand}"
-                                                             CommandParameter="{Binding ElementName=NameOrderFormat, Path=SelectedItem}" />
-                                    </EventTriggerBehavior>
-                                </Interaction.Behaviors>
-                            </ComboBox>
-                        </StackPanel>
+                            Width="140"
+                            VerticalAlignment="Center"
+                            VerticalContentAlignment="Center"
+                            ItemsSource="{Binding FileNamePartTimeFormatList}"
+                            SelectedItem="{Binding SelectedFileNamePartTimeFormat}">
+                            <Interaction.Behaviors>
+                                <EventTriggerBehavior EventName="SelectionChanged">
+                                    <InvokeCommandAction Command="{Binding FileNamePartTimeFormatCommand}"
+                                                         CommandParameter="{Binding ElementName=NameFileNamePartTimeFormat, Path=SelectedItem}" />
+                                </EventTriggerBehavior>
+                            </Interaction.Behaviors>
+                        </ComboBox>
+                        <TextBlock
+                            Name="NameOrderFormatLabel"
+                            Grid.Column="3"
+                            VerticalAlignment="Center"
+                            FontSize="{DynamicResource DownKyiFontSizeBody}"
+                            Foreground="{DynamicResource BrushTextDark}"
+                            Text="{DynamicResource OrderFormat}" />
+                        <ComboBox
+                            Name="NameOrderFormat"
+                            Grid.Column="4"
+                            Width="140"
+                            VerticalAlignment="Center"
+                            VerticalContentAlignment="Center"
+                            DisplayMemberBinding="{Binding Name}"
+                            ItemsSource="{Binding OrderFormatList}"
+                            SelectedItem="{Binding OrderFormatDisplay}">
+                            <Interaction.Behaviors>
+                                <EventTriggerBehavior EventName="SelectionChanged">
+                                    <InvokeCommandAction Command="{Binding OrderFormatCommand}"
+                                                         CommandParameter="{Binding ElementName=NameOrderFormat, Path=SelectedItem}" />
+                                </EventTriggerBehavior>
+                            </Interaction.Behaviors>
+                        </ComboBox>
                         <Button
-                            Grid.Column="2"
-                            Width="75"
+                            Name="NameResetFileNameButton"
+                            Grid.Column="6"
+                            MinWidth="92"
                             HorizontalAlignment="Right"
                             VerticalAlignment="Center"
                             Command="{Binding ResetCommand}"
                             Content="{DynamicResource Reset}"
-                            FontSize="12"
+                            FontSize="{DynamicResource DownKyiFontSizeBody}"
                             Theme="{StaticResource BtnBorderStyle}" />
                     </Grid>
 
