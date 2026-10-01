@@ -515,6 +515,21 @@ internal sealed class WindowsEtwResourceFlightRecorder : IDisposable
     internal static ToolResult RunTool(
         string executable,
         params string[] arguments)
+        => RunToolCore(executable, waitUntilReady: null, arguments);
+
+    internal static ToolResult RunToolAfterReadiness(
+        string executable,
+        Action waitUntilReady,
+        params string[] arguments)
+    {
+        ArgumentNullException.ThrowIfNull(waitUntilReady);
+        return RunToolCore(executable, waitUntilReady, arguments);
+    }
+
+    private static ToolResult RunToolCore(
+        string executable,
+        Action? waitUntilReady,
+        params string[] arguments)
     {
         using var scope = OwnedProcessScope.StartAsync(
                 CreateToolStartInfo(executable, arguments),
@@ -524,6 +539,7 @@ internal sealed class WindowsEtwResourceFlightRecorder : IDisposable
         var process = scope.Host;
         var outputTask = process.StandardOutput.ReadToEndAsync();
         var errorTask = process.StandardError.ReadToEndAsync();
+        waitUntilReady?.Invoke();
         process.WaitForExit();
         var exitCode = process.ExitCode;
 

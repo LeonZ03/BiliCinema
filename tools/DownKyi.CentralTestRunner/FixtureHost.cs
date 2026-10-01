@@ -124,6 +124,18 @@ internal static class FixtureHost
             ?? throw new InvalidOperationException("The pipe-holder fixture did not start.");
         await File.WriteAllTextAsync(args[2], child.Id.ToString(System.Globalization.CultureInfo.InvariantCulture))
             .ConfigureAwait(false);
+        if (args.Length > 3)
+        {
+            if (!OperatingSystem.IsWindows())
+            {
+                throw new PlatformNotSupportedException(
+                    "The pipe-holder release event is only available on Windows.");
+            }
+
+            using var release = EventWaitHandle.OpenExisting(args[3]);
+            release.WaitOne();
+        }
+
         return 0;
     }
 
