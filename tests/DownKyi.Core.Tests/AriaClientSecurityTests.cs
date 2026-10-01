@@ -30,6 +30,18 @@ public sealed class AriaClientSecurityTests
         _ = new AriaClient(host, 6800, "test-token");
     }
 
+    [Theory]
+    [InlineData("http://localhost", "ws://localhost:6800/jsonrpc")]
+    [InlineData("https://aria.example", "wss://aria.example:6800/jsonrpc")]
+    public void WebSocketEndpointUsesTheValidatedRpcAuthority(
+        string host,
+        string expected)
+    {
+        var client = new AriaClient(host, 6800, "test-token");
+
+        Assert.Equal(expected, client.WebSocketUri.AbsoluteUri);
+    }
+
     [Fact]
     public void RpcEndpointUserInformationIsRejected()
     {

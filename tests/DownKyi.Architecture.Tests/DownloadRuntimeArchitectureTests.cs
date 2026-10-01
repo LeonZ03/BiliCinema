@@ -551,6 +551,9 @@ public sealed class DownloadRuntimeArchitectureTests
         var mediaStageSource = File.ReadAllText(Path.Combine(directory, "DownloadMediaStage.cs"));
         var builtinSource = File.ReadAllText(Path.Combine(directory, "BuiltinTransferBackend.cs"));
         var ariaSource = File.ReadAllText(Path.Combine(directory, "Aria2TransferBackend.cs"));
+        var ariaLifecycleSource = File.ReadAllText(Path.Combine(
+            directory,
+            "Aria2RuntimeLifecycle.cs"));
 
         Assert.DoesNotContain("paused.Phase == DownloadPhase.Pausing", stateSource, StringComparison.Ordinal);
         Assert.Contains("ConfirmPauseAfterWorkerStopsAsync", orchestratorSource, StringComparison.Ordinal);
@@ -561,9 +564,19 @@ public sealed class DownloadRuntimeArchitectureTests
         Assert.True(
             builtinSource.IndexOf("if (request.IsPauseRequested())", StringComparison.Ordinal) <
             builtinSource.IndexOf("request.EnsureActive();", StringComparison.Ordinal));
+        Assert.Contains("request.WaitForPauseRequestedAsync(", ariaSource, StringComparison.Ordinal);
+        Assert.DoesNotContain("PauseStatusPollInterval", ariaSource, StringComparison.Ordinal);
+        Assert.Contains(
+            "if (!_runtimeLifecycle.UsesPauseNotifications)",
+            ariaSource,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "internal bool UsesPauseNotifications => _ownsAriaServer;",
+            ariaLifecycleSource,
+            StringComparison.Ordinal);
         Assert.True(
-            ariaSource.IndexOf("if (request.IsPauseRequested())", StringComparison.Ordinal) <
-                   ariaSource.IndexOf("request.EnsureActive();", StringComparison.Ordinal));
+            ariaSource.IndexOf("_runtimeLifecycle.RegisterPauseWaiter(gid)", StringComparison.Ordinal) <
+            ariaSource.IndexOf("_ariaClient.PauseAsync(gid", StringComparison.Ordinal));
     }
 
     [Fact]

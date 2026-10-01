@@ -1,7 +1,7 @@
 # aria2 RPC Client Ownership
 
 Status: accepted
-Last verified: 2026-07-29
+Last verified: 2026-10-01
 
 ## Classification
 
@@ -43,19 +43,35 @@ does not change its public API.
   information is rejected and the transport does not follow redirects.
 - Each `AriaClient` instance owns its endpoint and secret. No mutable static
   host, port or token state is allowed.
+- The packaged, process-owned aria2 runtime derives its single WebSocket
+  notification endpoint from the same immutable client endpoint (`http` to
+  `ws`) and owns the listener start/stop lifecycle. The listener does not
+  reconnect itself. Custom aria2 retains its existing HTTP/HTTPS RPC contract
+  and does not require WebSocket support.
 - A secret is mandatory. The packaged runtime generates a fresh 256-bit value
   and passes it to aria2 through a temporary restricted config rather than a
   process argument.
 - `aria2.*` calls place `token:<secret>` first in `params`.
+- `PauseAsync` and `TellStatus` require the caller's `CancellationToken` so a
+  transfer can cancel and observe every raced RPC operation. `TellWaitingAsync`
+  retains its existing signature.
 - `system.*` calls do not automatically add the aria2 token.
 - Request `jsonrpc` remains `2.0`, request IDs remain non-empty and each public
   call emits exactly one physical request.
 - Retry decisions belong to `DownloadTransferCoordinator`; this adapter cannot
   add a second retry budget.
-- Public method names, parameters and response DTOs are compatibility surface.
-  Changing them requires an explicit API migration.
+- `AriaClient` is a repository-internal cross-assembly product API. Signature
+  changes update repository callers and contract tests together; absent a
+  separately distributed package, they do not require legacy binary-compatible
+  overloads.
 - `ChangeUriAsync` maps to `aria2.changeUri`; it must never regress to
   `aria2.changePosition`.
+- For packaged, process-owned aria2, pause acknowledgement is keyed by exact GID
+  and comes from `aria2.onDownloadPause`. Complete, error and stop notifications
+  only release the waiter; `AriaManager` remains the owner of terminal status
+  classification. If the WebSocket disconnects, each affected transfer makes at
+  most one `TellStatus` check and never treats active, unknown or failed status
+  lookup as paused.
 
 `AriaClientRpcContractTests` invokes every public RPC method against an injected
 capture transport. It verifies that the public method inventory and wire method

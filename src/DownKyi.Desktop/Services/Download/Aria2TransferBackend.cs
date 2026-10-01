@@ -43,7 +43,8 @@ internal sealed partial class Aria2TransferBackend : ITransferBackend
         ILoggerFactory loggerFactory,
         ILogger<Aria2TransferBackend> logger,
         bool ownsAriaServer,
-        LocalAriaRpcEndpoint? localEndpoint)
+        LocalAriaRpcEndpoint? localEndpoint,
+        Func<IAria2NotificationSocket>? notificationSocketFactory = null)
     {
         _networkSettings = networkSettings ?? throw new ArgumentNullException(nameof(networkSettings));
         _ariaClient = ariaClient ?? throw new ArgumentNullException(nameof(ariaClient));
@@ -60,7 +61,8 @@ internal sealed partial class Aria2TransferBackend : ITransferBackend
             ariaServer,
             loggerFactory.CreateLogger<Aria2RuntimeLifecycle>(),
             ownsAriaServer,
-            localEndpoint);
+            localEndpoint,
+            notificationSocketFactory);
     }
 
     public string Name => _runtimeLifecycle.Name;
@@ -173,53 +175,37 @@ internal sealed partial class Aria2TransferBackend : ITransferBackend
         ariaManager.TellStatus += progressHandler;
         try
         {
-            var (downloadResult, errorCode, errorMessage) =
-                await ariaManager.GetDownloadStatusDetailAsync(
-                activeGid,
-                async cancellationToken =>
-                {
-                    cancellationToken.ThrowIfCancellationRequested();
-                    if (request.IsPauseRequested())
+            if (!_runtimeLifecycle.UsesPauseNotifications)
+            {
+                var customStatus = await ariaManager.GetDownloadStatusDetailAsync(
+                    activeGid,
+                    async cancellationToken =>
                     {
-                        await _ariaClient.PauseAsync(activeGid).ConfigureAwait(false);
-                        throw new OperationCanceledException("Download was paused.");
-                    }
+                        cancellationToken.ThrowIfCancellationRequested();
+                        if (request.IsPauseRequested())
+                        {
+                            await _ariaClient.PauseAsync(activeGid, cancellationToken)
+                                .ConfigureAwait(false);
+                            throw new OperationCanceledException("Download was paused.");
+                        }
 
-                    request.EnsureActive();
-                },
-                request.CancellationToken).ConfigureAwait(true);
-
-            if (downloadResult == DownloadResult.SUCCESS)
-            {
-                var finalFile = Path.Combine(request.Directory, request.FileName);
-                var integrity = DownloadFileIntegrity.Check(
-                    finalFile,
-                    request.ExpectedBytes);
-                if (!integrity.IsUsable)
-                {
-                    _logger.LogInformationMessage(
-                        integrity.Reason ?? "Downloaded media file is not usable.");
-                    return DownloadTransferResult.Failed(
-                        DownloadTransferFailureKind.InvalidMedia,
-                        "download.transfer.invalid-media");
-                }
-
-                return DownloadTransferResult.Succeeded();
-            }
-
-            if (ShouldClearBackendIdentity(errorCode))
-            {
-                await request.SetBackendIdentityAsync(
-                    null,
+                        request.EnsureActive();
+                    },
                     request.CancellationToken).ConfigureAwait(true);
+                return await CreateTransferResultAsync(
+                    customStatus,
+                    request).ConfigureAwait(true);
             }
 
-            return Aria2TransferFailureClassifier.Classify(
-                errorCode,
-                errorMessage);
+            return await TransferWithPauseNotificationsAsync(
+                ariaManager,
+                activeGid,
+                request).ConfigureAwait(true);
         }
         catch (OperationCanceledException) when (
-            !request.CancellationToken.IsCancellationRequested && request.IsPauseRequested())
+            !_runtimeLifecycle.UsesPauseNotifications
+            && !request.CancellationToken.IsCancellationRequested
+            && request.IsPauseRequested())
         {
             return DownloadTransferResult.Paused();
         }
@@ -252,6 +238,227 @@ internal sealed partial class Aria2TransferBackend : ITransferBackend
         }
     }
 
+    private async Task<DownloadTransferResult> TransferWithPauseNotificationsAsync(
+        AriaManager ariaManager,
+        string activeGid,
+        DownloadTransferRequest request)
+    {
+        using var transferCancellation = CancellationTokenSource.CreateLinkedTokenSource(
+            request.CancellationToken);
+        Task<AriaDownloadStatus>? statusTask = null;
+        Task? pauseRequestTask = null;
+        Task<Aria2RuntimeLifecycle.Aria2PauseCheckpoint>? pauseCheckpointTask = null;
+        try
+        {
+            statusTask = ariaManager.GetDownloadStatusDetailAsync(
+                activeGid,
+                cancellationToken =>
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+                    if (!request.IsPauseRequested())
+                    {
+                        request.EnsureActive();
+                    }
+
+                    return ValueTask.CompletedTask;
+                },
+                transferCancellation.Token);
+            pauseRequestTask = request.WaitForPauseRequestedAsync(
+                transferCancellation.Token);
+
+            var completedTask = await Task.WhenAny(statusTask, pauseRequestTask)
+                .ConfigureAwait(true);
+            if (ReferenceEquals(completedTask, statusTask))
+            {
+                return await CreateTransferResultAsync(
+                    await statusTask.ConfigureAwait(true),
+                    request).ConfigureAwait(true);
+            }
+
+            await pauseRequestTask.ConfigureAwait(true);
+            request.CancellationToken.ThrowIfCancellationRequested();
+            pauseCheckpointTask = PauseAndWaitForCheckpointAsync(
+                activeGid,
+                transferCancellation.Token);
+            completedTask = await Task.WhenAny(statusTask, pauseCheckpointTask)
+                .ConfigureAwait(true);
+            if (ReferenceEquals(completedTask, statusTask))
+            {
+                return await CreateTransferResultAsync(
+                    await statusTask.ConfigureAwait(true),
+                    request).ConfigureAwait(true);
+            }
+
+            var checkpoint = await pauseCheckpointTask.ConfigureAwait(true);
+            if (checkpoint is Aria2RuntimeLifecycle.Aria2PauseCheckpoint.Complete
+                or Aria2RuntimeLifecycle.Aria2PauseCheckpoint.Error
+                or Aria2RuntimeLifecycle.Aria2PauseCheckpoint.Removed)
+            {
+                return await CreateTransferResultAsync(
+                    await statusTask.ConfigureAwait(true),
+                    request).ConfigureAwait(true);
+            }
+
+            var racedStatus = await CancelAndObserveStatusAsync(
+                transferCancellation,
+                statusTask).ConfigureAwait(true);
+            if (racedStatus != null)
+            {
+                return await CreateTransferResultAsync(racedStatus, request)
+                    .ConfigureAwait(true);
+            }
+
+            if (checkpoint == Aria2RuntimeLifecycle.Aria2PauseCheckpoint.Paused)
+            {
+                return DownloadTransferResult.Paused();
+            }
+
+            return await ResolveDisconnectedPauseAsync(
+                ariaManager,
+                activeGid,
+                request).ConfigureAwait(true);
+        }
+        finally
+        {
+            await transferCancellation.CancelAsync().ConfigureAwait(true);
+            await ObserveRacedTaskCompletionAsync(statusTask).ConfigureAwait(true);
+            await ObserveRacedTaskCompletionAsync(pauseRequestTask).ConfigureAwait(true);
+            await ObserveRacedTaskCompletionAsync(pauseCheckpointTask).ConfigureAwait(true);
+        }
+    }
+
+    private async Task<Aria2RuntimeLifecycle.Aria2PauseCheckpoint>
+        PauseAndWaitForCheckpointAsync(
+            string gid,
+            CancellationToken cancellationToken)
+    {
+        using var waiter = _runtimeLifecycle.RegisterPauseWaiter(gid);
+        var pause = await _ariaClient.PauseAsync(gid, cancellationToken)
+            .ConfigureAwait(true);
+        if (pause is not { Result: { } pausedGid }
+            || !string.Equals(pausedGid, gid, StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException("aria2 rejected the pause request.");
+        }
+
+        return await waiter.Completion.WaitAsync(cancellationToken).ConfigureAwait(true);
+    }
+
+    private async Task<DownloadTransferResult> ResolveDisconnectedPauseAsync(
+        AriaManager ariaManager,
+        string gid,
+        DownloadTransferRequest request)
+    {
+        AriaTellStatus status;
+        try
+        {
+            status = await _ariaClient
+                .TellStatus(gid, request.CancellationToken)
+                .ConfigureAwait(true);
+        }
+        catch (Exception exception) when (exception is HttpRequestException
+            or IOException
+            or TimeoutException
+            or Newtonsoft.Json.JsonException)
+        {
+            _logger.LogWarningMessage(
+                $"aria2 pause could not be confirmed after WebSocket disconnect; " +
+                $"type={exception.GetType().Name}.");
+            return DownloadTransferResult.Failed(
+                DownloadTransferFailureKind.TransientNetwork,
+                "download.transfer.aria2-rpc");
+        }
+
+        if (status is not { Result: { } statusResult })
+        {
+            _logger.LogWarningMessage(
+                "aria2 pause could not be confirmed after WebSocket disconnect.");
+            return DownloadTransferResult.Failed(
+                DownloadTransferFailureKind.TransientNetwork,
+                "download.transfer.aria2-rpc");
+        }
+
+        var state = AriaManager.ClassifyStatus(statusResult);
+        if (state == AriaDownloadState.Paused)
+        {
+            return DownloadTransferResult.Paused();
+        }
+
+        var terminalStatus = await ariaManager.ResolveTerminalStatusAsync(
+            gid,
+            statusResult,
+            lastKnownFilePath: null,
+            cancellationToken: request.CancellationToken).ConfigureAwait(true);
+        if (terminalStatus != null)
+        {
+            return await CreateTransferResultAsync(terminalStatus, request)
+                .ConfigureAwait(true);
+        }
+
+        _logger.LogWarningMessage(
+            $"aria2 pause could not be confirmed after WebSocket disconnect; state={state}.");
+        return DownloadTransferResult.Failed(
+            DownloadTransferFailureKind.TransientNetwork,
+            "download.transfer.aria2-rpc");
+    }
+
+    private async Task<DownloadTransferResult> CreateTransferResultAsync(
+        AriaDownloadStatus status,
+        DownloadTransferRequest request)
+    {
+        if (status.Result == DownloadResult.SUCCESS)
+        {
+            var finalFile = Path.Combine(request.Directory, request.FileName);
+            var integrity = DownloadFileIntegrity.Check(
+                finalFile,
+                request.ExpectedBytes);
+            if (!integrity.IsUsable)
+            {
+                _logger.LogInformationMessage(
+                    integrity.Reason ?? "Downloaded media file is not usable.");
+                return DownloadTransferResult.Failed(
+                    DownloadTransferFailureKind.InvalidMedia,
+                    "download.transfer.invalid-media");
+            }
+
+            return DownloadTransferResult.Succeeded();
+        }
+
+        if (ShouldClearBackendIdentity(status.ErrorCode))
+        {
+            await request.SetBackendIdentityAsync(
+                null,
+                request.CancellationToken).ConfigureAwait(true);
+        }
+
+        return Aria2TransferFailureClassifier.Classify(
+            status.ErrorCode,
+            status.ErrorMessage);
+    }
+
+    private static async Task<AriaDownloadStatus?> CancelAndObserveStatusAsync(
+        CancellationTokenSource cancellation,
+        Task<AriaDownloadStatus> statusTask)
+    {
+        await cancellation.CancelAsync().ConfigureAwait(true);
+        try
+        {
+            return await statusTask.ConfigureAwait(true);
+        }
+        catch (OperationCanceledException) when (cancellation.IsCancellationRequested)
+        {
+            return null;
+        }
+    }
+
+    private static async Task ObserveRacedTaskCompletionAsync(Task? task)
+    {
+        if (task != null)
+        {
+            await task.ConfigureAwait(ConfigureAwaitOptions.SuppressThrowing);
+        }
+    }
+
     private async Task<AriaTaskPreparation> EnsureAriaTaskAsync(
         DownloadTransferRequest request)
     {
@@ -275,7 +482,9 @@ internal sealed partial class Aria2TransferBackend : ITransferBackend
         string? existingStatus = null;
         if (!string.IsNullOrWhiteSpace(gid))
         {
-            var status = await _ariaClient.TellStatus(gid).ConfigureAwait(true);
+            var status = await _ariaClient
+                .TellStatus(gid, request.CancellationToken)
+                .ConfigureAwait(true);
             if (status is not { Result: { } statusResult })
             {
                 if (IsNotFound(status.Error))

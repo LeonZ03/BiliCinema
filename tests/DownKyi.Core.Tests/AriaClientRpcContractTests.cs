@@ -65,7 +65,9 @@ public sealed class AriaClientRpcContractTests
     [InlineData("remove")]
     [InlineData("force-remove")]
     [InlineData("remove-result")]
-    public async Task TransferRemovalMethodsPropagateCancellation(string operation)
+    [InlineData("pause")]
+    [InlineData("tell-status")]
+    public async Task SelectedRpcMethodsPropagateCancellation(string operation)
     {
         using var cancellation = new CancellationTokenSource();
         var requestStarted = new TaskCompletionSource(
@@ -82,11 +84,13 @@ public sealed class AriaClientRpcContractTests
                 await Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken).ConfigureAwait(false);
                 return null;
             });
-        var request = operation switch
+        Task request = operation switch
         {
             "remove" => client.RemoveAsync("gid", cancellation.Token),
             "force-remove" => client.ForceRemoveAsync("gid", cancellation.Token),
             "remove-result" => client.RemoveDownloadResultAsync("gid", cancellation.Token),
+            "pause" => client.PauseAsync("gid", cancellation.Token),
+            "tell-status" => client.TellStatus("gid", cancellation.Token),
             _ => throw new ArgumentOutOfRangeException(nameof(operation), operation, null)
         };
 
@@ -95,6 +99,22 @@ public sealed class AriaClientRpcContractTests
 
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => request);
         Assert.Equal(cancellation.Token, observedToken);
+    }
+
+    [Theory]
+    [InlineData(nameof(AriaClient.PauseAsync))]
+    [InlineData(nameof(AriaClient.TellStatus))]
+    public void PauseCheckpointRpcMethodsRequireCancellationToken(string methodName)
+    {
+        var method = Assert.Single(typeof(AriaClient).GetMethods(
+            BindingFlags.Instance | BindingFlags.Public | BindingFlags.DeclaredOnly),
+            candidate => string.Equals(candidate.Name, methodName, StringComparison.Ordinal));
+        var cancellationParameter = Assert.Single(
+            method.GetParameters(),
+            parameter => parameter.ParameterType == typeof(CancellationToken));
+
+        Assert.False(cancellationParameter.IsOptional);
+        Assert.False(cancellationParameter.HasDefaultValue);
     }
 
     [Fact]
@@ -131,13 +151,13 @@ public sealed class AriaClientRpcContractTests
             new(nameof(AriaClient.AddMetalinkAsync), "aria2.addMetalink", true, client => client.AddMetalinkAsync("metalink", [], sendOption)),
             new(nameof(AriaClient.RemoveAsync), "aria2.remove", true, client => client.RemoveAsync("gid")),
             new(nameof(AriaClient.ForceRemoveAsync), "aria2.forceRemove", true, client => client.ForceRemoveAsync("gid")),
-            new(nameof(AriaClient.PauseAsync), "aria2.pause", true, client => client.PauseAsync("gid")),
+            new(nameof(AriaClient.PauseAsync), "aria2.pause", true, client => client.PauseAsync("gid", TestContext.Current.CancellationToken)),
             new(nameof(AriaClient.PauseAllAsync), "aria2.pauseAll", true, client => client.PauseAllAsync()),
             new(nameof(AriaClient.ForcePauseAsync), "aria2.forcePause", true, client => client.ForcePauseAsync("gid")),
             new(nameof(AriaClient.ForcePauseAllAsync), "aria2.forcePauseAll", true, client => client.ForcePauseAllAsync()),
             new(nameof(AriaClient.UnpauseAsync), "aria2.unpause", true, client => client.UnpauseAsync("gid")),
             new(nameof(AriaClient.UnpauseAllAsync), "aria2.unpauseAll", true, client => client.UnpauseAllAsync()),
-            new(nameof(AriaClient.TellStatus), "aria2.tellStatus", true, client => client.TellStatus("gid")),
+            new(nameof(AriaClient.TellStatus), "aria2.tellStatus", true, client => client.TellStatus("gid", TestContext.Current.CancellationToken)),
             new(nameof(AriaClient.GetUrisAsync), "aria2.getUris", true, client => client.GetUrisAsync("gid")),
             new(nameof(AriaClient.GetFilesAsync), "aria2.getFiles", true, client => client.GetFilesAsync("gid")),
             new(nameof(AriaClient.GetPeersAsync), "aria2.getPeers", true, client => client.GetPeersAsync("gid")),
