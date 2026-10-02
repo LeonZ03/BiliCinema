@@ -270,6 +270,52 @@ public sealed class DownloadManagerCoordinatorTests
     }
 
     [Fact]
+    public async Task RemovedCompletedHistoryIsImmediatelyEligibleForDownloadAgain()
+    {
+        using var context = new CoordinatorContext();
+        await context.CreateCompletedItemAsync(
+            "redownload-after-delete", "media", "redownload-after-delete.mp4");
+        await context.Coordinator.LoadDownloadedHistoryAsync();
+        var completed = Assert.Single(context.State.Downloaded);
+        var desktop = new TestDesktopInteractionContext();
+        var duplicatePolicy = new DownloadDuplicatePolicy(
+            context.State,
+            context.Storage,
+            desktop.Notifications,
+            desktop.Dialogs);
+        var page = new DownKyi.Presentation.VideoPage
+        {
+            Cid = completed.DownloadBase.Cid,
+            AudioQualityFormat = completed.AudioCodec.Name,
+            PlayUrl = new PlayUrl { Dash = new PlayUrlDash() }
+        };
+        var quality = new DownKyi.Presentation.VideoQuality
+        {
+            Quality = completed.Resolution.Id,
+            SelectedVideoCodec = completed.VideoCodecName
+        };
+
+        Assert.True(await duplicatePolicy.ShouldSkipAsync(
+            page,
+            quality,
+            DownKyi.Core.Settings.RepeatDownloadStrategy.JumpOver,
+            TestContext.Current.CancellationToken));
+
+        await context.Coordinator.RemoveDownloadedAsync(
+            completed,
+            TestContext.Current.CancellationToken);
+
+        Assert.Empty(context.State.Downloaded);
+        Assert.Empty(await context.Storage.GetDownloadedAsync(
+            TestContext.Current.CancellationToken));
+        Assert.False(await duplicatePolicy.ShouldSkipAsync(
+            page,
+            quality,
+            DownKyi.Core.Settings.RepeatDownloadStrategy.JumpOver,
+            TestContext.Current.CancellationToken));
+    }
+
+    [Fact]
     public async Task LegacyCompletedItemWithoutPublishedMapReportsMissingRecordWithoutGuessing()
     {
         using var context = new CoordinatorContext();
