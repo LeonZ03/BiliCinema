@@ -205,6 +205,11 @@ public sealed class Aria2PauseEventTests
             TaskCreationOptions.RunContinuationsAsynchronously);
         var statusCancellationObserved = new TaskCompletionSource(
             TaskCreationOptions.RunContinuationsAsynchronously);
+        var pauseRpcStarted = new TaskCompletionSource(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        var allowPauseNotification = new TaskCompletionSource(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        Task<DownloadTransferResult>? transfer = null;
         var tellStatusCount = 0;
         var client = CreateClient(async (_, payload, cancellationToken) =>
         {
@@ -231,6 +236,10 @@ public sealed class Aria2PauseEventTests
 
                     throw new InvalidOperationException("The status request was not canceled.");
                 case "aria2.pause":
+                    pauseRpcStarted.TrySetResult();
+                    await allowPauseNotification.Task
+                        .WaitAsync(cancellationToken)
+                        .ConfigureAwait(false);
                     var receiveAttempt = socket.ReceiveAttemptCount;
                     socket.Emit("aria2.onDownloadPause", gid);
                     await socket.WaitForReceiveAttemptAsync(
@@ -248,11 +257,17 @@ public sealed class Aria2PauseEventTests
             gid,
             pauseRequested,
             initialStatusStarted,
-            beforeAwait: () =>
+            beforeAwait: async () =>
             {
                 pauseRequested.TrySetResult();
-                return Task.CompletedTask;
-            });
+                await pauseRpcStarted.Task
+                    .WaitAsync(TestContext.Current.CancellationToken)
+                    .ConfigureAwait(true);
+                Assert.NotNull(transfer);
+                Assert.False(transfer.IsCompleted);
+                allowPauseNotification.TrySetResult();
+            },
+            transferTaskObserver: task => transfer = task);
 
         Assert.Equal(DownloadTransferOutcome.Paused, result.Outcome);
         Assert.Equal(1, Volatile.Read(ref tellStatusCount));
@@ -740,7 +755,8 @@ public sealed class Aria2PauseEventTests
         Func<Task> beforeAwait,
         Action<string>? outputPathObserver = null,
         Func<CancellationToken, Task>? waitForPauseAsync = null,
-        ILogger<Aria2TransferBackend>? backendLogger = null)
+        ILogger<Aria2TransferBackend>? backendLogger = null,
+        Action<Task<DownloadTransferResult>>? transferTaskObserver = null)
     {
         var directory = Path.Combine(
             Path.GetTempPath(),
@@ -794,6 +810,7 @@ public sealed class Aria2PauseEventTests
                 CancellationToken: requestCancellation.Token,
                 StagingDirectory: directory);
             var transferTask = backend.TransferAsync(request);
+            transferTaskObserver?.Invoke(transferTask);
             await initialStatusStarted.Task
                 .WaitAsync(TestContext.Current.CancellationToken)
                 .ConfigureAwait(true);

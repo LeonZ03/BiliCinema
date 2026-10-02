@@ -28,6 +28,7 @@ internal sealed class DownloadOrchestrator : IDownloadRuntime
     private readonly Lock _schedulerSync = new();
     private readonly SemaphoreSlim _schedulerIntentGate = new(1, 1);
     private readonly HashSet<DownloadTaskId> _pauseOwnedTasks = [];
+    private readonly Queue<DownloadTaskId> _resumePriority = [];
     private Channel<DownloadTaskId>? _admissionQueue;
     private Channel<DownloadTaskId>? _downloadQueue;
     private Task _admissionWorker = Task.CompletedTask;
@@ -334,7 +335,7 @@ internal sealed class DownloadOrchestrator : IDownloadRuntime
 
                 if (task?.Phase == DownloadPhase.Queued)
                 {
-                    await EnqueueAsync(taskId, cancellationToken).ConfigureAwait(false);
+                    EnqueuePauseOwnedTask(taskId);
                 }
 
                 lock (_schedulerSync)
@@ -370,6 +371,17 @@ internal sealed class DownloadOrchestrator : IDownloadRuntime
 
             _dispatchBlocked?.TrySetResult();
             _dispatchBlocked = null;
+        }
+    }
+
+    private void EnqueuePauseOwnedTask(DownloadTaskId taskId)
+    {
+        lock (_schedulerSync)
+        {
+            if (_scheduledTasks.TryAdd(taskId, 0))
+            {
+                _resumePriority.Enqueue(taskId);
+            }
         }
     }
 
@@ -463,10 +475,16 @@ internal sealed class DownloadOrchestrator : IDownloadRuntime
     {
         try
         {
-            await foreach (var taskId in reader.ReadAllAsync(shutdownToken).ConfigureAwait(false))
+            while (true)
             {
-                ActiveDownloadExecution? execution = null;
-                var ownsExecution = false;
+                var admission = await WaitForExecutionAdmissionAsync(reader, shutdownToken)
+                    .ConfigureAwait(false);
+                if (admission == null)
+                {
+                    return;
+                }
+
+                var (taskId, execution) = admission.Value;
                 try
                 {
                     var task = await _tasks.FindAsync(taskId, shutdownToken).ConfigureAwait(false);
@@ -475,15 +493,7 @@ internal sealed class DownloadOrchestrator : IDownloadRuntime
                         continue;
                     }
 
-                    execution = await WaitForExecutionAdmissionAsync(taskId, shutdownToken)
-                        .ConfigureAwait(false);
-                    ownsExecution = execution != null;
-                    if (!ownsExecution)
-                    {
-                        continue;
-                    }
-
-                    await _stateWriter.StartAsync(taskId, execution!.Token).ConfigureAwait(false);
+                    await _stateWriter.StartAsync(taskId, execution.Token).ConfigureAwait(false);
                     execution.ReportStarted();
                     await _executor.ExecuteAsync(taskId, execution.Token).ConfigureAwait(false);
                 }
@@ -491,7 +501,7 @@ internal sealed class DownloadOrchestrator : IDownloadRuntime
                 {
                     return;
                 }
-                catch (OperationCanceledException) when (execution?.IsCancellationRequested == true)
+                catch (OperationCanceledException) when (execution.IsCancellationRequested)
                 {
                     continue;
                 }
@@ -514,15 +524,12 @@ internal sealed class DownloadOrchestrator : IDownloadRuntime
                 {
                     try
                     {
-                        execution?.ReportNotStarted();
+                        execution.ReportNotStarted();
                         await ConfirmPauseAfterWorkerStopsAsync(taskId).ConfigureAwait(false);
                         ActiveDownloadExecution? ownedExecution = null;
-                        if (ownsExecution)
+                        lock (_schedulerSync)
                         {
-                            lock (_schedulerSync)
-                            {
-                                _activeExecutions.TryRemove(taskId, out ownedExecution);
-                            }
+                            _activeExecutions.TryRemove(taskId, out ownedExecution);
                         }
 
                         if (ownedExecution != null)
@@ -531,7 +538,7 @@ internal sealed class DownloadOrchestrator : IDownloadRuntime
                         }
                         else
                         {
-                            execution?.Dispose();
+                            execution.Dispose();
                         }
 
                         _scheduledTasks.TryRemove(taskId, out _);
@@ -550,8 +557,9 @@ internal sealed class DownloadOrchestrator : IDownloadRuntime
         }
     }
 
-    private async Task<ActiveDownloadExecution?> WaitForExecutionAdmissionAsync(
-        DownloadTaskId taskId,
+    private async Task<(DownloadTaskId TaskId, ActiveDownloadExecution Execution)?>
+        WaitForExecutionAdmissionAsync(
+        ChannelReader<DownloadTaskId> reader,
         CancellationToken shutdownToken)
     {
         while (true)
@@ -562,18 +570,45 @@ internal sealed class DownloadOrchestrator : IDownloadRuntime
                 dispatchResumed = _dispatchBlocked?.Task;
                 if (dispatchResumed == null)
                 {
-                    var execution = new ActiveDownloadExecution(shutdownToken);
-                    if (_activeExecutions.TryAdd(taskId, execution))
+                    DownloadTaskId? taskId = null;
+                    if (_resumePriority.TryDequeue(out var resumedTaskId))
                     {
-                        return execution;
+                        taskId = resumedTaskId;
+                    }
+                    else if (reader.TryRead(out var queuedTaskId))
+                    {
+                        taskId = queuedTaskId;
                     }
 
-                    execution.Dispose();
-                    return null;
+                    if (taskId == null)
+                    {
+                        dispatchResumed = null;
+                    }
+                    else
+                    {
+                        var execution = new ActiveDownloadExecution(shutdownToken);
+                        if (_activeExecutions.TryAdd(taskId, execution))
+                        {
+                            return (taskId, execution);
+                        }
+
+                        execution.Dispose();
+                        _scheduledTasks.TryRemove(taskId, out _);
+                        continue;
+                    }
                 }
             }
 
-            await dispatchResumed.WaitAsync(shutdownToken).ConfigureAwait(false);
+            if (dispatchResumed != null)
+            {
+                await dispatchResumed.WaitAsync(shutdownToken).ConfigureAwait(false);
+                continue;
+            }
+
+            if (!await reader.WaitToReadAsync(shutdownToken).ConfigureAwait(false))
+            {
+                return null;
+            }
         }
     }
 
@@ -665,6 +700,7 @@ internal sealed class DownloadOrchestrator : IDownloadRuntime
             _dispatchBlocked?.TrySetResult();
             _dispatchBlocked = null;
             _pauseOwnedTasks.Clear();
+            _resumePriority.Clear();
             _pauseIntent = false;
             _schedulerIntentVersion++;
         }
