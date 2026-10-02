@@ -275,7 +275,7 @@ internal static class VideoPagePlaybackMapper
                 // 上面的foreach不会选中HEVC编码，
                 // 而杜比视界只有HEVC编码，
                 // 因此这里再判断并设置一次
-                if (selectedVideoQuality.SelectedVideoCodec == null && selectedVideoQuality.VideoCodecList.Count > 0)
+                if (string.IsNullOrEmpty(selectedVideoQuality.SelectedVideoCodec) && selectedVideoQuality.VideoCodecList.Count > 0)
                 {
                     selectedVideoQuality.SelectedVideoCodec = selectedVideoQuality.VideoCodecList[0];
                 }
