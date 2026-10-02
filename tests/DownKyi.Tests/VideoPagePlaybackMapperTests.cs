@@ -13,7 +13,7 @@ public sealed class VideoPagePlaybackMapperTests : IDisposable
         Guid.NewGuid().ToString("N"));
 
     [Fact]
-    public void ApplyPlayUrlFallsBackToAvailableCodecAtHighestQuality()
+    public void ApplyPlayUrlFallsBackToHevcWhenAvcIsUnavailableAtHighestQuality()
     {
         Directory.CreateDirectory(_directory);
         using var settingsStore = new SettingsStore(Path.Combine(_directory, "settings.json"));
@@ -53,6 +53,48 @@ public sealed class VideoPagePlaybackMapperTests : IDisposable
 
         Assert.Equal(126, page.VideoQuality.Quality);
         Assert.Equal("杜比视界", page.VideoQuality.QualityFormat);
+        Assert.Equal("H.265/HEVC", page.VideoQuality.SelectedVideoCodec);
+    }
+
+    [Fact]
+    public void ApplyPlayUrlPreservesHevcFallbackWhenAv1IsUnavailable()
+    {
+        Directory.CreateDirectory(_directory);
+        using var settingsStore = new SettingsStore(Path.Combine(_directory, "settings.json"));
+        var settings = settingsStore.Current with
+        {
+            Video = settingsStore.Current.Video with
+            {
+                Quality = 127,
+                VideoCodecs = 13
+            },
+            User = settingsStore.Current.User with
+            {
+                Mid = 1,
+                IsLogin = true,
+                IsVip = true
+            }
+        };
+        var playUrl = new PlayUrl
+        {
+            Dash = new PlayUrlDash
+            {
+                Video =
+                [
+                    new PlayUrlDashVideo { Id = 80, CodecId = 7 },
+                    new PlayUrlDashVideo { Id = 80, CodecId = 12 }
+                ]
+            },
+            SupportFormats =
+            [
+                new PlayUrlSupportFormat { Quality = 80, NewDescription = "1080P 高清" }
+            ]
+        };
+        var page = new VideoPage();
+
+        VideoPagePlaybackMapper.ApplyPlayUrl(playUrl, page, settings);
+
+        Assert.Equal(80, page.VideoQuality.Quality);
         Assert.Equal("H.265/HEVC", page.VideoQuality.SelectedVideoCodec);
     }
 

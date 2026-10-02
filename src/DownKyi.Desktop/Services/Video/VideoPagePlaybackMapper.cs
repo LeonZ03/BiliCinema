@@ -178,10 +178,6 @@ internal static class VideoPagePlaybackMapper
     {
         var videoQualityList = new List<VideoQuality>();
         var codeIds = PlaybackQualityCatalog.GetCodecIds();
-        var codecPreference = codeIds
-            .OrderByDescending(codec => codec.Id == videoCodecs)
-            .Select(codec => codec.Name)
-            .ToArray();
 
         if (playUrl.Dash.Video == null)
         {
@@ -244,12 +240,46 @@ internal static class VideoPagePlaybackMapper
                 }
             }
 
-        }
+            // 设置选中的视频编码
+            var selectedVideoQuality = videoQualityList.FirstOrDefault(t => t.Quality == video.Id);
+            if (selectedVideoQuality == null)
+            {
+                continue;
+            }
 
-        foreach (var videoQuality in videoQualityList)
-        {
-            videoQuality.SelectedVideoCodec = codecPreference.FirstOrDefault(
-                codec => videoQuality.VideoCodecList.Contains(codec, StringComparer.Ordinal)) ?? string.Empty;
+            // 设置选中的视频编码
+            var videoCodecsName = codeIds.FirstOrDefault(t => t.Id == videoCodecs)?.Name ?? string.Empty;
+            if (videoQualityList[videoQualityList.IndexOf(selectedVideoQuality)].VideoCodecList.Contains(videoCodecsName))
+            {
+                videoQualityList[videoQualityList.IndexOf(selectedVideoQuality)].SelectedVideoCodec = videoCodecsName;
+            }
+            else
+            {
+                // 当获取的视频没有设置的视频编码时
+                foreach (var codec in codeIds)
+                {
+                    if (videoQualityList[videoQualityList.IndexOf(selectedVideoQuality)].VideoCodecList
+                        .Contains(codec.Name))
+                    {
+                        videoQualityList[videoQualityList.IndexOf(selectedVideoQuality)].SelectedVideoCodec =
+                            codec.Name;
+                    }
+
+                    if (codec.Id == videoCodecs)
+                    {
+                        break;
+                    }
+                }
+
+                // 若默认编码为AVC，但画质为杜比视界时，
+                // 上面的foreach不会选中HEVC编码，
+                // 而杜比视界只有HEVC编码，
+                // 因此这里再判断并设置一次
+                if (string.IsNullOrEmpty(selectedVideoQuality.SelectedVideoCodec) && selectedVideoQuality.VideoCodecList.Count > 0)
+                {
+                    selectedVideoQuality.SelectedVideoCodec = selectedVideoQuality.VideoCodecList[0];
+                }
+            }
         }
 
         return videoQualityList;
