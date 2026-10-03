@@ -7,10 +7,6 @@
 
     <!--  系统  -->
     <system:String x:Key="Close">关闭</system:String>
-    <system:String x:Key="Maximize">最大化</system:String>
-    <system:String x:Key="Minimize">最小化</system:String>
-    <system:String x:Key="Restore">还原</system:String>
-    <system:String x:Key="Skin">皮肤</system:String>
 
     <!--  Index  -->
     <system:String x:Key="Login">登录</system:String>
