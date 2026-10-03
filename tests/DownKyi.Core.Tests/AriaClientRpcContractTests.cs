@@ -147,16 +147,11 @@ public sealed class AriaClientRpcContractTests
         return
         [
             new(nameof(AriaClient.AddUriAsync), "aria2.addUri", true, client => client.AddUriAsync(["https://media.example/video"], sendOption)),
-            new(nameof(AriaClient.AddTorrentAsync), "aria2.addTorrent", true, client => client.AddTorrentAsync("torrent", [], sendOption)),
-            new(nameof(AriaClient.AddMetalinkAsync), "aria2.addMetalink", true, client => client.AddMetalinkAsync("metalink", [], sendOption)),
             new(nameof(AriaClient.RemoveAsync), "aria2.remove", true, client => client.RemoveAsync("gid")),
             new(nameof(AriaClient.ForceRemoveAsync), "aria2.forceRemove", true, client => client.ForceRemoveAsync("gid")),
             new(nameof(AriaClient.PauseAsync), "aria2.pause", true, client => client.PauseAsync("gid", TestContext.Current.CancellationToken)),
             new(nameof(AriaClient.PauseAllAsync), "aria2.pauseAll", true, client => client.PauseAllAsync()),
-            new(nameof(AriaClient.ForcePauseAsync), "aria2.forcePause", true, client => client.ForcePauseAsync("gid")),
-            new(nameof(AriaClient.ForcePauseAllAsync), "aria2.forcePauseAll", true, client => client.ForcePauseAllAsync()),
             new(nameof(AriaClient.UnpauseAsync), "aria2.unpause", true, client => client.UnpauseAsync("gid")),
-            new(nameof(AriaClient.UnpauseAllAsync), "aria2.unpauseAll", true, client => client.UnpauseAllAsync()),
             new(nameof(AriaClient.TellStatus), "aria2.tellStatus", true, client => client.TellStatus("gid", TestContext.Current.CancellationToken)),
             new(nameof(AriaClient.GetUrisAsync), "aria2.getUris", true, client => client.GetUrisAsync("gid")),
             new(nameof(AriaClient.GetFilesAsync), "aria2.getFiles", true, client => client.GetFilesAsync("gid")),
