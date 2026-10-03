@@ -1,5 +1,39 @@
 # 更新日志
 
+## [1.2.0] - 2026-10-02
+
+### Features
+
+- 内建下载器改为 DownKyi 自有的 HTTP Range 引擎，以有界并发直接写入分段位置、持久保存每段进度，并兼容既有 `.download` 续传资料。
+- 单视频下载设置可选择具体字幕轨；音视频内容不完整时会在建立任务前统一提示使用可用内容或跳过，并支持同类冲突套用到全部项目。
+- 弹幕下载新增 Bilibili XML 与 ASS + XML 输出，并支持本机表情／特殊字符清理、关键字屏蔽及发送者 UID 屏蔽。
+- 支持 Bilibili `list/<MID>?sid=<SERIES_ID>` 系列列表地址、浏览器 Cookie 导入，以及已完成下载历史的按需载入与分页。
+
+### User Interface
+
+- 桌面界面统一为 Fluent 风格的 Light／Dark semantic surfaces，并更新情境式左侧导航、选中／焦点状态、设置页、工具箱、下载列表与视频详情布局。
+- 视频详情重新解析时会保留既有内容与操作脉络；搜索框、下拉选择、批次下载和下载状态提示的键盘焦点及交互反馈更清晰。
+
+### Bug Fixes
+
+- 下载产物改用任务私有 staging 与原子发布，避免背景清理删除非本任务档案或覆盖外部出现的同名目的地；跨安装目录也会在产品启动前执行同一单实例保护。
+- 旧版下载资料迁移、active task／completed history 权责、输出保留键与损坏列分页均改为明确的持久化边界，保留既有任务、进度、已发布档案与隔离资料。
+- 内建下载续传会验证强 ETag、保守的 Last-Modified 时间窗及必要的重叠内容；aria2 完成结果、DURL timeline、最终音视频 stream 与实际 decode 也会在提交完成前验证。
+- “全部暂停／恢复”现在由下载 scheduler 统一关闸、确认 active aria2 GID 的暂停事件，并优先恢复本次暂停的任务；等待中的任务保持等待，WebSocket 通知不可用时回退既有 RPC 状态确认。
+- 修复所选画质缺少偏好 codec 时无法回退到可用串流、番剧试看被误当正式播放流、DASH backup URL 为空、重复 buvid Cookie，以及完成历史与批次操作的竞态问题。
+- 修复 Windows UI apartment、登录档外部更新、好友返回状态、下载批次跨导航、视频解析可见性与多个 Fluent 控制项的焦点／尺寸问题。
+
+### Security And Diagnostics
+
+- 封面请求保持匿名并统一为 HTTPS；下载失败与反馈 Issue 预填会移除外部资源 URL，同时保留可复制的脱敏诊断。
+- 更新检查统一使用 SemVer 2.0.0 precedence；手动检查更新不会显示或执行“跳过此版本”，自动启动提示才可保存该选择。
+
+### Reliability And Release
+
+- release subject、package validator 与 previous-tag resolution 改为从 `version.txt` 和 annotated first-parent SemVer 历史衍生，不再复制版本专属脚本或测试名称。
+- CentralTestRunner、跨平台 process supervision、Windows ETW、macOS bundle／DMG 与 Linux AppImage 启动验证改用明确 readiness／lifecycle state，并保留首次失败与 cleanup 诊断，不以固定等待时间判断完成。
+- 更新固定 FFmpeg mirror，并维持 package manifest、SHA-256、aria2／FFmpeg 内容、版本与跨平台启动闸门。
+
 ## [1.1.6] - 2026-09-11
 
 ### Bug Fixes
