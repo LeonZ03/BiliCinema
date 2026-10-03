@@ -5,6 +5,9 @@ namespace DownKyi.Core.BiliApi.Users.Models;
 
 public class SpacePublicationList : BaseModel
 {
-    [JsonProperty("tlist")] public SpacePublicationListType Tlist { get; set; } = new();
+    [JsonProperty("tlist")]
+    public IReadOnlyDictionary<string, SpacePublicationListTypeVideoZone> Tlist { get; set; }
+        = new Dictionary<string, SpacePublicationListTypeVideoZone>();
+
     [JsonProperty("vlist")] public IReadOnlyList<SpacePublicationListVideo>? Vlist { get; set; }
 }

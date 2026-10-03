@@ -18,8 +18,6 @@ public class VideoZone
 
     private VideoZone()
     {
-        // SpacePublicationListType类需要同步更新
-
         //动画
         _zones.Add(new ZoneAttr(1, "douga", "动画")); // 主分区
         _zones.Add(new ZoneAttr(24, "mad", "MAD·AMV", 1)); // 具有一定制作程度的动画或静画的二次创作视频

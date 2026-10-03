@@ -135,14 +135,16 @@ public sealed class BiliApiModelContractTests
     [Fact]
     public void PublicationTypesExcludeEmptyDefaultZones()
     {
-        var publication = new SpacePublicationList
-        {
-            Tlist = new SpacePublicationListType
+        var publication = JsonConvert.DeserializeObject<SpacePublicationList>(
+            """
             {
-                Dance = new SpacePublicationListTypeVideoZone { Tid = 129, Name = "舞蹈", Count = 68 },
-                Life = new SpacePublicationListTypeVideoZone { Tid = 160, Name = "生活", Count = 34 }
+              "tlist": {
+                "129": { "tid": 129, "name": "舞蹈", "count": 68 },
+                "160": { "tid": 160, "name": "生活", "count": 34 },
+                "999": { "tid": 999, "name": "空分区", "count": 0 }
+              }
             }
-        };
+            """);
 
         var zones = UserSpace.GetPublicationType(publication);
 

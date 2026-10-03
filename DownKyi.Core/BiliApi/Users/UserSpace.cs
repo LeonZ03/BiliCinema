@@ -3,7 +3,6 @@ using DownKyi.Core.BiliApi.Sign;
 using DownKyi.Core.BiliApi.Users.Models;
 using DownKyi.Core.Storage;
 using Newtonsoft.Json;
-using Newtonsoft.Json.Linq;
 
 namespace DownKyi.Core.BiliApi.Users;
 
@@ -73,22 +72,14 @@ public static partial class UserSpace
     /// <returns></returns>
     public static IReadOnlyList<SpacePublicationListTypeVideoZone>? GetPublicationType(SpacePublicationList? publication)
     {
-        if (publication?.Tlist == null)
+        if (publication == null)
         {
             return null;
         }
 
-        var result = new List<SpacePublicationListTypeVideoZone>();
-        var typeList = JObject.Parse(publication.Tlist.ToString("N"));
-        foreach (var item in typeList)
-        {
-            if (item.Value == null) continue;
-            var value = JsonConvert.DeserializeObject<SpacePublicationListTypeVideoZone>(item.Value.ToString());
-            if (value is { Count: > 0 })
-                result.Add(value);
-        }
-
-        return result;
+        return publication.Tlist.Values
+            .Where(static zone => zone.Count > 0)
+            .ToList();
     }
 
     /// <summary>
