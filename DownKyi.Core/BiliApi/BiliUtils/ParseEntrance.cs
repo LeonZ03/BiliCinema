@@ -10,8 +10,6 @@ public static partial class ParseEntrance
     public static readonly string ShortUrl = "https://b23.tv/";
     public static readonly string MobileUrl = "https://m.bilibili.com";
 
-    public static readonly string SpaceUrl = "https://space.bilibili.com";
-
     public static readonly string VideoUrl = $"{WwwUrl}/video/";
     public static readonly string BangumiUrl = $"{WwwUrl}/bangumi/play/";
     public static readonly string BangumiMediaUrl = $"{WwwUrl}/bangumi/media/";
