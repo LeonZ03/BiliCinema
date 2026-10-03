@@ -6,32 +6,6 @@ namespace DownKyi.Core.BiliApi.Zone;
 public static class VideoZoneIcon
 {
     private const string DefaultImageKey = "videoUpDrawingImage";
-    private static readonly Dictionary<int, string> ImageKeys =
-        new Dictionary<int, string>
-    {
-        [-10] = "Zone.cheeseDrawingImage",
-        [1] = "Zone.dougaDrawingImage",
-        [3] = "Zone.musicDrawingImage",
-        [4] = "Zone.gameDrawingImage",
-        [5] = "Zone.entDrawingImage",
-        [11] = "Zone.teleplayDrawingImage",
-        [13] = "Zone.animeDrawingImage",
-        [23] = "Zone.movieDrawingImage",
-        [36] = "Zone.techDrawingImage",
-        [119] = "Zone.kichikuDrawingImage",
-        [129] = "Zone.danceDrawingImage",
-        [155] = "Zone.fashionDrawingImage",
-        [160] = "Zone.lifeDrawingImage",
-        [167] = "Zone.guochuangDrawingImage",
-        [177] = "Zone.documentaryDrawingImage",
-        [181] = "Zone.cinephileDrawingImage",
-        [188] = "Zone.digitalDrawingImage",
-        [202] = "Zone.informationDrawingImage",
-        [211] = "Zone.foodDrawingImage",
-        [217] = "Zone.animalDrawingImage",
-        [223] = "Zone.carDrawingImage",
-        [234] = "Zone.sportsDrawingImage"
-    };
 
     /// <summary>
     /// 根据tid，获取视频分区图标
@@ -40,6 +14,31 @@ public static class VideoZoneIcon
     /// <returns></returns>
     public static string GetZoneImageKey(int tid)
     {
-        return ImageKeys.TryGetValue(tid, out var imageKey) ? imageKey : DefaultImageKey;
+        return tid switch
+        {
+            -10 => "Zone.cheeseDrawingImage",
+            1 => "Zone.dougaDrawingImage",
+            3 => "Zone.musicDrawingImage",
+            4 => "Zone.gameDrawingImage",
+            5 => "Zone.entDrawingImage",
+            11 => "Zone.teleplayDrawingImage",
+            13 => "Zone.animeDrawingImage",
+            23 => "Zone.movieDrawingImage",
+            36 => "Zone.techDrawingImage",
+            119 => "Zone.kichikuDrawingImage",
+            129 => "Zone.danceDrawingImage",
+            155 => "Zone.fashionDrawingImage",
+            160 => "Zone.lifeDrawingImage",
+            167 => "Zone.guochuangDrawingImage",
+            177 => "Zone.documentaryDrawingImage",
+            181 => "Zone.cinephileDrawingImage",
+            188 => "Zone.digitalDrawingImage",
+            202 => "Zone.informationDrawingImage",
+            211 => "Zone.foodDrawingImage",
+            217 => "Zone.animalDrawingImage",
+            223 => "Zone.carDrawingImage",
+            234 => "Zone.sportsDrawingImage",
+            _ => DefaultImageKey
+        };
     }
 }
