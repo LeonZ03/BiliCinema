@@ -78,6 +78,35 @@ public sealed class SectionNavigationVisualStateTests
         });
     }
 
+    [AvaloniaFact]
+    public Task SectionBackHeadersKeepTextInsideTheirHoverSurfaceAcrossThemes()
+    {
+        return AvaloniaTestDispatcher.RunAsync(() =>
+        {
+            var application = DesktopTestResources.EnsureProductThemeResources();
+            var originalTheme = application.RequestedThemeVariant;
+            var fluentTheme = new FluentTheme();
+            application.Styles.Insert(0, fluentTheme);
+
+            try
+            {
+                foreach (var theme in new[] { ThemeVariant.Light, ThemeVariant.Dark })
+                {
+                    application.RequestedThemeVariant = theme;
+
+                    AssertBackHeaderContainsTitle(new ViewSettings());
+                    AssertBackHeaderContainsTitle(new ViewDownloadManager());
+                    AssertBackHeaderContainsTitle(new ViewToolbox());
+                }
+            }
+            finally
+            {
+                application.RequestedThemeVariant = originalTheme;
+                application.Styles.Remove(fluentTheme);
+            }
+        });
+    }
+
     private static void AssertTargetViewUsesSharedThemes(
         UserControl view,
         ControlTheme listTheme,
@@ -86,6 +115,41 @@ public sealed class SectionNavigationVisualStateTests
         var navigation = Assert.IsType<ListBox>(view.FindControl<ListBox>("NameLeftTabHeaders"));
         Assert.Same(listTheme, navigation.Theme);
         Assert.Same(itemTheme, navigation.ItemContainerTheme);
+    }
+
+    private static void AssertBackHeaderContainsTitle(UserControl view)
+    {
+        var window = new Window
+        {
+            Content = view,
+            Width = 600,
+            Height = 240
+        };
+
+        try
+        {
+            window.Show();
+            window.UpdateLayout();
+
+            var button = Assert.Single(
+                view.GetVisualDescendants().OfType<Button>());
+            var chrome = Assert.Single(
+                button.GetVisualDescendants().OfType<Border>());
+            var title = Assert.Single(
+                button.GetVisualDescendants().OfType<TextBlock>());
+            var titleRight = title.TranslatePoint(
+                new Point(title.Bounds.Width, 0),
+                chrome);
+
+            Assert.NotNull(titleRight);
+            Assert.True(
+                chrome.Bounds.Width - titleRight.Value.X >= 8,
+                $"{view.GetType().Name} leaves less than 8 px after its title.");
+        }
+        finally
+        {
+            window.Close();
+        }
     }
 
     private static void AssertSelectedState(
