@@ -1,4 +1,3 @@
-using System.Net;
 using System.Text.Json.Serialization;
 
 namespace DownKyi.Core.Storage;
@@ -38,10 +37,5 @@ public class DownKyiCookie
     {
         Domain = domain;
         IsWireValue = isWireValue;
-    }
-
-    public Cookie ToSystemNetCookie()
-    {
-        return new Cookie(Name, Value, "/", Domain);
     }
 }
