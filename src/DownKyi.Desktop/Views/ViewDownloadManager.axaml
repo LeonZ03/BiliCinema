@@ -19,7 +19,7 @@
                 VerticalAlignment="Center"
                 Command="{Binding BackSpaceCommand}"
                 Theme="{StaticResource ImageBtnStyle}">
-                <StackPanel Orientation="Horizontal">
+                <StackPanel Margin="0,0,8,0" Orientation="Horizontal">
                     <ContentControl Width="24" Height="24">
                         <Path
                             Theme="{StaticResource NavigationIcon.ArrowBack}"

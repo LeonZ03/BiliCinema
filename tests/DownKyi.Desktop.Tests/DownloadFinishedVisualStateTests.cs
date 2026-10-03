@@ -89,6 +89,8 @@ public sealed class DownloadFinishedVisualStateTests
             view.FindControl<Button>("NameClearAllDownloadedButton"));
         content.IsVisible = true;
         list.ItemsSource = new[] { item };
+        var selectedSortItem = Assert.IsType<ComboBoxItem>(sort.Items[0]);
+        selectedSortItem.Content = "按下载时间升序";
         sort.SelectedIndex = 0;
 
         var host = new ContentControl
@@ -108,6 +110,24 @@ public sealed class DownloadFinishedVisualStateTests
         {
             window.Show();
             window.UpdateLayout();
+
+            var selectedSortText = Assert.IsType<string>(selectedSortItem.Content);
+            var measuredSortText = new TextBlock
+            {
+                FontFamily = sort.FontFamily,
+                FontSize = sort.FontSize,
+                FontStyle = sort.FontStyle,
+                FontWeight = sort.FontWeight,
+                Text = selectedSortText
+            };
+            measuredSortText.Measure(Size.Infinity);
+            var selectedSortContent = Assert.Single(
+                sort.GetVisualDescendants().OfType<ContentControl>(),
+                candidate => candidate.Name == "ContentPresenter");
+            Assert.True(
+                selectedSortContent.Bounds.Width >= measuredSortText.DesiredSize.Width,
+                $"Sort text needs {measuredSortText.DesiredSize.Width} px but only "
+                + $"{selectedSortContent.Bounds.Width} px is available.");
 
             var container = Assert.IsType<ListBoxItem>(list.ContainerFromIndex(0));
             var row = Named<Border>(container, "NameFinishedTaskRow");

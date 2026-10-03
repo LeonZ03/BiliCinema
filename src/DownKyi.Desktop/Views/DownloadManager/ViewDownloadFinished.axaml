@@ -260,7 +260,7 @@
                         Spacing="10">
                         <ComboBox
                             Name="NameFinishedSort"
-                            Width="120"
+                            MinWidth="120"
                             VerticalAlignment="Center"
                             SelectedIndex="{Binding FinishedSortBy}">
                             <Interaction.Behaviors>
