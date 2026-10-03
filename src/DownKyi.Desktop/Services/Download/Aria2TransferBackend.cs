@@ -499,7 +499,6 @@ internal sealed partial class Aria2TransferBackend : ITransferBackend
         var terminalStatus = await ariaManager.ResolveTerminalStatusAsync(
             gid,
             statusResult,
-            lastKnownFilePath: null,
             cancellationToken: request.CancellationToken).ConfigureAwait(true);
         if (terminalStatus != null)
         {
