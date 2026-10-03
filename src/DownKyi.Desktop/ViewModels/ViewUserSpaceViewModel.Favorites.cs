@@ -19,7 +19,7 @@ internal partial class ViewUserSpaceViewModel
         {
             NavigationData = folders,
             Id = 3,
-            Icon = NormalIcon.Instance().FavoriteOutline,
+            Icon = NormalIcon.Current.FavoriteOutline,
             IconColor = "#FFFF6699",
             Title = DictionaryResource.GetString("PublicFavorites")
         });

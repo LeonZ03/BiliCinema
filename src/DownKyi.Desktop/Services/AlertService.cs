@@ -28,7 +28,7 @@ internal class AlertService
         int buttonNumber = 2,
         CancellationToken cancellationToken = default)
     {
-        var image = SystemIcon.Instance().Info;
+        var image = SystemIcon.Current.Info;
         var title = DictionaryResource.GetString("Info");
         return ShowMessage(image, title, message, buttonNumber, cancellationToken);
     }
@@ -44,7 +44,7 @@ internal class AlertService
         int buttonNumber = 1,
         CancellationToken cancellationToken = default)
     {
-        var image = SystemIcon.Instance().Warning;
+        var image = SystemIcon.Current.Warning;
         var title = DictionaryResource.GetString("Warning");
         return ShowMessage(image, title, message, buttonNumber, cancellationToken);
     }
@@ -58,7 +58,7 @@ internal class AlertService
         string message,
         CancellationToken cancellationToken = default)
     {
-        var image = SystemIcon.Instance().Error;
+        var image = SystemIcon.Current.Error;
         var title = DictionaryResource.GetString("Error");
         return ShowMessage(image, title, message, 1, cancellationToken);
     }

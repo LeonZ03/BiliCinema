@@ -211,7 +211,7 @@ public sealed class DownloadOrchestratorTests
             await GetTaskAsync(context, taskIds[3]));
         Assert.Equal(DownloadPhase.Queued, (await GetTaskAsync(context, taskIds[3])).Phase);
         Assert.Equal(DownloadStatus.WaitForDownload, queuedBeforeConfirmation.Downloading.DownloadStatus);
-        Assert.Same(ButtonIcon.Instance().Pause, queuedBeforeConfirmation.StartOrPause);
+        Assert.Same(ButtonIcon.Current.Pause, queuedBeforeConfirmation.StartOrPause);
 
         pauseConfirmed.TrySetResult();
         await pause.WaitAsync(TestContext.Current.CancellationToken);
@@ -226,7 +226,7 @@ public sealed class DownloadOrchestratorTests
             await GetTaskAsync(context, taskIds[3]));
         Assert.Equal(DownloadPhase.Queued, (await GetTaskAsync(context, taskIds[3])).Phase);
         Assert.Equal(DownloadStatus.WaitForDownload, queuedAfterConfirmation.Downloading.DownloadStatus);
-        Assert.Same(ButtonIcon.Instance().Pause, queuedAfterConfirmation.StartOrPause);
+        Assert.Same(ButtonIcon.Current.Pause, queuedAfterConfirmation.StartOrPause);
 
         await orchestrator.ResumeAllAsync(TestContext.Current.CancellationToken);
         await threeTasksStartedAfterResume.Task.WaitAsync(TestContext.Current.CancellationToken);

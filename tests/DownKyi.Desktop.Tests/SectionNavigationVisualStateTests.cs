@@ -237,13 +237,13 @@ public sealed class SectionNavigationVisualStateTests
                 new TabHeader
                 {
                     Id = 0,
-                    Image = NormalIcon.Instance().Downloading,
+                    Image = NormalIcon.Current.Downloading,
                     Title = "Downloading"
                 },
                 new TabHeader
                 {
                     Id = 1,
-                    Image = NormalIcon.Instance().DownloadFinished,
+                    Image = NormalIcon.Current.DownloadFinished,
                     Title = "Downloaded"
                 }
             },

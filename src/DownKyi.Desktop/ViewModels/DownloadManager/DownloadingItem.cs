@@ -13,10 +13,10 @@ namespace DownKyi.ViewModels.DownloadManager
         public DownloadingItem()
         {
             // 暂停继续按钮
-            StartOrPause = ButtonIcon.Instance().Pause;
+            StartOrPause = ButtonIcon.Current.Pause;
 
             // 删除按钮
-            Delete = ButtonIcon.Instance().Delete;
+            Delete = ButtonIcon.Current.Delete;
         }
 
         // model数据
@@ -121,9 +121,9 @@ namespace DownKyi.ViewModels.DownloadManager
                 ArgumentNullException.ThrowIfNull(value);
                 SetProperty(ref _startOrPause, value);
 
-                OperationTip = value.Equals(ButtonIcon.Instance().Start) ? DictionaryResource.GetString("StartDownload")
-                    : value.Equals(ButtonIcon.Instance().Pause) ? DictionaryResource.GetString("PauseDownload")
-                    : value.Equals(ButtonIcon.Instance().Retry) ? DictionaryResource.GetString("RetryDownload") : string.Empty;
+                OperationTip = value.Equals(ButtonIcon.Current.Start) ? DictionaryResource.GetString("StartDownload")
+                    : value.Equals(ButtonIcon.Current.Pause) ? DictionaryResource.GetString("PauseDownload")
+                    : value.Equals(ButtonIcon.Current.Retry) ? DictionaryResource.GetString("RetryDownload") : string.Empty;
             }
         }
 
@@ -141,9 +141,9 @@ namespace DownKyi.ViewModels.DownloadManager
         {
             StartOrPause = status switch
             {
-                DownloadStatus.PauseStarted or DownloadStatus.Pause => ButtonIcon.Instance().Start,
-                DownloadStatus.DownloadFailed => ButtonIcon.Instance().Retry,
-                _ => ButtonIcon.Instance().Pause
+                DownloadStatus.PauseStarted or DownloadStatus.Pause => ButtonIcon.Current.Start,
+                DownloadStatus.DownloadFailed => ButtonIcon.Current.Retry,
+                _ => ButtonIcon.Current.Pause
             };
         }
     }

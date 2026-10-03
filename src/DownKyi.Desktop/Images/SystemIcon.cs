@@ -1,13 +1,8 @@
 namespace DownKyi.Images;
 
-internal class SystemIcon
+internal sealed class SystemIcon
 {
-    private static SystemIcon? _instance;
-
-    public static SystemIcon Instance()
-    {
-        return _instance ??= new SystemIcon();
-    }
+    public static SystemIcon Current { get; } = new();
 
     private SystemIcon()
     {

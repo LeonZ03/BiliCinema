@@ -112,15 +112,15 @@ internal class ViewIndexViewModel : ViewModelBase
         _loginPanelVisibility = true;
         Header = "avares://DownKyi.Desktop/Resources/default_header.jpg";
 
-        TextLogo = LogoIcon.Instance().TextLogo;
+        TextLogo = LogoIcon.Current.TextLogo;
 
-        GeneralSearch = ButtonIcon.Instance().GeneralSearch;
+        GeneralSearch = ButtonIcon.Current.GeneralSearch;
 
-        Settings = ButtonIcon.Instance().Settings;
+        Settings = ButtonIcon.Current.Settings;
 
-        DownloadManager = ButtonIcon.Instance().DownloadManage;
+        DownloadManager = ButtonIcon.Current.DownloadManage;
 
-        Toolbox = ButtonIcon.Instance().Toolbox;
+        Toolbox = ButtonIcon.Current.Toolbox;
 
     }
 
@@ -304,7 +304,7 @@ internal class ViewIndexViewModel : ViewModelBase
         ArgumentNullException.ThrowIfNull(navigationContext);
         base.OnNavigatedTo(navigationContext);
 
-        DownloadManager = ButtonIcon.Instance().DownloadManage;
+        DownloadManager = ButtonIcon.Current.DownloadManage;
         DownloadManager.Height = 27;
         DownloadManager.Width = 32;
 

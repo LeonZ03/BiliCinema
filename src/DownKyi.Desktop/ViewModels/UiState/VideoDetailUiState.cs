@@ -24,7 +24,7 @@ internal sealed partial class VideoDetailUiState : ObservableObject
     private string _inputSearchText = string.Empty;
 
     [ObservableProperty]
-    private VectorImage _downloadManage = ButtonIcon.Instance().DownloadManage;
+    private VectorImage _downloadManage = ButtonIcon.Current.DownloadManage;
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsContentVisible))]

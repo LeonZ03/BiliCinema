@@ -87,7 +87,7 @@ internal partial class ViewMyBangumiFollowViewModel : ViewModelBase
         ArrowBack = NavigationIcon.CreateArrowBack();
 
         // 下载管理按钮
-        DownloadManage = ButtonIcon.Instance().DownloadManage;
+        DownloadManage = ButtonIcon.Current.DownloadManage;
         DownloadManage.Height = 24;
         DownloadManage.Width = 24;
 
@@ -393,7 +393,7 @@ internal partial class ViewMyBangumiFollowViewModel : ViewModelBase
         ArgumentNullException.ThrowIfNull(navigationContext);
         base.OnNavigatedTo(navigationContext);
 
-        DownloadManage = ButtonIcon.Instance().DownloadManage;
+        DownloadManage = ButtonIcon.Current.DownloadManage;
         DownloadManage.Height = 24;
         DownloadManage.Width = 24;
 

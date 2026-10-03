@@ -1,17 +1,10 @@
 namespace DownKyi.Images;
 
-internal class ButtonIcon
+internal sealed class ButtonIcon
 {
-    private static ButtonIcon? _instance;
+    public static ButtonIcon Current { get; } = new();
 
-    public static ButtonIcon Current => Instance();
-
-    public static ButtonIcon Instance()
-    {
-        return _instance ??= new ButtonIcon();
-    }
-
-    public ButtonIcon()
+    private ButtonIcon()
     {
         GeneralSearch = new VectorImage
         {

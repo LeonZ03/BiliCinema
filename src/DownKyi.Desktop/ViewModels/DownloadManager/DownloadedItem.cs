@@ -9,13 +9,13 @@ internal class DownloadedItem : DownloadBaseItem
     public DownloadedItem()
     {
         // 打开文件夹按钮
-        OpenFolder = ButtonIcon.Instance().Folder;
+        OpenFolder = ButtonIcon.Current.Folder;
 
         // 打开视频按钮
-        OpenVideo = ButtonIcon.Instance().Start;
+        OpenVideo = ButtonIcon.Current.Start;
 
         // 删除按钮
-        RemoveVideo = ButtonIcon.Instance().Trash;
+        RemoveVideo = ButtonIcon.Current.Trash;
     }
 
     // model数据

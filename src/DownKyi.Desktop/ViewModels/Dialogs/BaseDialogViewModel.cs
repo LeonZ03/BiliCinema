@@ -38,9 +38,9 @@ internal class BaseDialogViewModel : ObservableObject
         Title = new AppInfo().Name;
         CloseIcon = new VectorImage
         {
-            Height = SystemIcon.Instance().Close.Height,
-            Width = SystemIcon.Instance().Close.Width,
-            Data = SystemIcon.Instance().Close.Data
+            Height = SystemIcon.Current.Close.Height,
+            Width = SystemIcon.Current.Close.Width,
+            Data = SystemIcon.Current.Close.Data
         };
 
         #endregion

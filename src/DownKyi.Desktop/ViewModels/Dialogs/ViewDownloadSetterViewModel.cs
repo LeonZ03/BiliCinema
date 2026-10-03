@@ -173,9 +173,9 @@ internal class ViewDownloadSetterViewModel : BaseDialogViewModel
 
         Title = DictionaryResource.GetString("DownloadSetter");
 
-        CloudDownloadIcon = NormalIcon.Instance().CloudDownload;
+        CloudDownloadIcon = NormalIcon.Current.CloudDownload;
 
-        FolderIcon = NormalIcon.Instance().Folder;
+        FolderIcon = NormalIcon.Current.Folder;
 
         // 下载内容
         var videoSettings = _settingsStore.Current.Video;

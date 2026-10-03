@@ -51,7 +51,7 @@ internal sealed class ViewFavoritesViewModel : ViewModelBase
             _favorites.Add(new FavoriteFolder(
                 folder.Id,
                 folder.Cover,
-                NormalIcon.Instance().Favorite,
+                NormalIcon.Current.Favorite,
                 folder.Title,
                 folder.MediaCount,
                 DateTimeOffset.FromUnixTimeSeconds(folder.UpdatedAtUnixSeconds)
