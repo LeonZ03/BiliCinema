@@ -386,7 +386,7 @@ internal sealed class ViewVideoDetailViewModel : ViewModelBase
 
     private static VectorImage CreateDownloadManageIcon()
     {
-        var icon = ButtonIcon.Instance().DownloadManage;
+        var icon = ButtonIcon.DownloadManage;
         icon.Height = 24;
         icon.Width = 24;
         return icon;

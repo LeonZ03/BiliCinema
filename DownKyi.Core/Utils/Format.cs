@@ -82,26 +82,18 @@ public static class Format
         };
     }
 
-    /// <summary>
-    /// 格式化网速
-    /// </summary>
-    /// <param name="speed"></param>
-    /// <returns></returns>
-    public static string FormatSpeed(float speed)
+    public static string FormatSpeedWithBandwidth(double bytesPerSecond)
     {
-        return speed switch
+        var speed = (float)bytesPerSecond;
+        var formattedSpeed = speed switch
         {
             <= 0 => "0B/s",
             < 1024 => $"{speed:F2}B/s",
             < 1024 * 1024 => $"{speed / 1024:F2}KB/s",
             _ => $"{speed / 1024 / 1024:F2}MB/s"
         };
-    }
-
-    public static string FormatSpeedWithBandwidth(double bytesPerSecond)
-    {
         var mbps = Math.Max(0, bytesPerSecond) * 8 / 1000 / 1000;
-        return $"{FormatSpeed((float)bytesPerSecond)} ({mbps:F2} Mbps)";
+        return $"{formattedSpeed} ({mbps:F2} Mbps)";
     }
 
     /// <summary>

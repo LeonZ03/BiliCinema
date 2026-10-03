@@ -1,9 +1,9 @@
 using System.Collections.Immutable;
+using System.Text;
 using System.Web;
 using DownKyi.Core.Settings;
 using DownKyi.Core.Settings.Models;
 using DownKyi.Core.Storage;
-using DownKyi.Core.Utils;
 
 namespace DownKyi.Core.BiliApi.Login;
 
@@ -30,6 +30,69 @@ public static class LoginHelper
     private static List<DownKyiCookie> CloneCookies(IEnumerable<DownKyiCookie> cookies)
     {
         return cookies.Select(CloneCookie).ToList();
+    }
+
+    public static IReadOnlyList<DownKyiCookie> ParseCookie(Uri? redirectUri)
+    {
+        if (redirectUri is null) return [];
+
+        var query = HttpUtility.ParseQueryString(redirectUri.Query);
+        return (from item in query.AllKeys.OfType<string>()
+                let value = query[item]
+                where item is not ("Expires" or "gourl")
+                select new DownKyiCookie(item, value, ".bilibili.com"))
+            .ToList();
+    }
+
+    private static bool WriteCookiesToDisk(string file, IReadOnlyList<DownKyiCookie> cookies)
+    {
+        try
+        {
+            using Stream stream = File.Create(file);
+            System.Text.Json.JsonSerializer.Serialize(stream, cookies);
+            return true;
+        }
+        catch (IOException)
+        {
+            return false;
+        }
+        catch (System.Text.Json.JsonException)
+        {
+            return false;
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return false;
+        }
+    }
+
+    private static List<DownKyiCookie>? ReadCookiesFromStream(Stream stream)
+    {
+        ArgumentNullException.ThrowIfNull(stream);
+
+        try
+        {
+            if (stream.CanSeek)
+            {
+                stream.Seek(0, SeekOrigin.Begin);
+            }
+
+            using var streamReader = new StreamReader(stream, Encoding.UTF8);
+            var json = streamReader.ReadToEnd();
+            return Newtonsoft.Json.JsonConvert.DeserializeObject<List<DownKyiCookie>>(json);
+        }
+        catch (IOException)
+        {
+            return null;
+        }
+        catch (Newtonsoft.Json.JsonException)
+        {
+            return null;
+        }
+        catch (ObjectDisposedException)
+        {
+            return null;
+        }
     }
 
     public static string BuildCookieHeader(IEnumerable<DownKyiCookie> cookies)
@@ -94,7 +157,7 @@ public static class LoginHelper
     /// <returns></returns>
     public static bool SaveLoginInfoCookies(Uri redirectUri)
     {
-        var cookies = ObjectHelper.ParseCookie(redirectUri);
+        var cookies = ParseCookie(redirectUri);
 
         return SaveLoginInfoCookies(cookies);
     }
@@ -108,7 +171,7 @@ public static class LoginHelper
     {
         var tempFile = LocalLoginInfo + "-" + Guid.NewGuid().ToString("N");
 
-        var isSucceed = ObjectHelper.WriteCookiesToDisk(tempFile, cookies);
+        var isSucceed = WriteCookiesToDisk(tempFile, cookies);
         if (isSucceed)
         {
             try
@@ -182,7 +245,7 @@ public static class LoginHelper
             {
                 // 直接读取文件，用 FileShare.Read 避免独占锁，无需临时文件
                 using var stream = new FileStream(LocalLoginInfo, FileMode.Open, FileAccess.Read, FileShare.Read);
-                cookies = ObjectHelper.ReadCookiesFromStream(stream)?
+                cookies = ReadCookiesFromStream(stream)?
                     .Where(cookie => !string.IsNullOrWhiteSpace(cookie.Name))
                     .Select(cookie => new DownKyiCookie(
                         cookie.Name.Trim(),

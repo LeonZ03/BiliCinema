@@ -46,30 +46,4 @@ public static class CheeseInfo
         return BiliApiRequest.RequirePayload(cheese.Data);
     }
 
-    /// <summary>
-    /// 获取课程分集列表
-    /// </summary>
-    /// <param name="seasonId"></param>
-    /// <param name="ps"></param>
-    /// <param name="pn"></param>
-    /// <returns></returns>
-    public static async Task<CheeseEpisodeList?> CheeseEpisodeListAsync(
-        this IBilibiliApiClient client,
-        long seasonId,
-        int ps = 50,
-        int pn = 1,
-        CancellationToken cancellationToken = default)
-    {
-        var url = $"https://api.bilibili.com/pugv/view/web/ep/list?season_id={seasonId}&pn={pn}&ps={ps}";
-        const string referer = "https://www.bilibili.com";
-        var cheese = await BiliApiRequest.RequestJsonAsync<CheeseEpisodeListOrigin>(
-            client,
-            url,
-            referer,
-            nameof(CheeseEpisodeListAsync),
-            "CheeseInfo",
-            cancellationToken: cancellationToken).ConfigureAwait(false);
-
-        return BiliApiRequest.RequirePayload(cheese.Data);
-    }
 }

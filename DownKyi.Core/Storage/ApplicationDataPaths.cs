@@ -128,12 +128,6 @@ internal static class ApplicationDataPaths
     // 登录cookies
     public static string Login { get; } = Path.Combine(Config, "Login");
 
-    // Bilibili
-    private static string Bilibili { get; } = Path.Combine(Root, "Bilibili");
-
-    // 弹幕
-    public static string Danmaku { get; } = Path.Combine(Bilibili, "Danmakus");
-
     // 下载
     public static string Media { get; } = Path.Combine(Root, "Media");
 

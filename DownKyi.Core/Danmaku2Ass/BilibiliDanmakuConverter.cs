@@ -9,19 +9,6 @@ namespace DownKyi.Core.Danmaku2Ass;
 public sealed class BilibiliDanmakuConverter
 {
     private const int NormalFontSize = 25;
-    private static readonly FrozenDictionary<int, VideoResolution> Resolutions =
-        new Dictionary<int, VideoResolution>
-        {
-            [6] = new(426, 240),
-            [16] = new(640, 360),
-            [32] = new(854, 480),
-            [64] = new(1280, 720),
-            [74] = new(1280, 720),
-            [80] = new(1920, 1080),
-            [112] = new(1920, 1080),
-            [116] = new(1920, 1080),
-            [120] = new(3840, 2160)
-        }.ToFrozenDictionary();
     private static readonly FrozenDictionary<int, string> StyleByMode =
         new Dictionary<int, string>
         {
@@ -226,15 +213,4 @@ public sealed class BilibiliDanmakuConverter
                || (mode is 1 or 2 or 3 or 6 && _config["scroll_filter"]);
     }
 
-    public static Dictionary<string, int> GetResolution(int quality)
-    {
-        var resolution = Resolutions.GetValueOrDefault(quality);
-        return new Dictionary<string, int>
-        {
-            ["width"] = resolution.Width,
-            ["height"] = resolution.Height
-        };
-    }
-
-    private readonly record struct VideoResolution(int Width, int Height);
 }

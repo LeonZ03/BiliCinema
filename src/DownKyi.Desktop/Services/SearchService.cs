@@ -140,16 +140,6 @@ internal class SearchService
         return true;
     }
 
-    /// <summary>
-    /// 搜索关键词
-    /// </summary>
-    /// <param name="key"></param>
-    /// <param name="parentRoute"></param>
-    public static void SearchKey(string key, AppRoute parentRoute)
-    {
-        // TODO
-    }
-
     private void NavigateToVideo(AppRoute parentRoute, string input)
     {
         _navigationService.Navigate(new AppNavigationRequest(AppRoute.VideoDetail, parentRoute, input));

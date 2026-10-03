@@ -3,7 +3,6 @@ using DownKyi.Core.BiliApi.Sign;
 using DownKyi.Core.BiliApi.Users.Models;
 using DownKyi.Core.Storage;
 using Newtonsoft.Json;
-using Newtonsoft.Json.Linq;
 
 namespace DownKyi.Core.BiliApi.Users;
 
@@ -56,14 +55,14 @@ public static partial class UserSpace
     {
         const int pn = 1;
         const int ps = 1;
-        var publication = await client.GetPublicationAsync(
+        var publication = await client.GetPublicationPageAsync(
             keys,
             unixTimeSeconds,
             mid,
             pn,
             ps,
             cancellationToken: cancellationToken).ConfigureAwait(false);
-        return GetPublicationType(publication);
+        return GetPublicationType(publication?.List);
     }
 
     /// <summary>
@@ -73,104 +72,14 @@ public static partial class UserSpace
     /// <returns></returns>
     public static IReadOnlyList<SpacePublicationListTypeVideoZone>? GetPublicationType(SpacePublicationList? publication)
     {
-        if (publication?.Tlist == null)
+        if (publication == null)
         {
             return null;
         }
 
-        var result = new List<SpacePublicationListTypeVideoZone>();
-        var typeList = JObject.Parse(publication.Tlist.ToString("N"));
-        foreach (var item in typeList)
-        {
-            if (item.Value == null) continue;
-            var value = JsonConvert.DeserializeObject<SpacePublicationListTypeVideoZone>(item.Value.ToString());
-            if (value is { Count: > 0 })
-                result.Add(value);
-        }
-
-        return result;
-    }
-
-    /// <summary>
-    /// 查询用户所有的投稿视频明细
-    /// </summary>
-    /// <param name="mid">用户id</param>
-    /// <param name="order">排序</param>
-    /// <param name="tid">视频分区</param>
-    /// <param name="keyword">搜索关键词</param>
-    /// <returns></returns>
-    public static async Task<IReadOnlyList<SpacePublicationListVideo>> GetAllPublicationAsync(
-        this IBilibiliApiClient client,
-        WbiKeys keys,
-        long unixTimeSeconds,
-        long mid,
-        int tid = 0,
-        PublicationOrder order = PublicationOrder.PUBDATE,
-        string keyword = "",
-        CancellationToken cancellationToken = default)
-    {
-        var result = new List<SpacePublicationListVideo>();
-
-        var i = 0;
-        while (true)
-        {
-            i++;
-            const int ps = 100;
-
-            var data = await client.GetPublicationAsync(
-                keys,
-                unixTimeSeconds,
-                mid,
-                i,
-                ps,
-                tid,
-                order,
-                keyword,
-                cancellationToken).ConfigureAwait(false);
-            if (data?.Vlist == null || data.Vlist.Count == 0)
-            {
-                break;
-            }
-
-            result.AddRange(data.Vlist);
-        }
-
-        return result;
-    }
-
-    /// <summary>
-    /// 查询用户投稿视频明细
-    /// </summary>
-    /// <param name="mid">用户id</param>
-    /// <param name="pn">页码</param>
-    /// <param name="ps">每页的视频数</param>
-    /// <param name="order">排序</param>
-    /// <param name="tid">视频分区</param>
-    /// <param name="keyword">搜索关键词</param>
-    /// <returns></returns>
-    public static async Task<SpacePublicationList?> GetPublicationAsync(
-        this IBilibiliApiClient client,
-        WbiKeys keys,
-        long unixTimeSeconds,
-        long mid,
-        int pn,
-        int ps,
-        long tid = 0,
-        PublicationOrder order = PublicationOrder.PUBDATE,
-        string keyword = "",
-        CancellationToken cancellationToken = default)
-    {
-        var page = await client.GetPublicationPageAsync(
-            keys,
-            unixTimeSeconds,
-            mid,
-            pn,
-            ps,
-            tid,
-            order,
-            keyword,
-            cancellationToken).ConfigureAwait(false);
-        return page?.List;
+        return publication.Tlist.Values
+            .Where(static zone => zone.Count > 0)
+            .ToList();
     }
 
     /// <summary>
@@ -247,99 +156,6 @@ public static partial class UserSpace
             PublicationOrder.STOW => "stow",
             _ => throw new ArgumentOutOfRangeException(nameof(order), order, "Unsupported publication order.")
         };
-    }
-
-    #endregion
-
-    #region 频道
-
-    /// <summary>
-    /// 查询用户频道列表
-    /// </summary>
-    /// <param name="mid">用户id</param>
-    /// <returns></returns>
-    public static async Task<IReadOnlyList<SpaceChannelList>?> GetChannelListAsync(
-        this IBilibiliApiClient client,
-        long mid,
-        CancellationToken cancellationToken = default)
-    {
-        var url = $"https://api.bilibili.com/x/space/channel/list?mid={mid}";
-        const string referer = "https://www.bilibili.com";
-        var spaceChannel = await BiliApiRequest.RequestJsonAsync<SpaceChannelOrigin>(
-            client,
-            url,
-            referer,
-            nameof(GetChannelListAsync),
-            "UserSpace",
-            cancellationToken: cancellationToken).ConfigureAwait(false);
-
-        return BiliApiRequest.RequirePayload(spaceChannel.Data).List;
-    }
-
-    /// <summary>
-    /// 查询用户频道中的所有视频
-    /// </summary>
-    /// <param name="mid"></param>
-    /// <param name="cid"></param>
-    /// <returns></returns>
-    public static async Task<IReadOnlyList<SpaceChannelArchive?>> GetAllChannelVideoListAsync(
-        this IBilibiliApiClient client,
-        long mid,
-        long cid,
-        CancellationToken cancellationToken = default)
-    {
-        var result = new List<SpaceChannelArchive?>();
-
-        var i = 0;
-        while (true)
-        {
-            i++;
-            const int ps = 100;
-
-            var data = await client.GetChannelVideoListAsync(
-                mid,
-                cid,
-                i,
-                ps,
-                cancellationToken).ConfigureAwait(false);
-            if (data == null || data.Count == 0)
-            {
-                break;
-            }
-
-            result.AddRange(data);
-        }
-
-        return result;
-    }
-
-    /// <summary>
-    /// 查询用户频道中的视频
-    /// </summary>
-    /// <param name="mid"></param>
-    /// <param name="cid"></param>
-    /// <param name="pn"></param>
-    /// <param name="ps"></param>
-    /// <returns></returns>
-    public static async Task<IReadOnlyList<SpaceChannelArchive>?> GetChannelVideoListAsync(
-        this IBilibiliApiClient client,
-        long mid,
-        long cid,
-        int pn,
-        int ps,
-        CancellationToken cancellationToken = default)
-    {
-        var url = $"https://api.bilibili.com/x/space/channel/video?mid={mid}&cid={cid}&pn={pn}&ps={ps}";
-        const string referer = "https://www.bilibili.com";
-        var spaceChannelVideo = await BiliApiRequest.RequestJsonAsync<SpaceChannelVideoOrigin>(
-            client,
-            url,
-            referer,
-            nameof(GetChannelVideoListAsync),
-            "UserSpace",
-            cancellationToken: cancellationToken).ConfigureAwait(false);
-
-        return BiliApiRequest.RequirePayload(spaceChannelVideo.Data).List.Archives;
     }
 
     #endregion

@@ -293,7 +293,7 @@
                                 <Path
                                     Width="16"
                                     Height="16"
-                                    Data="{Binding Trash.Data, Source={x:Static images:ButtonIcon.Current}}"
+                                    Data="{Binding Data, Source={x:Static images:ButtonIcon.Trash}}"
                                     Fill="{Binding RelativeSource={RelativeSource FindAncestor, AncestorType={x:Type Button}}, Path=Foreground}"
                                     Stretch="Uniform" />
                                 <TextBlock

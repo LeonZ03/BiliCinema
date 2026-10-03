@@ -144,12 +144,6 @@ public sealed class TlsSecurityArchitectureTests
             "Client",
             "Entity",
             "AriaSendData.cs");
-        var ariaOption = ReadProductionSource(
-            "DownKyi.Core",
-            "Aria2cNet",
-            "Client",
-            "Entity",
-            "AriaOption.cs");
         var addressResolver = ReadProductionSource(
             "src",
             "DownKyi.Desktop",
@@ -185,7 +179,6 @@ public sealed class TlsSecurityArchitectureTests
 
         Assert.Contains("[JsonProperty(\"https-proxy\")]", sendOption, StringComparison.Ordinal);
         Assert.DoesNotContain("all-proxy", sendOption, StringComparison.OrdinalIgnoreCase);
-        Assert.DoesNotContain("all-proxy", ariaOption, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("max-redirect", sendOption, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("AllowAutoRedirect = false", addressResolver, StringComparison.Ordinal);
         Assert.Contains("download.transfer.insecure-redirect", addressResolver, StringComparison.Ordinal);

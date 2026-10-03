@@ -22,7 +22,7 @@ namespace DownKyi.ViewModels.DownloadManager
                 _downloadBase = value;
 
                 ZoneImage = DictionaryResource.GetIfApplicationInitialized<DrawingImage>(
-                    VideoZoneIcon.Instance().GetZoneImageKey(DownloadBase.ZoneId));
+                    VideoZoneIcon.GetZoneImageKey(DownloadBase.ZoneId));
                 OnPropertyChanged();
                 OnPropertyChanged(nameof(Order));
                 OnPropertyChanged(nameof(MainTitle));
@@ -45,91 +45,27 @@ namespace DownKyi.ViewModels.DownloadManager
         }
 
         // 视频序号
-        public int Order
-        {
-            get => DownloadBase.Order;
-            set
-            {
-                DownloadBase.Order = value;
-                OnPropertyChanged();
-            }
-        }
+        public int Order => DownloadBase.Order;
 
         // 视频主标题
-        public string MainTitle
-        {
-            get => DownloadBase.MainTitle;
-            set
-            {
-                DownloadBase.MainTitle = value;
-                OnPropertyChanged();
-            }
-        }
+        public string MainTitle => DownloadBase.MainTitle;
 
         // 视频标题
-        public string Name
-        {
-            get => DownloadBase.Name;
-            set
-            {
-                DownloadBase.Name = value;
-                OnPropertyChanged();
-            }
-        }
+        public string Name => DownloadBase.Name;
 
         // 时长
-        public string Duration
-        {
-            get => DownloadBase.Duration;
-            set
-            {
-                DownloadBase.Duration = value;
-                OnPropertyChanged();
-            }
-        }
+        public string Duration => DownloadBase.Duration;
 
         // 视频编码名称，AVC、HEVC
-        public string VideoCodecName
-        {
-            get => DownloadBase.VideoCodecName;
-            set
-            {
-                DownloadBase.VideoCodecName = value;
-                OnPropertyChanged();
-            }
-        }
+        public string VideoCodecName => DownloadBase.VideoCodecName;
 
         // 视频画质
-        public Quality Resolution
-        {
-            get => DownloadBase.Resolution;
-            set
-            {
-                DownloadBase.Resolution = value;
-                OnPropertyChanged();
-            }
-        }
+        public Quality Resolution => DownloadBase.Resolution;
 
         // 音频编码
-        public Quality AudioCodec
-        {
-            get => DownloadBase.AudioCodec;
-            set
-            {
-                DownloadBase.AudioCodec = value;
-                OnPropertyChanged();
-            }
-        }
+        public Quality AudioCodec => DownloadBase.AudioCodec;
 
         // 文件大小
-        public string? FileSize
-        {
-            get => DownloadBase.FileSize;
-            set
-            {
-                DownloadBase.FileSize = value;
-                OnPropertyChanged();
-            }
-        }
+        public string? FileSize => DownloadBase.FileSize;
     }
 }

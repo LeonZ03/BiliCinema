@@ -91,9 +91,6 @@ internal sealed class DownloadMediaStage : IDownloadPipelineStage
             "Playback data does not contain a supported media stream.");
     }
 
-    internal static DownloadMediaKind DetectMediaKind(PlayUrl? playUrl)
-        => DownloadMediaContract.Detect(playUrl);
-
     internal static PlayUrlDashVideo? CreateDurlDownloadDescriptor(
         IEnumerable<PlayUrlDurl> durls)
     {

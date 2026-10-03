@@ -112,15 +112,15 @@ internal class ViewIndexViewModel : ViewModelBase
         _loginPanelVisibility = true;
         Header = "avares://DownKyi.Desktop/Resources/default_header.jpg";
 
-        TextLogo = LogoIcon.Instance().TextLogo;
+        TextLogo = LogoIcon.TextLogo;
 
-        GeneralSearch = ButtonIcon.Instance().GeneralSearch;
+        GeneralSearch = ButtonIcon.GeneralSearch;
 
-        Settings = ButtonIcon.Instance().Settings;
+        Settings = ButtonIcon.Settings;
 
-        DownloadManager = ButtonIcon.Instance().DownloadManage;
+        DownloadManager = ButtonIcon.DownloadManage;
 
-        Toolbox = ButtonIcon.Instance().Toolbox;
+        Toolbox = ButtonIcon.Toolbox;
 
     }
 
@@ -225,12 +225,7 @@ internal class ViewIndexViewModel : ViewModelBase
 
         _logger.LogDebugMessage("Processing search input.");
         InputText = Regex.Replace(InputText, @"[【]*[^【]*[^】]*[】 ]", "");
-        var isSupport = _searchService.BiliInput(InputText, AppRoute.Index);
-        if (!isSupport)
-        {
-            // 关键词搜索
-            SearchService.SearchKey(InputText, AppRoute.Index);
-        }
+        _searchService.BiliInput(InputText, AppRoute.Index);
 
         InputText = string.Empty;
     }
@@ -304,7 +299,7 @@ internal class ViewIndexViewModel : ViewModelBase
         ArgumentNullException.ThrowIfNull(navigationContext);
         base.OnNavigatedTo(navigationContext);
 
-        DownloadManager = ButtonIcon.Instance().DownloadManage;
+        DownloadManager = ButtonIcon.DownloadManage;
         DownloadManager.Height = 27;
         DownloadManager.Width = 32;
 

@@ -14,25 +14,6 @@ internal static class VideoSelectionState
         return sections.FirstOrDefault(section => section.IsSelected);
     }
 
-    public static List<VideoPage> GetSelectedPages(VideoSection? section)
-    {
-        return section?.VideoPages.Where(page => page.IsSelected).ToList() ?? new List<VideoPage>();
-    }
-
-    public static void ApplySelectedPages(VideoSection section, IEnumerable<VideoPage> selectedPages)
-    {
-        var selectedCids = new HashSet<long>(selectedPages.Select(page => page.Cid));
-        foreach (var videoPage in section.VideoPages)
-        {
-            videoPage.IsSelected = selectedCids.Contains(videoPage.Cid);
-        }
-    }
-
-    public static bool IsAllSelected(VideoSection? section, int selectedCount)
-    {
-        return section?.VideoPages.Count > 0 && selectedCount == section.VideoPages.Count;
-    }
-
     public static void SetAllSelected(VideoSection? section, bool isSelected)
     {
         if (section == null)

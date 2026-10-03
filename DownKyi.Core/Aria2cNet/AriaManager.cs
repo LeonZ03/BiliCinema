@@ -13,23 +13,6 @@ public sealed class AriaProgressEventArgs(long totalLength, long completedLength
     public string Gid { get; } = gid;
 }
 
-public sealed class AriaDownloadCompletedEventArgs(
-    bool isSuccess,
-    string? downloadPath,
-    string gid,
-    string? message) : EventArgs
-{
-    public bool IsSuccess { get; } = isSuccess;
-    public string? DownloadPath { get; } = downloadPath;
-    public string Gid { get; } = gid;
-    public string? Message { get; } = message;
-}
-
-public sealed class AriaGlobalStatusEventArgs(long speed) : EventArgs
-{
-    public long Speed { get; } = speed;
-}
-
 public sealed record AriaDownloadStatus(
     DownloadResult Result,
     string? ErrorCode,
@@ -66,37 +49,6 @@ public class AriaManager
         TellStatus?.Invoke(this, new AriaProgressEventArgs(totalLength, completedLength, speed, gid));
     }
 
-    // 下载结果回调
-    public event EventHandler<AriaDownloadCompletedEventArgs>? DownloadFinish;
-
-    protected virtual void OnDownloadFinish(bool isSuccess, string? downloadPath, string gid, string? msg = null)
-    {
-        DownloadFinish?.Invoke(this, new AriaDownloadCompletedEventArgs(isSuccess, downloadPath, gid, msg));
-    }
-
-    // 全局下载状态
-    public event EventHandler<AriaGlobalStatusEventArgs>? GlobalStatus;
-
-    protected virtual void OnGlobalStatus(long speed)
-    {
-        GlobalStatus?.Invoke(this, new AriaGlobalStatusEventArgs(speed));
-    }
-
-    /// <summary>
-    /// 获取gid下载项的状态。
-    /// </summary>
-    public async Task<DownloadResult> GetDownloadStatusAsync(
-        string gid,
-        Func<CancellationToken, ValueTask>? statusCallback = null,
-        CancellationToken cancellationToken = default)
-    {
-        var status = await GetDownloadStatusDetailAsync(
-            gid,
-            statusCallback,
-            cancellationToken).ConfigureAwait(false);
-        return status.Result;
-    }
-
     /// <summary>
     /// Gets the download status while preserving aria2's machine-readable failure code.
     /// </summary>
@@ -113,7 +65,6 @@ public class AriaManager
                 null);
         }
 
-        string? filePath = null;
         while (true)
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -130,7 +81,6 @@ public class AriaManager
                         StringComparison.OrdinalIgnoreCase)
                         ? "not-found"
                         : $"rpc-{rpcError.Code}";
-                    OnDownloadFinish(false, null, gid, rpcError.Message);
                     return new AriaDownloadStatus(
                         errorCode == "not-found"
                             ? DownloadResult.ABORT
@@ -139,7 +89,6 @@ public class AriaManager
                         rpcError.Message);
                 }
 
-                OnDownloadFinish(false, null, gid, null);
                 return new AriaDownloadStatus(
                     DownloadResult.FAILED,
                     "rpc-empty",
@@ -147,11 +96,6 @@ public class AriaManager
             }
 
             var result = status.Result;
-            if (result.Files?.Count >= 1)
-            {
-                filePath = result.Files[0].Path;
-            }
-
             var totalLength = ParseLong(result.TotalLength);
             var completedLength = ParseLong(result.CompletedLength);
             var speed = ParseLong(result.DownloadSpeed);
@@ -168,7 +112,6 @@ public class AriaManager
             var terminalStatus = await ResolveTerminalStatusAsync(
                 gid,
                 result,
-                filePath,
                 cancellationToken).ConfigureAwait(false);
             if (terminalStatus != null)
             {
@@ -182,7 +125,6 @@ public class AriaManager
     public async Task<AriaDownloadStatus?> ResolveTerminalStatusAsync(
         string gid,
         AriaTellStatusResult result,
-        string? lastKnownFilePath,
         CancellationToken cancellationToken)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(gid);
@@ -190,17 +132,12 @@ public class AriaManager
         switch (ClassifyStatus(result))
         {
             case AriaDownloadState.Complete:
-                var completedFilePath = result.Files?.Count >= 1
-                    ? result.Files[0].Path
-                    : lastKnownFilePath;
-                OnDownloadFinish(true, completedFilePath, gid, null);
                 return new AriaDownloadStatus(
                     DownloadResult.SUCCESS,
                     null,
                     null);
 
             case AriaDownloadState.Removed:
-                OnDownloadFinish(false, null, gid, result.ErrorMessage);
                 return new AriaDownloadStatus(
                     DownloadResult.ABORT,
                     "removed",
@@ -222,7 +159,6 @@ public class AriaManager
                     _logger.LogDebugMessage("aria2 removed the failed download result.");
                 }
 
-                OnDownloadFinish(false, null, gid, result.ErrorMessage);
                 return new AriaDownloadStatus(
                     DownloadResult.FAILED,
                     errorCode,
@@ -259,26 +195,6 @@ public class AriaManager
             "paused" => AriaDownloadState.Paused,
             _ => AriaDownloadState.Unknown
         };
-    }
-
-    /// <summary>
-    /// 获取全局下载速度。
-    /// </summary>
-    public async Task GetGlobalStatusAsync(CancellationToken cancellationToken = default)
-    {
-        while (!cancellationToken.IsCancellationRequested)
-        {
-            var globalStatus = await _ariaClient.GetGlobalStatAsync().ConfigureAwait(false);
-            if (globalStatus?.Result == null)
-            {
-                await Task.Delay(PollDelayMilliseconds, cancellationToken).ConfigureAwait(false);
-                continue;
-            }
-
-            OnGlobalStatus(ParseLong(globalStatus.Result.DownloadSpeed));
-
-            await Task.Delay(PollDelayMilliseconds, cancellationToken).ConfigureAwait(false);
-        }
     }
 
     private static long ParseLong(string? value)

@@ -121,7 +121,8 @@ public sealed class AriaClientSecurityTests
             server.Url.Port,
             "test-token");
 
-        await Assert.ThrowsAsync<HttpRequestException>(() => client.GetGlobalOptionAsync())
+        await Assert.ThrowsAsync<HttpRequestException>(() =>
+                client.GetAriaVersionAsync(TestContext.Current.CancellationToken))
             .ConfigureAwait(true);
     }
 
@@ -144,7 +145,8 @@ public sealed class AriaClientSecurityTests
             redirect.Url.Port,
             "test-token");
 
-        await Assert.ThrowsAsync<HttpRequestException>(() => client.GetGlobalOptionAsync())
+        await Assert.ThrowsAsync<HttpRequestException>(() =>
+                client.GetAriaVersionAsync(TestContext.Current.CancellationToken))
             .ConfigureAwait(true);
 
         Assert.Equal(1, redirect.RequestCount);

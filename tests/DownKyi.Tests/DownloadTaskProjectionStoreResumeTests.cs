@@ -91,8 +91,9 @@ public sealed class DownloadTaskProjectionStoreResumeTests : IDisposable
                 tasks,
                 historyService,
                 clock);
-            var restored = Assert.Single(
-                await reopenedStorage.GetDownloadingAsync(TestContext.Current.CancellationToken));
+            var startup = await reopenedStorage.GetDownloadingStateAsync(
+                TestContext.Current.CancellationToken);
+            var restored = Assert.Single(startup.Projections);
             Assert.Equal(ariaGid, restored.Downloading.Gid);
             Assert.Equal("video.m4s", restored.Downloading.DownloadFiles["video"]);
             Assert.Equal("audio.m4s", restored.Downloading.DownloadFiles["audio"]);
@@ -182,7 +183,8 @@ public sealed class DownloadTaskProjectionStoreResumeTests : IDisposable
             reopenedTasks,
             reopenedHistoryService,
             reopenedClock);
-        Assert.Empty(await reopened.GetDownloadingAsync(TestContext.Current.CancellationToken));
+        var startup = await reopened.GetDownloadingStateAsync(TestContext.Current.CancellationToken);
+        Assert.Empty(startup.Projections);
         var restored = Assert.Single(
             await reopened.GetDownloadedAsync(TestContext.Current.CancellationToken));
         Assert.Equal("complete-task-01", restored.DownloadBase.Id);

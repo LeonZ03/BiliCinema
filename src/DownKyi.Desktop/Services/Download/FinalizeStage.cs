@@ -1,11 +1,11 @@
 using System;
+using System.Globalization;
 using System.Threading;
 using System.Threading.Tasks;
 using DownKyi.Application.Diagnostics;
 using DownKyi.Core.Utils;
 using DownKyi.Domain.Downloads;
 using DownKyi.Domain.Results;
-using DownKyi.Models;
 using Microsoft.Extensions.Logging;
 
 namespace DownKyi.Services.Download;
@@ -58,7 +58,7 @@ internal sealed class FinalizeStage : IDownloadPipelineStage
             }
         }
 
-        var downloaded = CreateDownloadedSummary(
+        var completion = CreateCompletionSummary(
             _projectionStore
                 .GetRequiredSnapshot(context.TaskId)
                 .Transfer
@@ -67,10 +67,7 @@ internal sealed class FinalizeStage : IDownloadPipelineStage
 
         var completedTask = await _stateWriter.CompleteAsync(
             context.TaskId,
-            new DownloadCompletion(
-                downloaded.FinishedTimestamp,
-                downloaded.FinishedTime,
-                downloaded.MaxSpeedDisplay),
+            completion,
             cancellationToken).ConfigureAwait(true);
         try
         {
@@ -84,16 +81,20 @@ internal sealed class FinalizeStage : IDownloadPipelineStage
         return DownloadStageResult.Success(Name);
     }
 
-    internal static Downloaded CreateDownloadedSummary(
+    internal static DownloadCompletion CreateCompletionSummary(
         long maximumBytesPerSecond,
         TimeProvider timeProvider)
     {
         ArgumentNullException.ThrowIfNull(timeProvider);
-        var downloaded = new Downloaded
-        {
-            MaxSpeedDisplay = Format.FormatSpeedWithBandwidth(maximumBytesPerSecond)
-        };
-        downloaded.SetFinishedTimestamp(timeProvider.GetUtcNow().ToUnixTimeSeconds());
-        return downloaded;
+        var finishedTimestamp = timeProvider.GetUtcNow().ToUnixTimeSeconds();
+        var epoch = TimeZoneInfo.ConvertTimeFromUtc(
+            new DateTime(1970, 1, 1),
+            TimeZoneInfo.Local);
+        var finishedTime = epoch.AddSeconds(finishedTimestamp)
+            .ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture);
+        return new DownloadCompletion(
+            finishedTimestamp,
+            finishedTime,
+            Format.FormatSpeedWithBandwidth(maximumBytesPerSecond));
     }
 }

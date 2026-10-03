@@ -19,13 +19,9 @@ public sealed class BiliApiModelContractTests
         const string json = """{"bv_id":"legacy","bvid":"current","attr":9}""";
 
         var media = JsonConvert.DeserializeObject<FavoritesMedia>(json);
-        var mediaId = JsonConvert.DeserializeObject<FavoritesMediaId>(json);
-
         Assert.Equal("legacy", media?.LegacyBvid);
         Assert.Equal("current", media?.Bvid);
         Assert.Equal(9, media?.Attr);
-        Assert.Equal("legacy", mediaId?.LegacyBvid);
-        Assert.Equal("current", mediaId?.Bvid);
     }
 
     private static readonly string[] ExpectedStyles = { "sci-fi", "adventure" };
@@ -112,15 +108,9 @@ public sealed class BiliApiModelContractTests
         var ariaUri = JsonConvert.DeserializeObject<AriaUri>("""
             { "status": "used", "uri": "https://example.invalid/file" }
             """);
-        var ariaServer = JsonConvert.DeserializeObject<AriaResultServer>("""
-            { "currentUri": "https://example.invalid/current", "uri": "https://example.invalid/original" }
-            """);
-
         Assert.Equal("https://example.invalid/qr", loginUrl?.QrCodeAddress);
         Assert.Equal("https://example.invalid/callback", loginStatus?.RedirectAddress);
         Assert.Equal("https://example.invalid/file", ariaUri?.Address);
-        Assert.Equal("https://example.invalid/current", ariaServer?.CurrentAddress);
-        Assert.Equal("https://example.invalid/original", ariaServer?.Address);
     }
 
     [Fact]
@@ -139,14 +129,16 @@ public sealed class BiliApiModelContractTests
     [Fact]
     public void PublicationTypesExcludeEmptyDefaultZones()
     {
-        var publication = new SpacePublicationList
-        {
-            Tlist = new SpacePublicationListType
+        var publication = JsonConvert.DeserializeObject<SpacePublicationList>(
+            """
             {
-                Dance = new SpacePublicationListTypeVideoZone { Tid = 129, Name = "舞蹈", Count = 68 },
-                Life = new SpacePublicationListTypeVideoZone { Tid = 160, Name = "生活", Count = 34 }
+              "tlist": {
+                "129": { "tid": 129, "name": "舞蹈", "count": 68 },
+                "160": { "tid": 160, "name": "生活", "count": 34 },
+                "999": { "tid": 999, "name": "空分区", "count": 0 }
+              }
             }
-        };
+            """);
 
         var zones = UserSpace.GetPublicationType(publication);
 

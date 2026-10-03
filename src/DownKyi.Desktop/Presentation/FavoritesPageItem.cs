@@ -133,13 +133,13 @@ internal class FavoritesPageItem : ObservableObject
     {
         #region 属性初始化
 
-        Play = NormalIcon.Instance().Play;
+        Play = NormalIcon.Current.Play;
 
-        Like = NormalIcon.Instance().Like;
+        Like = NormalIcon.Current.Like;
 
-        Favorite = NormalIcon.Instance().Favorite;
+        Favorite = NormalIcon.Current.Favorite;
 
-        Share = NormalIcon.Instance().Share;
+        Share = NormalIcon.Current.Share;
 
         #endregion
     }

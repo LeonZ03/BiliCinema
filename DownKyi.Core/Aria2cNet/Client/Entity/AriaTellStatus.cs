@@ -25,27 +25,6 @@ namespace DownKyi.Core.Aria2cNet.Client.Entity
     }
 
     [JsonObject]
-    public class AriaTellStatusList
-    {
-        [JsonProperty("id")]
-        public string Id { get; set; } = string.Empty;
-
-        [JsonProperty("jsonrpc")]
-        public string Jsonrpc { get; set; } = string.Empty;
-
-        [JsonProperty("result")]
-        public IReadOnlyList<AriaTellStatusResult>? Result { get; set; }
-
-        [JsonProperty("error")]
-        public AriaError? Error { get; set; }
-
-        public override string ToString()
-        {
-            return JsonConvert.SerializeObject(this);
-        }
-    }
-
-    [JsonObject]
     public class AriaTellStatusResult
     {
         [JsonProperty("bitfield")]

@@ -2,16 +2,11 @@
 
 namespace DownKyi.Images;
 
-internal class NormalIcon
+internal sealed class NormalIcon
 {
-    private static NormalIcon? _instance;
+    public static NormalIcon Current { get; } = new();
 
-    public static NormalIcon Instance()
-    {
-        return _instance ??= new NormalIcon();
-    }
-
-    public NormalIcon()
+    private NormalIcon()
     {
         Play = new VectorImage
         {

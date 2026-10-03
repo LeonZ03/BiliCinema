@@ -24,25 +24,15 @@ public sealed class DownloadListStateTests
     }
 
     [Fact]
-    public void ReplaceDownloadedSnapshotsItsInputBeforeClearing()
-    {
-        var state = new DownloadListState();
-        var item = CreateDownloadedItem("A", order: 1, finishedTimestamp: 10);
-        state.AddDownloaded(item);
-
-        state.ReplaceDownloaded(state.Downloaded);
-
-        Assert.Same(item, Assert.Single(state.Downloaded));
-    }
-
-    [Fact]
     public void SortDownloadedOrdersEqualTitlesByEpisodeOrder()
     {
         var state = new DownloadListState();
         var secondEpisode = CreateDownloadedItem("Series", order: 2, finishedTimestamp: 10);
         var otherTitle = CreateDownloadedItem("Another", order: 5, finishedTimestamp: 30);
         var firstEpisode = CreateDownloadedItem("Series", order: 1, finishedTimestamp: 20);
-        state.AddDownloadedRange([secondEpisode, otherTitle, firstEpisode]);
+        state.AddDownloaded(secondEpisode);
+        state.AddDownloaded(otherTitle);
+        state.AddDownloaded(firstEpisode);
 
         state.SortDownloaded(DownloadFinishedSort.Number);
 
@@ -60,7 +50,7 @@ public sealed class DownloadListStateTests
     }
 
     [Fact]
-    public void RemovedDownloadedIdRejectsDelayedSingleAndRangeAdds()
+    public void RemovedDownloadedIdRejectsDelayedAdd()
     {
         var state = new DownloadListState();
         var item = CreateDownloadedItem("A", order: 1, finishedTimestamp: 10);
@@ -68,7 +58,6 @@ public sealed class DownloadListStateTests
 
         Assert.True(state.RemoveDownloaded(item));
         state.AddDownloaded(item);
-        state.AddDownloadedRange([item]);
 
         Assert.Empty(state.Downloaded);
     }

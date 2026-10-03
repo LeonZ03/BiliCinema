@@ -153,7 +153,7 @@ internal class ViewPublicFavoritesViewModel : ViewModelBase
         ArrowBack = NavigationIcon.CreateArrowBack();
 
         // 下载管理按钮
-        DownloadManage = ButtonIcon.Instance().DownloadManage;
+        DownloadManage = ButtonIcon.DownloadManage;
         DownloadManage.Height = 24;
         DownloadManage.Width = 24;
 
@@ -312,7 +312,7 @@ internal class ViewPublicFavoritesViewModel : ViewModelBase
     {
         _logger.LogDebugMessage("Initializing public favorites view.");
 
-        DownloadManage = ButtonIcon.Instance().DownloadManage;
+        DownloadManage = ButtonIcon.DownloadManage;
         DownloadManage.Height = 24;
         DownloadManage.Width = 24;
 

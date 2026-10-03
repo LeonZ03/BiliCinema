@@ -126,7 +126,7 @@ internal class ViewArchiveViewModel : ViewModelBase
             }
 
             videoCount += zone.Count;
-            var iconKey = VideoZoneIcon.Instance().GetZoneImageKey(zone.Tid);
+            var iconKey = VideoZoneIcon.GetZoneImageKey(zone.Tid);
 
             _publicationZones.Add(new PublicationZone
             {

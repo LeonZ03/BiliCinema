@@ -260,7 +260,7 @@ internal partial class ViewUserSpaceViewModel : ViewModelBase
             {
                 NavigationData = publicationTypes,
                 Id = 0,
-                Icon = NormalIcon.Instance().VideoUp,
+                Icon = NormalIcon.Current.VideoUp,
                 IconColor = "#FF02B5DA",
                 Title = DictionaryResource.GetString("Publication"),
                 IsSelected = true
@@ -275,7 +275,7 @@ internal partial class ViewUserSpaceViewModel : ViewModelBase
             {
                 NavigationData = seasonsSeries,
                 Id = 2,
-                Icon = NormalIcon.Instance().Channel,
+                Icon = NormalIcon.Current.Channel,
                 IconColor = "#FF23C9ED",
                 Title = DictionaryResource.GetString("SeasonsSeries")
             });

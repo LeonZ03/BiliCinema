@@ -49,7 +49,7 @@ internal static class DownloadRestoreScenario
             var baselineWorkingSet = process.WorkingSet64;
             var peakWorkingSet = baselineWorkingSet;
             var stopwatch = Stopwatch.StartNew();
-            var restoreTask = projection.GetDownloadingAsync(cancellationToken);
+            var restoreTask = projection.GetDownloadingStateAsync(cancellationToken);
             while (!restoreTask.IsCompleted)
             {
                 process.Refresh();
@@ -57,11 +57,11 @@ internal static class DownloadRestoreScenario
                 await Task.Delay(TimeSpan.FromMilliseconds(1), cancellationToken).ConfigureAwait(false);
             }
 
-            var items = await restoreTask.ConfigureAwait(false);
+            var state = await restoreTask.ConfigureAwait(false);
             process.Refresh();
             peakWorkingSet = Math.Max(peakWorkingSet, process.WorkingSet64);
             stopwatch.Stop();
-            if (items.Count != taskCount)
+            if (state.Projections.Count != taskCount)
             {
                 throw new InvalidOperationException("Restore result count does not match the isolated dataset.");
             }
@@ -77,7 +77,7 @@ internal static class DownloadRestoreScenario
                     ["baseline_working_set_bytes"] = baselineWorkingSet,
                     ["peak_working_set_bytes"] = peakWorkingSet,
                     ["peak_working_set_delta_bytes"] = Math.Max(0, peakWorkingSet - baselineWorkingSet),
-                    ["restored_tasks"] = items.Count
+                    ["restored_tasks"] = state.Projections.Count
                 },
                 new Dictionary<string, string>(StringComparer.Ordinal)
                 {

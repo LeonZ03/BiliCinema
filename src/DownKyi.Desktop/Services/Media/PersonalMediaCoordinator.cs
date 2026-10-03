@@ -151,10 +151,10 @@ internal sealed class PersonalMediaCoordinator : IPersonalMediaCoordinator
     {
         return deviceType switch
         {
-            1 or 3 or 5 or 7 => NormalIcon.Instance().PlatformMobile,
-            2 => NormalIcon.Instance().PlatformPC,
-            4 or 6 => NormalIcon.Instance().PlatformIpad,
-            33 => NormalIcon.Instance().PlatformTV,
+            1 or 3 or 5 or 7 => NormalIcon.Current.PlatformMobile,
+            2 => NormalIcon.Current.PlatformPC,
+            4 or 6 => NormalIcon.Current.PlatformIpad,
+            33 => NormalIcon.Current.PlatformTV,
             _ => null
         };
     }

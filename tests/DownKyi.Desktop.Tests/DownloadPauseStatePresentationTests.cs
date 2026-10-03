@@ -30,15 +30,15 @@ public sealed class DownloadPauseStatePresentationTests
 
             Assert.Equal(DownloadStatus.WaitForDownload, queuedItem.Downloading.DownloadStatus);
             Assert.Equal("等待中……", queuedItem.DownloadStatusTitle);
-            Assert.Same(ButtonIcon.Instance().Pause, queuedItem.StartOrPause);
+            Assert.Same(ButtonIcon.Pause, queuedItem.StartOrPause);
 
             Assert.Equal(DownloadStatus.PauseStarted, pausingItem.Downloading.DownloadStatus);
             Assert.Equal("暂停中……", pausingItem.DownloadStatusTitle);
-            Assert.Same(ButtonIcon.Instance().Start, pausingItem.StartOrPause);
+            Assert.Same(ButtonIcon.Start, pausingItem.StartOrPause);
 
             Assert.Equal(DownloadStatus.Pause, pausedItem.Downloading.DownloadStatus);
             Assert.Equal("已暂停", pausedItem.DownloadStatusTitle);
-            Assert.Same(ButtonIcon.Instance().Start, pausedItem.StartOrPause);
+            Assert.Same(ButtonIcon.Start, pausedItem.StartOrPause);
         }).ConfigureAwait(true);
     }
 

@@ -3,7 +3,7 @@ using Newtonsoft.Json;
 
 namespace DownKyi.Core.BiliApi.Users.Models;
 
-// https://api.bilibili.com/x/space/channel/video?mid={mid}&page_num={pageNum}&page_size={pageSize}
+// https://api.bilibili.com/x/polymer/web-space/seasons_series_list
 public class SpaceSeasonsSeriesOrigin : BaseModel
 {
     //[JsonProperty("code")]

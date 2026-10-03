@@ -124,7 +124,7 @@ internal partial class ViewPublicationViewModel
 
     private void InitView()
     {
-        DownloadManage = ButtonIcon.Instance().DownloadManage;
+        DownloadManage = ButtonIcon.DownloadManage;
         DownloadManage.Height = 24;
         DownloadManage.Width = 24;
         TabHeaders.Clear();

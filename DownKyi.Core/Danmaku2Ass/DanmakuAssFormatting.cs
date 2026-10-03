@@ -67,31 +67,6 @@ internal static class DanmakuAssFormatting
     }
 
     /// <summary>
-    /// 时:分:秒 格式转 秒数
-    /// </summary>
-    /// <param name="hms"></param>
-    /// <returns></returns>
-    public static float Hms2second(string hms)
-    {
-        var numbers = hms.Split(':');
-
-        return numbers.Select((t, i) => (float)(float.Parse(numbers[numbers.Length - i - 1], CultureInfo.InvariantCulture) * Math.Pow(60, i))).Sum();
-    }
-
-    /// <summary>
-    /// 同Hms2second(string hms)，不过可以用 +/- 符号来连接多个
-    /// 即 3:00-2:30 相当于 30 秒
-    /// </summary>
-    /// <param name="xhms"></param>
-    /// <returns></returns>
-    public static float Xhms2second(string xhms)
-    {
-        var args = xhms.Replace("+", " +", StringComparison.Ordinal).Replace("-", " -", StringComparison.Ordinal).Split(' ');
-
-        return args.Sum(Hms2second);
-    }
-
-    /// <summary>
     /// 颜色值，整型转 RGB
     /// </summary>
     /// <param name="integer"></param>

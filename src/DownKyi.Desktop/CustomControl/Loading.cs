@@ -31,11 +31,6 @@ internal class Loading : TemplatedControl
 
     public static readonly StyledProperty<bool> IsActiveProperty = AvaloniaProperty.Register<Loading, bool>(nameof(IsActive), defaultValue: true);
 
-    private static void OnIsActiveChanged(AvaloniaObject obj, bool arg2)
-    {
-        ((Loading)obj).UpdateVisualStates();
-    }
-
     public static readonly DirectProperty<Loading, double> MaxSideLengthProperty = AvaloniaProperty.RegisterDirect<Loading, double>(nameof(MaxSideLength), o => o.MaxSideLength);
 
     public double MaxSideLength

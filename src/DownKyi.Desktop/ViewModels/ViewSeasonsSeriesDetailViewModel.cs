@@ -130,7 +130,7 @@ internal class ViewSeasonsSeriesDetailViewModel : ViewModelBase
 
         ArrowBack = NavigationIcon.CreateArrowBack();
 
-        DownloadManage = ButtonIcon.Instance().DownloadManage;
+        DownloadManage = ButtonIcon.DownloadManage;
         DownloadManage.Height = 24;
         DownloadManage.Width = 24;
     }
@@ -374,7 +374,7 @@ internal class ViewSeasonsSeriesDetailViewModel : ViewModelBase
         ArgumentNullException.ThrowIfNull(navigationContext);
         base.OnNavigatedTo(navigationContext);
 
-        DownloadManage = ButtonIcon.Instance().DownloadManage;
+        DownloadManage = ButtonIcon.DownloadManage;
         DownloadManage.Height = 24;
         DownloadManage.Width = 24;
 

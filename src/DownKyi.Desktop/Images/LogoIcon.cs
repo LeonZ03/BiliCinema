@@ -1,15 +1,8 @@
 namespace DownKyi.Images;
 
-internal class LogoIcon
+internal static class LogoIcon
 {
-    private static LogoIcon? _instance;
-
-    public static LogoIcon Instance()
-    {
-        return _instance ??= new LogoIcon();
-    }
-
-    private LogoIcon()
+    static LogoIcon()
     {
         TextLogo = new VectorImage
         {
@@ -47,5 +40,5 @@ internal class LogoIcon
         };
     }
 
-    public VectorImage TextLogo { get; private set; }
+    public static VectorImage TextLogo { get; }
 }

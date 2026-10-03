@@ -32,7 +32,7 @@ internal class ViewAlreadyDownloadedDialogViewModel : BaseDialogViewModel
     public ViewAlreadyDownloadedDialogViewModel()
     {
         Title = "提示";
-        Image = SystemIcon.Instance().Warning;
+        Image = SystemIcon.Current.Warning;
     }
 
     #region 命令声明

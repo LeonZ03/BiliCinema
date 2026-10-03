@@ -5,48 +5,6 @@ namespace DownKyi.Core.Aria2cNet.Client;
 public sealed partial class AriaClient
 {
     /// <summary>
-    /// This method returns global statistics such as the overall download and upload speeds.
-    /// The response is a struct and contains the following keys. Values are strings.
-    /// </summary>
-    /// <returns></returns>
-    public async Task<AriaGetGlobalStat> GetGlobalStatAsync()
-    {
-        List<object> ariaParams = new List<object>
-        {
-            "token:" + _token,
-        };
-        AriaSendData ariaSend = new AriaSendData
-        {
-            Id = Guid.NewGuid().ToString("N"),
-            Jsonrpc = JSONRPC,
-            Method = "aria2.getGlobalStat",
-            Params = ariaParams
-        };
-        return await GetRpcResponseAsync<AriaGetGlobalStat>(ariaSend).ConfigureAwait(false);
-    }
-
-    /// <summary>
-    /// This method purges completed/error/removed downloads to free memory.
-    /// This method returns OK.
-    /// </summary>
-    /// <returns></returns>
-    public async Task<AriaRemove> PurgeDownloadResultAsync()
-    {
-        List<object> ariaParams = new List<object>
-        {
-            "token:" + _token,
-        };
-        AriaSendData ariaSend = new AriaSendData
-        {
-            Id = Guid.NewGuid().ToString("N"),
-            Jsonrpc = JSONRPC,
-            Method = "aria2.purgeDownloadResult",
-            Params = ariaParams
-        };
-        return await GetRpcResponseAsync<AriaRemove>(ariaSend).ConfigureAwait(false);
-    }
-
-    /// <summary>
     /// This method removes a completed/error/removed download denoted by gid from memory.
     /// This method returns OK for success.
     /// </summary>
@@ -95,29 +53,6 @@ public sealed partial class AriaClient
     }
 
     /// <summary>
-    /// This method returns session information.
-    /// The response is a struct and contains following key.
-    /// <br/><br/>
-    /// Session ID, which is generated each time when aria2 is invoked.
-    /// </summary>
-    /// <returns></returns>
-    public async Task<AriaGetSessionInfo> GetSessionInfoAsync()
-    {
-        List<object> ariaParams = new List<object>
-        {
-            "token:" + _token,
-        };
-        AriaSendData ariaSend = new AriaSendData
-        {
-            Id = Guid.NewGuid().ToString("N"),
-            Jsonrpc = JSONRPC,
-            Method = "aria2.getSessionInfo",
-            Params = ariaParams
-        };
-        return await GetRpcResponseAsync<AriaGetSessionInfo>(ariaSend).ConfigureAwait(false);
-    }
-
-    /// <summary>
     /// This method shuts down aria2.
     /// This method returns OK.
     /// </summary>
@@ -162,24 +97,4 @@ public sealed partial class AriaClient
         return await GetRpcResponseAsync<AriaShutdown>(ariaSend).ConfigureAwait(false);
     }
 
-    /// <summary>
-    /// This method saves the current session to a file specified by the --save-session option.
-    /// This method returns OK if it succeeds.
-    /// </summary>
-    /// <returns></returns>
-    public async Task<AriaSaveSession> SaveSessionAsync()
-    {
-        List<object> ariaParams = new List<object>
-        {
-            "token:" + _token,
-        };
-        AriaSendData ariaSend = new AriaSendData
-        {
-            Id = Guid.NewGuid().ToString("N"),
-            Jsonrpc = JSONRPC,
-            Method = "aria2.saveSession",
-            Params = ariaParams
-        };
-        return await GetRpcResponseAsync<AriaSaveSession>(ariaSend).ConfigureAwait(false);
-    }
 }

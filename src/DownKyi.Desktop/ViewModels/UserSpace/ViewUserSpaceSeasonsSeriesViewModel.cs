@@ -70,11 +70,11 @@ internal class ViewUserSpaceSeasonsSeriesViewModel : ViewModelBase
         }
 
         object payload;
-        if (seasonsSeries.TypeImage == NormalIcon.Instance().SeasonsSeries)
+        if (seasonsSeries.TypeImage == NormalIcon.Current.SeasonsSeries)
         {
             payload = new SeasonNavigationPayload(mid, seasonsSeries.Id);
         }
-        else if (seasonsSeries.TypeImage == NormalIcon.Instance().Channel1)
+        else if (seasonsSeries.TypeImage == NormalIcon.Current.Channel1)
         {
             payload = new SeriesNavigationPayload(mid, seasonsSeries.Id);
         }
@@ -150,7 +150,7 @@ internal class ViewUserSpaceSeasonsSeriesViewModel : ViewModelBase
             {
                 Id = item.Meta.SeasonId,
                 Cover = image,
-                TypeImage = NormalIcon.Instance().SeasonsSeries,
+                TypeImage = NormalIcon.Current.SeasonsSeries,
                 Name = item.Meta.Name,
                 Count = item.Meta.Total,
                 Ctime = mtime
@@ -183,7 +183,7 @@ internal class ViewUserSpaceSeasonsSeriesViewModel : ViewModelBase
             {
                 Id = item.Meta.SeriesId,
                 Cover = image,
-                TypeImage = NormalIcon.Instance().Channel1,
+                TypeImage = NormalIcon.Current.Channel1,
                 Name = item.Meta.Name,
                 Count = item.Meta.Total,
                 Ctime = mtime

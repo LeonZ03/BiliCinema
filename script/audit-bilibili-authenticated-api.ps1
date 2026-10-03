@@ -409,11 +409,6 @@ try {
         "https://api.bilibili.com/x/relation/followings?vmid=$currentMid&pn=1&ps=1&order_type=attention" $false `
         @('data', 'data.list', 'data.total') $headers ([ref]$followingsJson)
 
-    $blacksJson = $null
-    Add-Probe $results 'block-list' '/x/relation/blacks' `
-        'https://api.bilibili.com/x/relation/blacks?pn=1&ps=1' $true `
-        @('data') $headers ([ref]$blacksJson)
-
     $groupsJson = $null
     Add-Probe $results 'following-groups' '/x/relation/tags' `
         'https://api.bilibili.com/x/relation/tags' $true `
@@ -436,14 +431,9 @@ try {
             "https://api.bilibili.com/x/v3/fav/resource/list?media_id=$favoriteId&pn=1&ps=1&keyword=&order=mtime&type=0&tid=0&platform=web" $false `
             @('data', 'data.medias', 'data.has_more') $headers ([ref]$favoriteResourcesJson)
 
-        $favoriteResourceIdsJson = $null
-        Add-Probe $results 'favorite-resource-ids' '/x/v3/fav/resource/ids' `
-            "https://api.bilibili.com/x/v3/fav/resource/ids?media_id=$favoriteId" $false `
-            @('data') $headers ([ref]$favoriteResourceIdsJson)
     }
     else {
         $results.Add((New-BlockedResult 'favorite-resources' '/x/v3/fav/resource/list' $false))
-        $results.Add((New-BlockedResult 'favorite-resource-ids' '/x/v3/fav/resource/ids' $false))
     }
 
     $groups = if ($null -eq $groupsJson) {

@@ -120,25 +120,6 @@ public sealed class FfmpegProcessor : IFfmpegMediaMuxer, IFfmpegMediaStreamValid
             .ConfigureAwait(false);
     }
 
-    public async Task<bool> MergeVideoAsync(
-        VideoApplicationSettings videoSettings,
-        string? audio,
-        string? video,
-        string destination,
-        bool overwriteDestination,
-        CancellationToken cancellationToken = default)
-    {
-        var result = await MergeMediaAsync(
-            videoSettings,
-            audio,
-            video,
-            destination,
-            overwriteDestination,
-            embeddedAudioMode: FfmpegEmbeddedAudioMode.Optional,
-            cancellationToken).ConfigureAwait(false);
-        return result.Succeeded;
-    }
-
     public async Task<FfmpegOperationResult> MergeMediaAsync(
         VideoApplicationSettings videoSettings,
         string? audio,

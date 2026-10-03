@@ -64,13 +64,6 @@ internal sealed class DownloadTaskProjectionStore : IDisposable
         ThrowStoreFailure(result.Error?.Message);
     }
 
-    public async Task<IReadOnlyList<DownloadingItem>> GetDownloadingAsync(
-        CancellationToken cancellationToken = default)
-    {
-        var state = await GetDownloadingStateAsync(cancellationToken).ConfigureAwait(true);
-        return state.Projections;
-    }
-
     public async Task<DownloadTaskProjectionStartupState> GetDownloadingStateAsync(
         CancellationToken cancellationToken = default)
     {
@@ -137,14 +130,6 @@ internal sealed class DownloadTaskProjectionStore : IDisposable
         return items;
     }
 
-    public async Task<IReadOnlyList<DownloadedItem>> GetRecentDownloadedAsync(
-        int pageSize,
-        CancellationToken cancellationToken = default)
-    {
-        var page = await GetDownloadedPageAsync(null, pageSize, cancellationToken).ConfigureAwait(true);
-        return page.Items.Select(DownloadTaskProjectionMapper.ToDownloadedItem).ToArray();
-    }
-
     public async Task ClearDownloadedAsync(CancellationToken cancellationToken = default)
     {
         var result = await _history.ClearAsync(cancellationToken).ConfigureAwait(true);
@@ -165,48 +150,6 @@ internal sealed class DownloadTaskProjectionStore : IDisposable
     {
         ArgumentNullException.ThrowIfNull(taskId);
         return _snapshots.TryGetValue(taskId, out task);
-    }
-
-    public async Task<DownloadTask?> WaitForSnapshotPhaseChangeAsync(
-        DownloadTaskId taskId,
-        DownloadPhase phase,
-        Task stopWaiting,
-        CancellationToken cancellationToken)
-    {
-        ArgumentNullException.ThrowIfNull(taskId);
-        ArgumentNullException.ThrowIfNull(stopWaiting);
-        var phaseChanged = new TaskCompletionSource<DownloadTask?>(
-            TaskCreationOptions.RunContinuationsAsynchronously);
-
-        void OnTaskChanged(object? sender, DownloadTaskChangedEventArgs args)
-        {
-            if (args.TaskId.Equals(taskId)
-                && (args.Snapshot == null || args.Snapshot.Phase != phase))
-            {
-                phaseChanged.TrySetResult(args.Snapshot);
-            }
-        }
-
-        _tasks.TaskChanged += OnTaskChanged;
-        try
-        {
-            if (!TryGetSnapshot(taskId, out var current) || current.Phase != phase)
-            {
-                return current;
-            }
-
-            var completed = await Task
-                .WhenAny(phaseChanged.Task, stopWaiting)
-                .WaitAsync(cancellationToken)
-                .ConfigureAwait(true);
-            return ReferenceEquals(completed, phaseChanged.Task)
-                ? await phaseChanged.Task.ConfigureAwait(true)
-                : null;
-        }
-        finally
-        {
-            _tasks.TaskChanged -= OnTaskChanged;
-        }
     }
 
     public async Task WaitForPauseRequestAsync(
@@ -259,13 +202,6 @@ internal sealed class DownloadTaskProjectionStore : IDisposable
         {
             DownloadTaskProjectionMapper.ApplyLiveProgress(progress, item);
         }
-    }
-
-    public static DownloadedItem CreateDownloadedProjection(DownloadTask task)
-    {
-        ArgumentNullException.ThrowIfNull(task);
-        return DownloadTaskProjectionMapper.ToDownloadedItem(
-            DownloadHistoryRecord.FromCompletedTask(task));
     }
 
     public void Dispose()

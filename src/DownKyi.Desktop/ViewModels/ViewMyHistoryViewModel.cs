@@ -124,7 +124,7 @@ internal class ViewMyHistoryViewModel : ViewModelBase
         ArrowBack = NavigationIcon.CreateArrowBack();
 
         // 下载管理按钮
-        DownloadManage = ButtonIcon.Instance().DownloadManage;
+        DownloadManage = ButtonIcon.DownloadManage;
         DownloadManage.Height = 24;
         DownloadManage.Width = 24;
 
@@ -405,7 +405,7 @@ internal class ViewMyHistoryViewModel : ViewModelBase
     private void InitView()
     {
 
-        DownloadManage = ButtonIcon.Instance().DownloadManage;
+        DownloadManage = ButtonIcon.DownloadManage;
         DownloadManage.Height = 24;
         DownloadManage.Width = 24;
 
@@ -429,7 +429,7 @@ internal class ViewMyHistoryViewModel : ViewModelBase
         ArgumentNullException.ThrowIfNull(navigationContext);
         base.OnNavigatedTo(navigationContext);
 
-        DownloadManage = ButtonIcon.Instance().DownloadManage;
+        DownloadManage = ButtonIcon.DownloadManage;
         DownloadManage.Height = 24;
         DownloadManage.Width = 24;
 

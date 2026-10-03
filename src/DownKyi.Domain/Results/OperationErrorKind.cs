@@ -6,10 +6,5 @@ public enum OperationErrorKind
     Validation,
     NotFound,
     Conflict,
-    Unauthorized,
-    Forbidden,
-    RateLimited,
-    Network,
-    Timeout,
-    ExternalProtocol
+    Network
 }

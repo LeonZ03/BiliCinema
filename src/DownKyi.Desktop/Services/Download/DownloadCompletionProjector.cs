@@ -1,6 +1,7 @@
 using System;
 using System.Threading.Tasks;
 using DownKyi.Application.Desktop;
+using DownKyi.Application.Downloads;
 using DownKyi.Domain.Downloads;
 using DownKyi.Platform;
 
@@ -29,8 +30,8 @@ internal sealed class DownloadCompletionProjector
     {
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(completedTask);
-        var downloadedItem =
-            DownloadTaskProjectionStore.CreateDownloadedProjection(completedTask);
+        var downloadedItem = DownloadTaskProjectionMapper.ToDownloadedItem(
+            DownloadHistoryRecord.FromCompletedTask(completedTask));
         return _uiDispatcher.InvokeAsync(() =>
         {
             _downloadLists.AddDownloaded(downloadedItem);

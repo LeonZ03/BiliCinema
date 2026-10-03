@@ -43,11 +43,11 @@ internal class ViewDownloadManagerViewModel : ViewModelBase
         {
             new()
             {
-                Id = 0, Image = NormalIcon.Instance().Downloading, Title = DictionaryResource.GetString("Downloading")
+                Id = 0, Image = NormalIcon.Current.Downloading, Title = DictionaryResource.GetString("Downloading")
             },
             new()
             {
-                Id = 1, Image = NormalIcon.Instance().DownloadFinished,
+                Id = 1, Image = NormalIcon.Current.DownloadFinished,
                 Title = DictionaryResource.GetString("DownloadFinished")
             }
         };

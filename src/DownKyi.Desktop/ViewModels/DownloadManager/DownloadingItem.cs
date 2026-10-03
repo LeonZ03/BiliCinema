@@ -13,10 +13,7 @@ namespace DownKyi.ViewModels.DownloadManager
         public DownloadingItem()
         {
             // 暂停继续按钮
-            StartOrPause = ButtonIcon.Instance().Pause;
-
-            // 删除按钮
-            Delete = ButtonIcon.Instance().Delete;
+            StartOrPause = ButtonIcon.Pause;
         }
 
         // model数据
@@ -121,19 +118,13 @@ namespace DownKyi.ViewModels.DownloadManager
                 ArgumentNullException.ThrowIfNull(value);
                 SetProperty(ref _startOrPause, value);
 
-                OperationTip = value.Equals(ButtonIcon.Instance().Start) ? DictionaryResource.GetString("StartDownload")
-                    : value.Equals(ButtonIcon.Instance().Pause) ? DictionaryResource.GetString("PauseDownload")
-                    : value.Equals(ButtonIcon.Instance().Retry) ? DictionaryResource.GetString("RetryDownload") : string.Empty;
+                OperationTip = value.Equals(ButtonIcon.Start) ? DictionaryResource.GetString("StartDownload")
+                    : value.Equals(ButtonIcon.Pause) ? DictionaryResource.GetString("PauseDownload")
+                    : value.Equals(ButtonIcon.Retry) ? DictionaryResource.GetString("RetryDownload") : string.Empty;
             }
         }
 
-        private VectorImage _delete = null!;
-
-        public VectorImage Delete
-        {
-            get => _delete;
-            set => SetProperty(ref _delete, value);
-        }
+        public VectorImage Delete { get; } = ButtonIcon.Delete;
 
         #endregion
 
@@ -141,9 +132,9 @@ namespace DownKyi.ViewModels.DownloadManager
         {
             StartOrPause = status switch
             {
-                DownloadStatus.PauseStarted or DownloadStatus.Pause => ButtonIcon.Instance().Start,
-                DownloadStatus.DownloadFailed => ButtonIcon.Instance().Retry,
-                _ => ButtonIcon.Instance().Pause
+                DownloadStatus.PauseStarted or DownloadStatus.Pause => ButtonIcon.Start,
+                DownloadStatus.DownloadFailed => ButtonIcon.Retry,
+                _ => ButtonIcon.Pause
             };
         }
     }

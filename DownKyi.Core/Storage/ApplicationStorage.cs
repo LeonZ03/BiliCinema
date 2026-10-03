@@ -76,15 +76,6 @@ public static class ApplicationStorage
         return ApplicationDataPaths.Login;
     }
 
-    /// <summary>
-    /// 获取弹幕的文件夹路径
-    /// </summary>
-    /// <returns></returns>
-    public static string GetDanmaku()
-    {
-        return CreateDirectory(ApplicationDataPaths.Danmaku);
-    }
-
     public static string GetMedia()
     {
         return CreateDirectory(ApplicationDataPaths.Media);

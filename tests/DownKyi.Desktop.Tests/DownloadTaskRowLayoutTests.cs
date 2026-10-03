@@ -64,13 +64,13 @@ public sealed class DownloadTaskRowLayoutTests
                 SpeedDisplay = "2.62 MB/s"
             }
         };
-        item.Order = 1;
-        item.MainTitle = "示例影片：较长标题用于检查下载任务的可读性";
-        item.Name = "第一集";
-        item.Duration = "12:48";
-        item.Resolution = new Quality { Name = "1080P" };
-        item.VideoCodecName = "AVC";
-        item.AudioCodec = new Quality { Name = "AAC" };
+        item.DownloadBase.Order = 1;
+        item.DownloadBase.MainTitle = "示例影片：较长标题用于检查下载任务的可读性";
+        item.DownloadBase.Name = "第一集";
+        item.DownloadBase.Duration = "12:48";
+        item.DownloadBase.Resolution = new Quality { Name = "1080P" };
+        item.DownloadBase.VideoCodecName = "AVC";
+        item.DownloadBase.AudioCodec = new Quality { Name = "AAC" };
 
         var view = new ViewDownloading();
         var content = Assert.IsType<Grid>(

@@ -54,10 +54,10 @@ internal partial class ViewMySpaceViewModel : ViewModelBase
         Loading = true;
 
         // B站图标
-        CoinIcon = NormalIcon.Instance().CoinIcon;
-        MoneyIcon = NormalIcon.Instance().MoneyIcon;
-        BindingEmail = NormalIcon.Instance().BindingEmail;
-        BindingPhone = NormalIcon.Instance().BindingPhone;
+        CoinIcon = NormalIcon.Current.CoinIcon;
+        MoneyIcon = NormalIcon.Current.MoneyIcon;
+        BindingEmail = NormalIcon.Current.BindingEmail;
+        BindingPhone = NormalIcon.Current.BindingPhone;
 
         StatusList = new ObservableCollection<SpaceItem>();
         PackageList = new ObservableCollection<SpaceItem>();
@@ -232,31 +232,31 @@ internal partial class ViewMySpaceViewModel : ViewModelBase
         PackageList.Add(new SpaceItem
         {
             IsEnabled = true,
-            Image = NormalIcon.Instance().FavoriteOutline,
+            Image = NormalIcon.Current.FavoriteOutline,
             Title = DictionaryResource.GetString("Favorites")
         });
         PackageList.Add(new SpaceItem
         {
             IsEnabled = true,
-            Image = NormalIcon.Instance().Subscription,
+            Image = NormalIcon.Current.Subscription,
             Title = DictionaryResource.GetString("Subscription")
         });
         PackageList.Add(new SpaceItem
         {
             IsEnabled = true,
-            Image = NormalIcon.Instance().ToView,
+            Image = NormalIcon.Current.ToView,
             Title = DictionaryResource.GetString("ToView")
         });
         PackageList.Add(new SpaceItem
         {
             IsEnabled = true,
-            Image = NormalIcon.Instance().History,
+            Image = NormalIcon.Current.History,
             Title = DictionaryResource.GetString("History")
         });
         PackageList.Add(new SpaceItem
         {
             IsEnabled = true,
-            Image = NormalIcon.Instance().Channel,
+            Image = NormalIcon.Current.Channel,
             Title = DictionaryResource.GetString("BilibiliDynamics")
         });
         SelectedStatus = -1;

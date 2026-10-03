@@ -1,17 +1,8 @@
 namespace DownKyi.Images;
 
-internal class ButtonIcon
+internal static class ButtonIcon
 {
-    private static ButtonIcon? _instance;
-
-    public static ButtonIcon Current => Instance();
-
-    public static ButtonIcon Instance()
-    {
-        return _instance ??= new ButtonIcon();
-    }
-
-    public ButtonIcon()
+    static ButtonIcon()
     {
         GeneralSearch = new VectorImage
         {
@@ -139,15 +130,15 @@ internal class ButtonIcon
         };
     }
 
-    public VectorImage GeneralSearch { get; private set; }
-    public VectorImage Settings { get; private set; }
-    public VectorImage DownloadManage { get; private set; }
-    public VectorImage Toolbox { get; private set; }
+    public static VectorImage GeneralSearch { get; }
+    public static VectorImage Settings { get; }
+    public static VectorImage DownloadManage { get; }
+    public static VectorImage Toolbox { get; }
 
-    public VectorImage Trash { get; private set; }
-    public VectorImage Delete { get; private set; }
-    public VectorImage Start { get; private set; }
-    public VectorImage Pause { get; private set; }
-    public VectorImage Retry { get; private set; }
-    public VectorImage Folder { get; private set; }
+    public static VectorImage Trash { get; }
+    public static VectorImage Delete { get; }
+    public static VectorImage Start { get; }
+    public static VectorImage Pause { get; }
+    public static VectorImage Retry { get; }
+    public static VectorImage Folder { get; }
 }

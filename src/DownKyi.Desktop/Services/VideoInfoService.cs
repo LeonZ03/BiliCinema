@@ -382,7 +382,7 @@ internal class VideoInfoService : IInfoService
 
         // 分区
         var videoZone = string.Empty;
-        var zoneList = VideoZone.Instance().Zones;
+        var zoneList = VideoZone.Current.Zones;
         var zone = zoneList.FirstOrDefault(it => it.Id == videoView.Tid);
         if (zone != null)
         {
