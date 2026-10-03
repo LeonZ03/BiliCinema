@@ -4,13 +4,8 @@
              Height="400"
              xmlns:vmd="clr-namespace:DownKyi.ViewModels.Dialogs"
              x:DataType="vmd:NewVersionAvailableDialogViewModel"
-             xmlns:local="using:DownKyi.Converter"
              x:Class="DownKyi.Views.Dialogs.NewVersionAvailableDialog">
-    
-    <UserControl.Resources>
-        <local:MarkdownToInlinesConverter x:Key="MarkdownConverter"/>
-    </UserControl.Resources>
-    
+
     <Border Background="{DynamicResource BrushBackground}"
             CornerRadius="8"
             BorderBrush="{DynamicResource BrushPrimary}"
@@ -48,8 +43,7 @@
                           VerticalScrollBarVisibility="Auto"
                           Padding="0 8">
                 <TextBlock Margin="15,0,0,0"
-                    Inlines="{Binding MarkdownText,
-                 Converter={StaticResource MarkdownConverter}}"
+                           Text="{Binding MarkdownText}"
                            TextWrapping="Wrap"/>
             </ScrollViewer>
             
