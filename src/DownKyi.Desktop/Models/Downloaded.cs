@@ -1,6 +1,3 @@
-using System;
-using System.Globalization;
-
 namespace DownKyi.Models;
 
 internal class Downloaded
@@ -12,15 +9,6 @@ internal class Downloaded
 
     // 完成时间戳
     public long FinishedTimestamp { get; set; }
-
-    public void SetFinishedTimestamp(long finishedTimestamp)
-    {
-        FinishedTimestamp = finishedTimestamp;
-
-        var startTime = TimeZoneInfo.ConvertTimeFromUtc(new DateTime(1970, 1, 1), TimeZoneInfo.Local); // 当地时区
-        var dateTime = startTime.AddSeconds(finishedTimestamp);
-        FinishedTime = dateTime.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture);
-    }
 
     // 完成时间
     public string FinishedTime { get; set; } = string.Empty;

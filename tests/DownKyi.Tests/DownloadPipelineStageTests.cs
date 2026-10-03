@@ -1005,13 +1005,13 @@ public sealed class DownloadPipelineStageTests
             3,
             TimeSpan.Zero);
 
-        var downloaded = FinalizeStage.CreateDownloadedSummary(
+        var completion = FinalizeStage.CreateCompletionSummary(
             maximumBytesPerSecond: 1_250_000,
             timeProvider: new FixedTimeProvider(finishedAt));
 
-        Assert.Equal(finishedAt.ToUnixTimeSeconds(), downloaded.FinishedTimestamp);
-        Assert.False(string.IsNullOrEmpty(downloaded.FinishedTime));
-        Assert.False(string.IsNullOrEmpty(downloaded.MaxSpeedDisplay));
+        Assert.Equal(finishedAt.ToUnixTimeSeconds(), completion.FinishedTimestamp);
+        Assert.False(string.IsNullOrEmpty(completion.FinishedTimeText));
+        Assert.False(string.IsNullOrEmpty(completion.MaximumSpeedText));
     }
 
     private static DownloadExecutionContext CreateContext(
