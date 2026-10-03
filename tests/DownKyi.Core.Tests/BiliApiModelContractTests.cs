@@ -19,13 +19,9 @@ public sealed class BiliApiModelContractTests
         const string json = """{"bv_id":"legacy","bvid":"current","attr":9}""";
 
         var media = JsonConvert.DeserializeObject<FavoritesMedia>(json);
-        var mediaId = JsonConvert.DeserializeObject<FavoritesMediaId>(json);
-
         Assert.Equal("legacy", media?.LegacyBvid);
         Assert.Equal("current", media?.Bvid);
         Assert.Equal(9, media?.Attr);
-        Assert.Equal("legacy", mediaId?.LegacyBvid);
-        Assert.Equal("current", mediaId?.Bvid);
     }
 
     private static readonly string[] ExpectedStyles = { "sci-fi", "adventure" };

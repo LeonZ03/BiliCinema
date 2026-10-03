@@ -8,29 +8,6 @@ namespace DownKyi.Core.BiliApi.Favorites;
 public static class FavoritesResource
 {
     /// <summary>
-    /// 获取收藏夹内容明细列表
-    /// </summary>
-    /// <param name="mediaId">收藏夹ID</param>
-    /// <param name="pn">页码</param>
-    /// <param name="ps">每页项数</param>
-    /// <returns></returns>
-    public static async Task<IReadOnlyList<FavoritesMedia>?> GetFavoritesMediaAsync(
-        this IBilibiliApiClient client,
-        long mediaId,
-        int pn,
-        int ps,
-        CancellationToken cancellationToken = default)
-    {
-        var resource = await client.GetFavoritesMediaResourceAsync(
-            mediaId,
-            pn,
-            ps,
-            null,
-            cancellationToken).ConfigureAwait(false);
-        return resource.Medias;
-    }
-
-    /// <summary>
     /// 获取收藏夹内容和服务端的后续分页标记。
     /// </summary>
     public static async Task<FavoritesMediaResource> GetFavoritesMediaResourceAsync(
@@ -47,7 +24,7 @@ public static class FavoritesResource
             client,
             url,
             referer,
-            nameof(GetFavoritesMediaAsync),
+            nameof(GetFavoritesMediaResourceAsync),
             "FavoritesResource",
             cancellationToken: cancellationToken).ConfigureAwait(false);
 
@@ -82,39 +59,19 @@ public static class FavoritesResource
             const int ps = 20;
 
             cancellationToken.ThrowIfCancellationRequested();
-            var data = await client.GetFavoritesMediaAsync(mediaId, i, ps, cancellationToken)
-                .ConfigureAwait(false);
-            if (data == null || data.Count == 0)
+            var page = await client.GetFavoritesMediaResourceAsync(
+                mediaId,
+                i,
+                ps,
+                null,
+                cancellationToken).ConfigureAwait(false);
+            result.AddRange(page.Medias);
+            if (!page.HasMore)
             {
                 break;
             }
-
-            result.AddRange(data);
         }
 
         return result;
-    }
-
-    /// <summary>
-    /// 获取收藏夹全部内容id
-    /// </summary>
-    /// <param name="mediaId"></param>
-    /// <returns></returns>
-    public static async Task<IReadOnlyList<FavoritesMediaId>?> GetFavoritesMediaIdAsync(
-        this IBilibiliApiClient client,
-        long mediaId,
-        CancellationToken cancellationToken = default)
-    {
-        var url = $"https://api.bilibili.com/x/v3/fav/resource/ids?media_id={mediaId}";
-        const string referer = "https://www.bilibili.com";
-        var media = await BiliApiRequest.RequestJsonAsync<FavoritesMediaIdOrigin>(
-            client,
-            url,
-            referer,
-            nameof(GetFavoritesMediaIdAsync),
-            "FavoritesResource",
-            cancellationToken: cancellationToken).ConfigureAwait(false);
-
-        return BiliApiRequest.RequirePayload(media.Data);
     }
 }
