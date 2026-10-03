@@ -120,7 +120,7 @@ internal sealed class BuiltinTransferBackend : ITransferBackend
             if (resolution.ErrorCode != null)
             {
                 return DownloadTransferResult.Failed(
-                    DownloadTransferFailureKind.Permanent,
+                    DownloadTransferFailureKind.CandidateRejected,
                     resolution.ErrorCode);
             }
 

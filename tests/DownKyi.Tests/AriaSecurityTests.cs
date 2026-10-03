@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Http;
+using System.Security.Authentication;
 using DownKyi.Core.Aria2cNet.Client;
 using DownKyi.Core.Aria2cNet.Server;
 using DownKyi.Core.Settings;
@@ -151,6 +152,41 @@ public sealed class AriaSecurityTests
 
         Assert.Equal("download.transfer.insecure-redirect", result.ErrorCode);
         Assert.Null(result.Address);
+        Assert.Equal(1, handler.RequestCount);
+    }
+
+    [Fact]
+    public async Task AddressResolverReturnsSanitizedRejectionForHostnameFailure()
+    {
+        const string sensitiveMessage =
+            "remote certificate name mismatch for signed-url-token-private";
+        using var handler = new StubHttpMessageHandler((request, _) =>
+        {
+            Assert.True(request.Headers.TryGetValues("Cookie", out var cookies));
+            Assert.Contains("SESSDATA=cookie-private", cookies);
+            throw new HttpRequestException(
+                "The SSL connection could not be established.",
+                new AuthenticationException(sensitiveMessage));
+        });
+        using var resolver = AriaDownloadAddressResolver.CreateForTest(handler);
+
+        var result = await resolver.ResolveAsync(
+            "https://api.bilibili.com/media?signature=private",
+            "DownKyi-Test-Agent",
+            "SESSDATA=cookie-private",
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal("download.transfer.tls.hostname", result.ErrorCode);
+        Assert.Null(result.Address);
+        Assert.Null(result.Headers);
+        Assert.DoesNotContain(
+            "signed-url-token-private",
+            result.ErrorCode,
+            StringComparison.Ordinal);
+        Assert.DoesNotContain(
+            "cookie-private",
+            result.ErrorCode,
+            StringComparison.Ordinal);
         Assert.Equal(1, handler.RequestCount);
     }
 

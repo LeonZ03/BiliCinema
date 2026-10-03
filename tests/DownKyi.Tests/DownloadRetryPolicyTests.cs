@@ -35,6 +35,66 @@ public sealed class DownloadRetryPolicyTests
     }
 
     [Fact]
+    public async Task CoordinatorTriesNextAddressAfterCandidateRejection()
+    {
+        using var backend = new RecordingBackend(
+            DownloadTransferResult.Failed(
+                DownloadTransferFailureKind.CandidateRejected,
+                "download.transfer.insecure-address"),
+            DownloadTransferResult.Succeeded());
+        var coordinator = CreateCoordinator(backend, maximumAttempts: 5);
+        var refreshCount = 0;
+
+        var result = await coordinator.TransferAsync(
+            CreateRequest(
+                "https://primary.invalid/media",
+                "https://backup.invalid/media"),
+            _ =>
+            {
+                refreshCount++;
+                return Task.FromResult<IReadOnlyList<string>>([]);
+            },
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(DownloadTransferOutcome.Succeeded, result.Outcome);
+        Assert.Equal(2, backend.Requests.Count);
+        Assert.Equal("https://primary.invalid/media", Assert.Single(backend.Requests[0].Urls));
+        Assert.Equal("https://backup.invalid/media", Assert.Single(backend.Requests[1].Urls));
+        Assert.Equal(0, refreshCount);
+    }
+
+    [Fact]
+    public async Task CoordinatorStopsAfterAllCandidatesAreRejected()
+    {
+        using var backend = new RecordingBackend(
+            DownloadTransferResult.Failed(
+                DownloadTransferFailureKind.CandidateRejected,
+                "download.transfer.insecure-address"),
+            DownloadTransferResult.Failed(
+                DownloadTransferFailureKind.CandidateRejected,
+                "download.transfer.tls.hostname"));
+        var coordinator = CreateCoordinator(backend, maximumAttempts: 5);
+        var refreshCount = 0;
+
+        var result = await coordinator.TransferAsync(
+            CreateRequest(
+                "https://primary.invalid/media",
+                "https://backup.invalid/media"),
+            _ =>
+            {
+                refreshCount++;
+                return Task.FromResult<IReadOnlyList<string>>([]);
+            },
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(DownloadTransferOutcome.Failed, result.Outcome);
+        Assert.Equal(DownloadTransferFailureKind.CandidateRejected, result.FailureKind);
+        Assert.Equal("download.transfer.tls.hostname", result.ErrorCode);
+        Assert.Equal(2, backend.Requests.Count);
+        Assert.Equal(0, refreshCount);
+    }
+
+    [Fact]
     public async Task CoordinatorRetriesTransientFailureOnSameAddressBeforeMoving()
     {
         using var backend = new RecordingBackend(
@@ -342,6 +402,36 @@ public sealed class DownloadRetryPolicyTests
     }
 
     [Fact]
+    public async Task BuiltinBackendClassifiesAddressPreflightRejectionAsCandidateRejected()
+    {
+        var directory = CreateTemporaryDirectory("builtin-candidate-rejected");
+        using var settings = new TestSettingsStore();
+        using var backend = new BuiltinTransferBackend(
+            settings.Store,
+            new DownloadDiagnosticLogger(
+                NullLogger<DownloadDiagnosticLogger>.Instance),
+            NullLogger<BuiltinTransferBackend>.Instance);
+
+        try
+        {
+            var result = await backend.TransferAsync(CreateRequestAt(
+                directory,
+                "media.tmp",
+                backendIdentity: null,
+                static (_, _) => Task.CompletedTask,
+                "http://download.invalid/media"));
+
+            Assert.Equal(DownloadTransferOutcome.Failed, result.Outcome);
+            Assert.Equal(DownloadTransferFailureKind.CandidateRejected, result.FailureKind);
+            Assert.Equal("download.transfer.insecure-address", result.ErrorCode);
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    [Fact]
     public async Task BuiltinBackendRecoversCompletedTargetBeforeResolvingAddress()
     {
         using var settings = new TestSettingsStore();
@@ -529,6 +619,25 @@ public sealed class DownloadRetryPolicyTests
 
         Assert.Equal(DownloadTransferOutcome.Failed, result.Outcome);
         Assert.Equal(DownloadTransferFailureKind.Tls, result.FailureKind);
+        Assert.Single(backend.Requests);
+    }
+
+    [Fact]
+    public async Task CoordinatorDoesNotRetryPermanentFailureOrTryBackupAddresses()
+    {
+        using var backend = new RecordingBackend(
+            DownloadTransferResult.Failed(
+                DownloadTransferFailureKind.Permanent,
+                "download.transfer.permanent"));
+        var coordinator = CreateCoordinator(backend, maximumAttempts: 5);
+
+        var result = await coordinator.TransferAsync(
+            CreateRequest("https://primary.invalid/media", "https://backup.invalid/media"),
+            static _ => Task.FromResult<IReadOnlyList<string>>([]),
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(DownloadTransferOutcome.Failed, result.Outcome);
+        Assert.Equal(DownloadTransferFailureKind.Permanent, result.FailureKind);
         Assert.Single(backend.Requests);
     }
 

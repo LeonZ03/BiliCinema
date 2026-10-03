@@ -61,6 +61,9 @@ internal sealed class DownloadRetryPolicy
             DownloadTransferFailureKind.InvalidMedia => hasNextAddress
                 ? new DownloadRetryDecision(DownloadRetryAction.TryNextAddress, TimeSpan.Zero)
                 : Stop(),
+            DownloadTransferFailureKind.CandidateRejected => hasNextAddress
+                ? new DownloadRetryDecision(DownloadRetryAction.TryNextAddress, TimeSpan.Zero)
+                : Stop(),
             DownloadTransferFailureKind.None or
                 DownloadTransferFailureKind.Disk or
                 DownloadTransferFailureKind.Tls or

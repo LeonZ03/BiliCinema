@@ -94,38 +94,51 @@ internal sealed class AriaDownloadAddressResolver : IDisposable
                 userAgent,
                 credentials);
             using var request = CreateProbeRequest(current, taskHeaders);
-            using var response = await _http.SendAsync(
-                request,
-                cancellationToken).ConfigureAwait(false);
-            if (!IsRedirect(response.StatusCode))
+            HttpResponseMessage response;
+            try
             {
-                return AriaDownloadAddressResolution.Accepted(
-                    current.AbsoluteUri,
-                    taskHeaders);
+                response = await _http.SendAsync(
+                    request,
+                    cancellationToken).ConfigureAwait(false);
+            }
+            catch (HttpRequestException exception) when (
+                TlsFailureClassifier.TryClassify(exception, out var tlsErrorCode))
+            {
+                return AriaDownloadAddressResolution.Rejected(tlsErrorCode);
             }
 
-            if (redirectCount >= MaximumRedirects)
+            using (response)
             {
-                return AriaDownloadAddressResolution.Rejected(
-                    "download.transfer.redirect-limit");
-            }
+                if (!IsRedirect(response.StatusCode))
+                {
+                    return AriaDownloadAddressResolution.Accepted(
+                        current.AbsoluteUri,
+                        taskHeaders);
+                }
 
-            var redirect = ResolveRedirect(current, response.Headers.Location);
-            if (redirect.ErrorCode != null)
-            {
-                return redirect;
-            }
+                if (redirectCount >= MaximumRedirects)
+                {
+                    return AriaDownloadAddressResolution.Rejected(
+                        "download.transfer.redirect-limit");
+                }
 
-            var next = redirect.Address
-                ?? throw new InvalidOperationException(
-                    "The accepted aria2 redirect address is missing.");
-            if (taskHeaders.CarriesCredentials && !IsSameOrigin(current, next))
-            {
-                return AriaDownloadAddressResolution.Rejected(
-                    "download.transfer.credentialed-redirect");
-            }
+                var redirect = ResolveRedirect(current, response.Headers.Location);
+                if (redirect.ErrorCode != null)
+                {
+                    return redirect;
+                }
 
-            current = next;
+                var next = redirect.Address
+                    ?? throw new InvalidOperationException(
+                        "The accepted aria2 redirect address is missing.");
+                if (taskHeaders.CarriesCredentials && !IsSameOrigin(current, next))
+                {
+                    return AriaDownloadAddressResolution.Rejected(
+                        "download.transfer.credentialed-redirect");
+                }
+
+                current = next;
+            }
         }
     }
 
