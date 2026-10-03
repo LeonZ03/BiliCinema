@@ -112,7 +112,7 @@ internal class ViewIndexViewModel : ViewModelBase
         _loginPanelVisibility = true;
         Header = "avares://DownKyi.Desktop/Resources/default_header.jpg";
 
-        TextLogo = LogoIcon.Current.TextLogo;
+        TextLogo = LogoIcon.TextLogo;
 
         GeneralSearch = ButtonIcon.GeneralSearch;
 
