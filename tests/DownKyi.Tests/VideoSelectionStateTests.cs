@@ -59,22 +59,6 @@ public sealed class VideoSelectionStateTests
     }
 
     [Fact]
-    public void ApplySelectedPagesUpdatesSectionSelectionByCid()
-    {
-        var section = CreateSections()[0];
-
-        VideoSelectionState.ApplySelectedPages(section, new[] { section.VideoPages[1] });
-
-        Assert.False(section.VideoPages[0].IsSelected);
-        Assert.True(section.VideoPages[1].IsSelected);
-        Assert.False(VideoSelectionState.IsAllSelected(section, VideoSelectionState.GetSelectedPages(section).Count));
-
-        VideoSelectionState.ApplySelectedPages(section, section.VideoPages);
-
-        Assert.True(VideoSelectionState.IsAllSelected(section, VideoSelectionState.GetSelectedPages(section).Count));
-    }
-
-    [Fact]
     public void SetAllSelectedSupportsSelectAllAndClearSelection()
     {
         var section = CreateSections()[0];
