@@ -147,12 +147,6 @@ public sealed class ApplicationLogProvider :
         return _sink.TryWrite(record);
     }
 
-    internal async Task RequestMaintenanceAsync(CancellationToken cancellationToken)
-    {
-        await _sink.FlushAsync(cancellationToken).ConfigureAwait(false);
-        await _retentionWorker.RunMaintenanceAsync(cancellationToken).ConfigureAwait(false);
-    }
-
     private static void ValidateOptions(ApplicationLogOptions? options)
     {
         ArgumentNullException.ThrowIfNull(options);
