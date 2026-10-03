@@ -204,13 +204,6 @@ internal sealed class DownloadTaskProjectionStore : IDisposable
         }
     }
 
-    public static DownloadedItem CreateDownloadedProjection(DownloadTask task)
-    {
-        ArgumentNullException.ThrowIfNull(task);
-        return DownloadTaskProjectionMapper.ToDownloadedItem(
-            DownloadHistoryRecord.FromCompletedTask(task));
-    }
-
     public void Dispose()
     {
         if (_disposed)
