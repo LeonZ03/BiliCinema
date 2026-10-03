@@ -70,21 +70,6 @@ public class AriaManager
     }
 
     /// <summary>
-    /// 获取gid下载项的状态。
-    /// </summary>
-    public async Task<DownloadResult> GetDownloadStatusAsync(
-        string gid,
-        Func<CancellationToken, ValueTask>? statusCallback = null,
-        CancellationToken cancellationToken = default)
-    {
-        var status = await GetDownloadStatusDetailAsync(
-            gid,
-            statusCallback,
-            cancellationToken).ConfigureAwait(false);
-        return status.Result;
-    }
-
-    /// <summary>
     /// Gets the download status while preserving aria2's machine-readable failure code.
     /// </summary>
     public async Task<AriaDownloadStatus> GetDownloadStatusDetailAsync(
