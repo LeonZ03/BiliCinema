@@ -41,32 +41,6 @@ public static class ObjectHelper
     }
 
     /// <summary>
-    /// 从磁盘读取cookie
-    /// </summary>
-    /// <param name="file"></param>
-    /// <returns></returns>
-    public static IReadOnlyList<DownKyiCookie>? ReadCookiesFromDisk(string file)
-    {
-        try
-        {
-            using Stream stream = File.Open(file, FileMode.Open);
-            return JsonSerializer.Deserialize<List<DownKyiCookie>>(stream);
-        }
-        catch (IOException)
-        {
-            return null;
-        }
-        catch (SystemTextJsonException)
-        {
-            return null;
-        }
-        catch (UnauthorizedAccessException)
-        {
-            return null;
-        }
-    }
-
-    /// <summary>
     /// 从已打开的流中读取cookie
     /// </summary>
     /// <param name="stream"></param>

@@ -34,21 +34,6 @@ internal static class DownloadStoreJson
         return JsonSerializer.Serialize(payload);
     }
 
-    public static string WriteBooleanMap(IEnumerable<KeyValuePair<string, bool>> values)
-    {
-        ArgumentNullException.ThrowIfNull(values);
-        return Write(writer =>
-        {
-            writer.WriteStartObject();
-            foreach (var value in values)
-            {
-                writer.WriteBoolean(value.Key, value.Value);
-            }
-
-            writer.WriteEndObject();
-        });
-    }
-
     public static string WriteStringMap(IEnumerable<KeyValuePair<string, string>> values)
     {
         ArgumentNullException.ThrowIfNull(values);
