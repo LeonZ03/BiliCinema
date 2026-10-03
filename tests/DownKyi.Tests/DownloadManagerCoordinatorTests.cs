@@ -254,8 +254,9 @@ public sealed class DownloadManagerCoordinatorTests
         var published = context.CreateFile(Path.Combine("published", "actual.flv"), "completed media");
         context.CreateFile("reopen-open.mp4", "decoy");
         context.ReopenStorage();
-        var reopenedItem = Assert.Single(await context.Storage.GetRecentDownloadedAsync(
-            10, TestContext.Current.CancellationToken));
+        var page = await context.Storage.GetDownloadedPageAsync(
+            null, 10, TestContext.Current.CancellationToken);
+        var reopenedItem = DownloadTaskProjectionMapper.ToDownloadedItem(Assert.Single(page.Items));
 
         var fileResult = await context.Coordinator.OpenVideoAsync(
             reopenedItem, TestContext.Current.CancellationToken);
@@ -325,13 +326,15 @@ public sealed class DownloadManagerCoordinatorTests
         await context.StateWriter.StartAsync(taskId, TestContext.Current.CancellationToken);
         await context.StateWriter.CompleteAsync(
             taskId, new DownloadCompletion(1, "completed", null), TestContext.Current.CancellationToken);
-        var legacy = Assert.Single(await context.Storage.GetRecentDownloadedAsync(
-            10, TestContext.Current.CancellationToken));
+        var legacyPage = await context.Storage.GetDownloadedPageAsync(
+            null, 10, TestContext.Current.CancellationToken);
+        var legacy = DownloadTaskProjectionMapper.ToDownloadedItem(Assert.Single(legacyPage.Items));
         context.CreateFile("legacy-no-map.mp4", "unowned decoy");
         context.CreateFile("legacy-no-map.flv", "unowned decoy");
         context.ReopenStorage();
-        var reopened = Assert.Single(await context.Storage.GetRecentDownloadedAsync(
-            10, TestContext.Current.CancellationToken));
+        var reopenedPage = await context.Storage.GetDownloadedPageAsync(
+            null, 10, TestContext.Current.CancellationToken);
+        var reopened = DownloadTaskProjectionMapper.ToDownloadedItem(Assert.Single(reopenedPage.Items));
 
         var file = await context.Coordinator.OpenVideoAsync(reopened, TestContext.Current.CancellationToken);
         var folder = await context.Coordinator.OpenFolderAsync(reopened, TestContext.Current.CancellationToken);
@@ -557,11 +560,12 @@ public sealed class DownloadManagerCoordinatorTests
             await StateWriter.CompleteAsync(taskId,
                 new DownloadCompletion(1, "completed", null), TestContext.Current.CancellationToken)
                 .ConfigureAwait(true);
-            return Assert.Single(
-                await Storage.GetRecentDownloadedAsync(
-                    10,
-                    TestContext.Current.CancellationToken).ConfigureAwait(true),
-                item => item.HistoryRecord.Id == taskId);
+            var page = await Storage.GetDownloadedPageAsync(
+                null,
+                10,
+                TestContext.Current.CancellationToken).ConfigureAwait(true);
+            return DownloadTaskProjectionMapper.ToDownloadedItem(
+                Assert.Single(page.Items, item => item.Id == taskId));
         }
 
         public string CreateFile(string name, string contents)

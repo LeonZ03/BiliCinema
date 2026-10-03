@@ -130,14 +130,6 @@ internal sealed class DownloadTaskProjectionStore : IDisposable
         return items;
     }
 
-    public async Task<IReadOnlyList<DownloadedItem>> GetRecentDownloadedAsync(
-        int pageSize,
-        CancellationToken cancellationToken = default)
-    {
-        var page = await GetDownloadedPageAsync(null, pageSize, cancellationToken).ConfigureAwait(true);
-        return page.Items.Select(DownloadTaskProjectionMapper.ToDownloadedItem).ToArray();
-    }
-
     public async Task ClearDownloadedAsync(CancellationToken cancellationToken = default)
     {
         var result = await _history.ClearAsync(cancellationToken).ConfigureAwait(true);
