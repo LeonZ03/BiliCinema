@@ -96,7 +96,6 @@ $probes = @(
     @{ Name = 'bangumi-season'; Uri = 'https://api.bilibili.com/pgc/view/web/season?ep_id=21495'; Kind = 'json' }
     @{ Name = 'bangumi-play-v2'; Uri = 'https://api.bilibili.com/pgc/player/web/v2/playurl?ep_id=21495&qn=64&fnver=0&fnval=4048'; Kind = 'json' }
     @{ Name = 'cheese-season'; Uri = 'https://api.bilibili.com/pugv/view/web/season?ep_id=3489'; Kind = 'json' }
-    @{ Name = 'cheese-episode-list'; Uri = 'https://api.bilibili.com/pugv/view/web/ep/list?season_id=205&pn=1&ps=1'; Kind = 'json' }
     @{ Name = 'cheese-play'; Uri = 'https://api.bilibili.com/pugv/player/web/playurl?ep_id=3489&qn=64&fnver=0&fnval=4048'; Kind = 'json' }
     @{ Name = 'favorites-created-page'; Uri = 'https://api.bilibili.com/x/v3/fav/folder/created/list?up_mid=2&pn=1&ps=1'; Kind = 'json' }
     @{ Name = 'favorites-created-all-alternative'; Uri = 'https://api.bilibili.com/x/v3/fav/folder/created/list-all?up_mid=2'; Kind = 'json' }

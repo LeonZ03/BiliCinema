@@ -85,26 +85,6 @@ public static partial class UserSpace
         return BiliApiRequest.RequirePayload(origin.Data);
     }
 
-    public static async Task<IReadOnlyList<SpaceCheese>?> GetCheeseAsync(
-        this IBilibiliApiClient client,
-        long mid,
-        int pn,
-        int ps,
-        CancellationToken cancellationToken = default)
-    {
-        var url = $"https://api.bilibili.com/pugv/app/web/season/page?mid={mid}&pn={pn}&ps={ps}";
-        const string referer = "https://www.bilibili.com";
-        var cheese = await BiliApiRequest.RequestJsonAsync<SpaceCheeseOrigin>(
-            client,
-            url,
-            referer,
-            nameof(GetCheeseAsync),
-            "UserSpace",
-            cancellationToken: cancellationToken).ConfigureAwait(false);
-
-        return BiliApiRequest.RequirePayload(cheese.Data).Items;
-    }
-
     public static async Task<BangumiFollowData?> GetBangumiFollowAsync(
         this IBilibiliApiClient client,
         long mid,
