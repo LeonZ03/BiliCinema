@@ -28,7 +28,7 @@ public sealed class FfmpegCommitBoundaryTests : IDisposable
             NullLoggerFactory.Instance,
             new SuccessfulOutputRunner());
 
-        var succeeded = await processor.MergeVideoAsync(
+        var result = await processor.MergeMediaAsync(
             _settings.Current.Video,
             audio,
             video,
@@ -36,7 +36,7 @@ public sealed class FfmpegCommitBoundaryTests : IDisposable
             overwriteDestination: false,
             cancellationToken: TestContext.Current.CancellationToken).ConfigureAwait(true);
 
-        Assert.True(succeeded);
+        Assert.True(result.Succeeded);
         Assert.True(File.Exists(output));
         Assert.True(File.Exists(audio));
         Assert.True(File.Exists(video));
