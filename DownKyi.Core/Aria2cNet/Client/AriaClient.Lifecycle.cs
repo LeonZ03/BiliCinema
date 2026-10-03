@@ -5,27 +5,6 @@ namespace DownKyi.Core.Aria2cNet.Client;
 public sealed partial class AriaClient
 {
     /// <summary>
-    /// This method returns global statistics such as the overall download and upload speeds.
-    /// The response is a struct and contains the following keys. Values are strings.
-    /// </summary>
-    /// <returns></returns>
-    public async Task<AriaGetGlobalStat> GetGlobalStatAsync()
-    {
-        List<object> ariaParams = new List<object>
-        {
-            "token:" + _token,
-        };
-        AriaSendData ariaSend = new AriaSendData
-        {
-            Id = Guid.NewGuid().ToString("N"),
-            Jsonrpc = JSONRPC,
-            Method = "aria2.getGlobalStat",
-            Params = ariaParams
-        };
-        return await GetRpcResponseAsync<AriaGetGlobalStat>(ariaSend).ConfigureAwait(false);
-    }
-
-    /// <summary>
     /// This method removes a completed/error/removed download denoted by gid from memory.
     /// This method returns OK for success.
     /// </summary>

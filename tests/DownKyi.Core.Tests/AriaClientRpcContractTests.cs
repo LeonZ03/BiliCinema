@@ -154,7 +154,6 @@ public sealed class AriaClientRpcContractTests
             new(nameof(AriaClient.UnpauseAsync), "aria2.unpause", true, client => client.UnpauseAsync("gid")),
             new(nameof(AriaClient.TellStatus), "aria2.tellStatus", true, client => client.TellStatus("gid", TestContext.Current.CancellationToken)),
             new(nameof(AriaClient.ChangeOptionAsync), "aria2.changeOption", true, client => client.ChangeOptionAsync("gid", new { Split = "4" })),
-            new(nameof(AriaClient.GetGlobalStatAsync), "aria2.getGlobalStat", true, client => client.GetGlobalStatAsync()),
             new(nameof(AriaClient.RemoveDownloadResultAsync), "aria2.removeDownloadResult", true, client => client.RemoveDownloadResultAsync("gid")),
             new(nameof(AriaClient.GetAriaVersionAsync), "aria2.getVersion", true, client => client.GetAriaVersionAsync()),
             new(nameof(AriaClient.ShutdownAsync), "aria2.shutdown", true, client => client.ShutdownAsync()),
