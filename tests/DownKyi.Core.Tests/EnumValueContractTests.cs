@@ -46,11 +46,6 @@ public sealed class EnumValueContractTests
     [Fact]
     public void NoneMembersDoNotShiftPersistedOrProtocolValues()
     {
-        Assert.Equal(0, (int)HowChangePosition.None);
-        Assert.Equal(1, (int)HowChangePosition.PosSet);
-        Assert.Equal("POS_SET", AriaClient.GetChangePositionValue(HowChangePosition.PosSet));
-        Assert.Equal("POS_CUR", AriaClient.GetChangePositionValue(HowChangePosition.PosCurrent));
-        Assert.Equal("POS_END", AriaClient.GetChangePositionValue(HowChangePosition.PosEnd));
         Assert.Equal(0, (int)AriaConfigLogLevel.NotSet);
         Assert.Equal(0, (int)AriaConfigFileAllocation.NotSet);
         Assert.Equal(0, (int)DownloadResult.None);

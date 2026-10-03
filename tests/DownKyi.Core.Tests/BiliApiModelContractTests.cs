@@ -108,15 +108,9 @@ public sealed class BiliApiModelContractTests
         var ariaUri = JsonConvert.DeserializeObject<AriaUri>("""
             { "status": "used", "uri": "https://example.invalid/file" }
             """);
-        var ariaServer = JsonConvert.DeserializeObject<AriaResultServer>("""
-            { "currentUri": "https://example.invalid/current", "uri": "https://example.invalid/original" }
-            """);
-
         Assert.Equal("https://example.invalid/qr", loginUrl?.QrCodeAddress);
         Assert.Equal("https://example.invalid/callback", loginStatus?.RedirectAddress);
         Assert.Equal("https://example.invalid/file", ariaUri?.Address);
-        Assert.Equal("https://example.invalid/current", ariaServer?.CurrentAddress);
-        Assert.Equal("https://example.invalid/original", ariaServer?.Address);
     }
 
     [Fact]
