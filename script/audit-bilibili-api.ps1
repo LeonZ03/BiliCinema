@@ -85,8 +85,6 @@ $probes = @(
     @{ Name = 'finger-spi'; Uri = 'https://api.bilibili.com/x/frontend/finger/spi'; Kind = 'json' }
     @{ Name = 'navigation'; Uri = 'https://api.bilibili.com/x/web-interface/nav'; Kind = 'json' }
     @{ Name = 'ordinary-view-public-control'; Uri = 'https://api.bilibili.com/x/web-interface/view?bvid=BV17x411w7KC'; Kind = 'json' }
-    @{ Name = 'ordinary-description'; Uri = 'https://api.bilibili.com/x/web-interface/archive/desc?bvid=BV17x411w7KC'; Kind = 'json' }
-    @{ Name = 'ordinary-page-list'; Uri = 'https://api.bilibili.com/x/player/pagelist?bvid=BV17x411w7KC'; Kind = 'json' }
     @{ Name = 'ordinary-tags'; Uri = 'https://api.bilibili.com/x/web-interface/view/detail/tag?bvid=BV17x411w7KC&cid=279786'; Kind = 'json' }
     @{ Name = 'relation-stat'; Uri = 'https://api.bilibili.com/x/relation/stat?vmid=2'; Kind = 'json' }
     @{ Name = 'up-stat'; Uri = 'https://api.bilibili.com/x/space/upstat?mid=2'; Kind = 'json' }

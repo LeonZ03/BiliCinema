@@ -17,15 +17,13 @@ public sealed class BvFixtureContractTests
         "JsonSamples");
 
     [Fact]
-    public void Bv1U7V66FEiKFixturesPreserveInfoPageAndPlaybackContracts()
+    public void Bv1U7V66FEiKFixturesPreserveInfoAndPlaybackContracts()
     {
         var view = Read<VideoViewOrigin>("video-view-BV1U7V66FEiK.json");
-        var pages = Read<VideoPagelist>("video-pagelist-BV1U7V66FEiK.json");
         var playUrl = Read<PlayUrlOrigin>("playurl-BV1U7V66FEiK.json");
 
         Assert.Equal("BV1U7V66FEiK", view.Data?.Bvid);
         Assert.Equal(1919810, Assert.Single(view.Data?.Pages ?? []).Cid);
-        Assert.Equal(1919810, Assert.Single(pages.Data ?? []).Cid);
         var payload = VideoStreamApi.SelectPlayUrlPayload(
             playUrl,
             VideoStreamApi.PlayUrlPayloadField.Data,
