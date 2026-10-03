@@ -82,12 +82,6 @@ internal sealed class DownloadListState
         _downloaded.Clear();
     }
 
-    public void ReplaceDownloaded(IEnumerable<DownloadedItem> items)
-    {
-        ArgumentNullException.ThrowIfNull(items);
-        ReplaceDownloadedCore(items.ToList());
-    }
-
     public void LoadDownloadedHistory(IEnumerable<DownloadedItem> items)
     {
         ArgumentNullException.ThrowIfNull(items);
