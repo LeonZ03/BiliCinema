@@ -105,34 +105,6 @@ public static partial class UserSpace
         return BiliApiRequest.RequirePayload(cheese.Data).Items;
     }
 
-    public static async Task<IReadOnlyList<SpaceCheese>> GetAllCheeseAsync(
-        this IBilibiliApiClient client,
-        long mid,
-        CancellationToken cancellationToken = default)
-    {
-        var result = new List<SpaceCheese>();
-
-        var page = 0;
-        while (true)
-        {
-            page++;
-            const int pageSize = 50;
-            var data = await client.GetCheeseAsync(
-                mid,
-                page,
-                pageSize,
-                cancellationToken).ConfigureAwait(false);
-            if (data == null || data.Count == 0)
-            {
-                break;
-            }
-
-            result.AddRange(data);
-        }
-
-        return result;
-    }
-
     public static async Task<BangumiFollowData?> GetBangumiFollowAsync(
         this IBilibiliApiClient client,
         long mid,
@@ -154,33 +126,4 @@ public static partial class UserSpace
         return BiliApiRequest.RequirePayload(bangumiFollow.Data);
     }
 
-    public static async Task<IReadOnlyList<BangumiFollow>> GetAllBangumiFollowAsync(
-        this IBilibiliApiClient client,
-        long mid,
-        BangumiType type,
-        CancellationToken cancellationToken = default)
-    {
-        var result = new List<BangumiFollow>();
-
-        var page = 0;
-        while (true)
-        {
-            page++;
-            const int pageSize = 30;
-            var data = await client.GetBangumiFollowAsync(
-                mid,
-                type,
-                page,
-                pageSize,
-                cancellationToken).ConfigureAwait(false);
-            if (data?.List == null || data.List.Count == 0)
-            {
-                break;
-            }
-
-            result.AddRange(data.List);
-        }
-
-        return result;
-    }
 }

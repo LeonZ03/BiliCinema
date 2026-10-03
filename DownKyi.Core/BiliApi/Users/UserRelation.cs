@@ -38,37 +38,6 @@ public static class UserRelation
     }
 
     /// <summary>
-    /// 查询用户所有的粉丝明细
-    /// </summary>
-    /// <param name="mid">目标用户UID</param>
-    /// <returns></returns>
-    public static async Task<IReadOnlyList<RelationFollowInfo>> GetAllFollowersAsync(
-        this IBilibiliApiClient client,
-        long mid,
-        CancellationToken cancellationToken = default)
-    {
-        var result = new List<RelationFollowInfo>();
-
-        var i = 0;
-        while (true)
-        {
-            i++;
-            const int ps = 50;
-
-            var data = await client.GetFollowersAsync(mid, i, ps, cancellationToken)
-                .ConfigureAwait(false);
-            if (data == null || data.List == null || data.List.Count == 0)
-            {
-                break;
-            }
-
-            result.AddRange(data.List);
-        }
-
-        return result;
-    }
-
-    /// <summary>
     /// 查询用户关注明细
     /// </summary>
     /// <param name="mid">目标用户UID</param>
@@ -101,39 +70,6 @@ public static class UserRelation
             cancellationToken: cancellationToken).ConfigureAwait(false);
 
         return BiliApiRequest.RequirePayload(relationFollower.Data);
-    }
-
-    /// <summary>
-    /// 查询用户所有的关注明细
-    /// </summary>
-    /// <param name="mid">目标用户UID</param>
-    /// <param name="order">排序方式</param>
-    /// <returns></returns>
-    public static async Task<IReadOnlyList<RelationFollowInfo>> GetAllFollowingsAsync(
-        this IBilibiliApiClient client,
-        long mid,
-        FollowingOrder order = FollowingOrder.DEFAULT,
-        CancellationToken cancellationToken = default)
-    {
-        var result = new List<RelationFollowInfo>();
-
-        var i = 0;
-        while (true)
-        {
-            i++;
-            const int ps = 50;
-
-            var data = await client.GetFollowingsAsync(mid, i, ps, order, cancellationToken)
-                .ConfigureAwait(false);
-            if (data == null || data.List == null || data.List.Count == 0)
-            {
-                break;
-            }
-
-            result.AddRange(data.List);
-        }
-
-        return result;
     }
 
     /// <summary>
@@ -218,43 +154,6 @@ public static class UserRelation
             cancellationToken: cancellationToken).ConfigureAwait(false);
 
         return BiliApiRequest.RequirePayload(content.Data);
-    }
-
-    /// <summary>
-    /// 查询所有的关注分组明细
-    /// </summary>
-    /// <param name="tagId">分组ID</param>
-    /// <param name="order">排序方式</param>
-    /// <returns></returns>
-    public static async Task<IReadOnlyList<RelationFollowInfo>> GetAllFollowingGroupContentAsync(
-        this IBilibiliApiClient client,
-        int tagId,
-        FollowingOrder order = FollowingOrder.DEFAULT,
-        CancellationToken cancellationToken = default)
-    {
-        var result = new List<RelationFollowInfo>();
-
-        var i = 0;
-        while (true)
-        {
-            i++;
-            const int ps = 50;
-
-            var data = await client.GetFollowingGroupContentAsync(
-                tagId,
-                i,
-                ps,
-                order,
-                cancellationToken).ConfigureAwait(false);
-            if (data == null || data.Count == 0)
-            {
-                break;
-            }
-
-            result.AddRange(data);
-        }
-
-        return result;
     }
 
     #endregion
