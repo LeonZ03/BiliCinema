@@ -1,5 +1,13 @@
 # 更新日志
 
+## [1.2.1] - 2026-10-03
+
+### Reliability And Release
+
+- 本版本包含未发布 `v1.2.0` 的全部功能、修复与跨平台套件内容。
+- release-safety fixture 现在会隔离外层 workflow 的 `GITHUB_REF`，并在预发布测试中明确模拟匹配的正式 tag 情境，避免只在 tag-triggered workflow 才出现版本误判。
+- `v1.2.0` tag 保持不可变且未建立 GitHub Release；`v1.2.1` 从最新 `main` 作为替代发行版。
+
 ## [1.2.0] - 2026-10-02
 
 ### Features
