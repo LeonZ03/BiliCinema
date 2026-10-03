@@ -96,8 +96,7 @@ public sealed class DownloadRuntimeArchitectureTests
             "AriaClient.Downloads.cs",
             "AriaClient.Lifecycle.cs",
             "AriaClient.Options.cs",
-            "AriaClient.Status.cs",
-            "AriaClient.System.cs"
+            "AriaClient.Status.cs"
         ];
 
         var actualFiles = Directory
