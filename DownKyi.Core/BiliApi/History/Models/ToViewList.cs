@@ -33,8 +33,6 @@ namespace DownKyi.Core.BiliApi.History.Models
         [JsonProperty("cid")]
         public long Cid { get; set; }
         // progress
-        [JsonProperty("add_at")]
-        public long AddAt { get; set; }
         [JsonProperty("bvid")]
         public string Bvid { get; set; } = string.Empty;
         // uri
