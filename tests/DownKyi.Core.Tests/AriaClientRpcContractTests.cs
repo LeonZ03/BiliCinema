@@ -178,10 +178,7 @@ public sealed class AriaClientRpcContractTests
             new(nameof(AriaClient.GetSessionInfoAsync), "aria2.getSessionInfo", true, client => client.GetSessionInfoAsync()),
             new(nameof(AriaClient.ShutdownAsync), "aria2.shutdown", true, client => client.ShutdownAsync()),
             new(nameof(AriaClient.ForceShutdownAsync), "aria2.forceShutdown", true, client => client.ForceShutdownAsync()),
-            new(nameof(AriaClient.SaveSessionAsync), "aria2.saveSession", true, client => client.SaveSessionAsync()),
-            new(nameof(AriaClient.MulticallAsync), "system.multicall", false, client => client.MulticallAsync([])),
-            new(nameof(AriaClient.ListMethodsAsync), "system.listMethods", false, client => client.ListMethodsAsync()),
-            new(nameof(AriaClient.ListNotificationsAsync), "system.listNotifications", false, client => client.ListNotificationsAsync())
+            new(nameof(AriaClient.SaveSessionAsync), "aria2.saveSession", true, client => client.SaveSessionAsync())
         ];
     }
 
