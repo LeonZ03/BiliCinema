@@ -14,9 +14,6 @@ namespace DownKyi.ViewModels.DownloadManager
         {
             // 暂停继续按钮
             StartOrPause = ButtonIcon.Current.Pause;
-
-            // 删除按钮
-            Delete = ButtonIcon.Current.Delete;
         }
 
         // model数据
@@ -127,13 +124,7 @@ namespace DownKyi.ViewModels.DownloadManager
             }
         }
 
-        private VectorImage _delete = null!;
-
-        public VectorImage Delete
-        {
-            get => _delete;
-            set => SetProperty(ref _delete, value);
-        }
+        public VectorImage Delete { get; } = ButtonIcon.Current.Delete;
 
         #endregion
 
