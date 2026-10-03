@@ -64,13 +64,6 @@ internal sealed class DownloadTaskProjectionStore : IDisposable
         ThrowStoreFailure(result.Error?.Message);
     }
 
-    public async Task<IReadOnlyList<DownloadingItem>> GetDownloadingAsync(
-        CancellationToken cancellationToken = default)
-    {
-        var state = await GetDownloadingStateAsync(cancellationToken).ConfigureAwait(true);
-        return state.Projections;
-    }
-
     public async Task<DownloadTaskProjectionStartupState> GetDownloadingStateAsync(
         CancellationToken cancellationToken = default)
     {
