@@ -24,26 +24,10 @@ internal class DownloadedItem : DownloadBaseItem
     public DownloadHistoryRecord HistoryRecord { get; set; } = null!;
 
     //  下载速度
-    public string? MaxSpeedDisplay
-    {
-        get => Downloaded.MaxSpeedDisplay;
-        set
-        {
-            Downloaded.MaxSpeedDisplay = value;
-            OnPropertyChanged();
-        }
-    }
+    public string? MaxSpeedDisplay => Downloaded.MaxSpeedDisplay;
 
     // 完成时间
-    public string FinishedTime
-    {
-        get => Downloaded.FinishedTime;
-        set
-        {
-            Downloaded.FinishedTime = value;
-            OnPropertyChanged();
-        }
-    }
+    public string FinishedTime => Downloaded.FinishedTime;
 
     #region 控制按钮
 
