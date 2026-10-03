@@ -57,17 +57,6 @@ internal sealed class DownloadListState
         _downloaded.Add(item);
     }
 
-    public void AddDownloadedRange(IEnumerable<DownloadedItem> items)
-    {
-        ArgumentNullException.ThrowIfNull(items);
-        var loadedIds = _downloaded
-            .Select(GetTaskId)
-            .ToHashSet(StringComparer.Ordinal);
-        _downloaded.AddRange(items.Where(item =>
-            !_removedDownloadedIds.Contains(GetTaskId(item))
-            && loadedIds.Add(GetTaskId(item))));
-    }
-
     public bool RemoveDownloaded(DownloadedItem item)
     {
         ArgumentNullException.ThrowIfNull(item);
