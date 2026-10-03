@@ -61,14 +61,14 @@ public sealed class DownloadFinishedVisualStateTests
                 MaxSpeedDisplay = "2.62 MB/s"
             }
         };
-        item.Order = 1;
-        item.MainTitle = "示例影片：较长标题用于检查已下载任务的可读性";
-        item.Name = "第一集";
-        item.Duration = "12:48";
-        item.Resolution = new Quality { Name = "1080P" };
-        item.VideoCodecName = "AVC";
-        item.AudioCodec = new Quality { Name = "AAC" };
-        item.FileSize = "42.5 MB";
+        item.DownloadBase.Order = 1;
+        item.DownloadBase.MainTitle = "示例影片：较长标题用于检查已下载任务的可读性";
+        item.DownloadBase.Name = "第一集";
+        item.DownloadBase.Duration = "12:48";
+        item.DownloadBase.Resolution = new Quality { Name = "1080P" };
+        item.DownloadBase.VideoCodecName = "AVC";
+        item.DownloadBase.AudioCodec = new Quality { Name = "AAC" };
+        item.DownloadBase.FileSize = "42.5 MB";
 
         var view = new ViewDownloadFinished();
         var content = Assert.IsType<Grid>(
