@@ -68,21 +68,6 @@ public sealed partial class SettingsManager
             v => _appSettings.About.AutoUpdateWhenLaunch = v);
     }
 
-    public bool SetSkipVersionOnLaunch(string skipVersionOnLaunch)
-    {
-        if (SemanticVersionPolicy.TryNormalizeIdentity(
-                skipVersionOnLaunch,
-                out var normalizedVersion))
-        {
-            return SetProperty(
-                _appSettings.About.SkipVersionOnLaunch,
-                normalizedVersion,
-                v => _appSettings.About.SkipVersionOnLaunch = v);
-        }
-
-        return false;
-    }
-
     public string GetSkipVersionOnLaunch()
     {
         if (SemanticVersionPolicy.TryNormalizeIdentity(
