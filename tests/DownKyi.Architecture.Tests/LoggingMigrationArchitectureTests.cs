@@ -123,7 +123,6 @@ public sealed class LoggingMigrationArchitectureTests
     }
 
     [Theory]
-    [InlineData("DownKyi.Core/Utils/HardDisk.cs")]
     [InlineData("DownKyi.Core/Utils/ObjectHelper.cs")]
     [InlineData("src/DownKyi.Desktop/CustomAction/ScrollIntoViewBehavior.cs")]
     [InlineData("src/DownKyi.Desktop/Services/VersionCheckerService.cs")]

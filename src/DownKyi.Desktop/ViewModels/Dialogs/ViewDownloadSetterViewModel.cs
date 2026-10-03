@@ -82,7 +82,7 @@ internal class ViewDownloadSetterViewModel : BaseDialogViewModel
             DriveName = Path.GetPathRoot(_directory) ?? _directory;
             try
             {
-                DriveNameFreeSpace = Format.FormatFileSize(HardDisk.GetHardDiskFreeSpace(_directory));
+                DriveNameFreeSpace = Format.FormatFileSize(new DriveInfo(_directory).TotalFreeSpace);
             }
             catch (Exception e) when (e is DriveNotFoundException or IOException or UnauthorizedAccessException)
             {
