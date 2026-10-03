@@ -101,7 +101,7 @@ internal static class DownloadTaskDraftFactory
 
     private static int ResolveZoneId(int typeId)
     {
-        var zoneList = VideoZone.Instance().Zones;
+        var zoneList = VideoZone.Current.Zones;
         var zone = zoneList.FirstOrDefault(item => item.Id == typeId);
         if (zone == null)
         {
