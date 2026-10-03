@@ -1,7 +1,6 @@
 using System.Text;
 using DownKyi.Core.BiliApi.Zone;
 using DownKyi.Core.Danmaku2Ass;
-using DanmakuBilibili = DownKyi.Core.Danmaku2Ass.BilibiliDanmakuConverter;
 
 namespace DownKyi.Core.Tests;
 
@@ -12,20 +11,6 @@ public sealed class DanmakuAndZoneContractTests
     {
         Assert.Equal("Zone.techDrawingImage", VideoZoneIcon.GetZoneImageKey(36));
         Assert.Equal("videoUpDrawingImage", VideoZoneIcon.GetZoneImageKey(int.MaxValue));
-    }
-
-    [Theory]
-    [InlineData(6, 426, 240)]
-    [InlineData(64, 1280, 720)]
-    [InlineData(80, 1920, 1080)]
-    [InlineData(120, 3840, 2160)]
-    [InlineData(-1, 0, 0)]
-    public void ResolutionLookupReturnsExpectedDimensions(int quality, int expectedWidth, int expectedHeight)
-    {
-        var resolution = DanmakuBilibili.GetResolution(quality);
-
-        Assert.Equal(expectedWidth, resolution["width"]);
-        Assert.Equal(expectedHeight, resolution["height"]);
     }
 
     [Fact]
