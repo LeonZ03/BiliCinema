@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
-using System.Linq;
 using System.Threading;
 using DownKyi.Core.BiliApi.VideoStream;
 using DownKyi.Core.BiliApi.VideoStream.Models;
@@ -115,16 +114,6 @@ internal sealed class DownloadExecutionContext
     public bool NeedsSubtitle => Input.RequestedContent.Subtitle;
 
     public bool NeedsCover => Input.RequestedContent.Cover;
-
-    public IReadOnlyList<string> GetMediaInputFiles()
-    {
-        return new[] { AudioFile, VideoFile }
-            .Concat(DurlDownloads.Select(download => download.FilePath))
-            .Where(file => !string.IsNullOrWhiteSpace(file))
-            .Cast<string>()
-            .Distinct(StringComparer.Ordinal)
-            .ToArray();
-    }
 
     public void EnsureActive(CancellationToken cancellationToken)
     {
