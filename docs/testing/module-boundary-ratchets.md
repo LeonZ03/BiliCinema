@@ -23,7 +23,7 @@
 
 ## 已收緊為零的邊界
 
-下列 Gate 8 債務已不再使用 baseline，而是任何命中都直接失敗：
+下列邊界已不再使用 baseline，而是任何命中都直接失敗：
 
 - Core 中的 Avalonia、QRCoder 與 XAML ownership。
 - Desktop service interfaces 對 `DownKyi.ViewModels` 的引用。

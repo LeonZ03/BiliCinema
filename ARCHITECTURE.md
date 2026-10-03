@@ -50,8 +50,6 @@ Bilibili endpoint adapters 留在 `DownKyi.Core/BiliApi` 以維持 DTO 與協定
 - 投稿分頁以 WBI `page.count` 為準；收藏的 `media_count` 不是 filtered count，只能依 `has_more` 擴展。返回時保留 query、頁碼與既有 media instances；只有被取消的未完成頁補載。
 - 可變 `PathIconData` geometry 必須由 factory 為各 ViewModel 建立獨立 instance，避免主題更新污染其他頁面。
 
-設計理由與相容矩陣見 `docs/design-docs/list-search-navigation.md` 與 `docs/design-docs/typed-navigation-user-space-compatibility.md`。
-
 ## Download invariant
 
 ```mermaid
