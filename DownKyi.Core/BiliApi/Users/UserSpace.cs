@@ -56,14 +56,14 @@ public static partial class UserSpace
     {
         const int pn = 1;
         const int ps = 1;
-        var publication = await client.GetPublicationAsync(
+        var publication = await client.GetPublicationPageAsync(
             keys,
             unixTimeSeconds,
             mid,
             pn,
             ps,
             cancellationToken: cancellationToken).ConfigureAwait(false);
-        return GetPublicationType(publication);
+        return GetPublicationType(publication?.List);
     }
 
     /// <summary>
@@ -89,41 +89,6 @@ public static partial class UserSpace
         }
 
         return result;
-    }
-
-    /// <summary>
-    /// 查询用户投稿视频明细
-    /// </summary>
-    /// <param name="mid">用户id</param>
-    /// <param name="pn">页码</param>
-    /// <param name="ps">每页的视频数</param>
-    /// <param name="order">排序</param>
-    /// <param name="tid">视频分区</param>
-    /// <param name="keyword">搜索关键词</param>
-    /// <returns></returns>
-    public static async Task<SpacePublicationList?> GetPublicationAsync(
-        this IBilibiliApiClient client,
-        WbiKeys keys,
-        long unixTimeSeconds,
-        long mid,
-        int pn,
-        int ps,
-        long tid = 0,
-        PublicationOrder order = PublicationOrder.PUBDATE,
-        string keyword = "",
-        CancellationToken cancellationToken = default)
-    {
-        var page = await client.GetPublicationPageAsync(
-            keys,
-            unixTimeSeconds,
-            mid,
-            pn,
-            ps,
-            tid,
-            order,
-            keyword,
-            cancellationToken).ConfigureAwait(false);
-        return page?.List;
     }
 
     /// <summary>
