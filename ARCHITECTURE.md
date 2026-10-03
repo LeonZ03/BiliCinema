@@ -102,7 +102,7 @@ flowchart LR
 - Packaged aria2 是 process-local child：每次使用 ephemeral loopback port、fresh high-entropy secret、restricted temporary config，且只有 supervised child 存活時 readiness 才有效。
 - Process arguments 不得含 Cookie、RPC secret 或 caller-combined argument text。
 - Custom remote aria2 由外部擁有；非 loopback endpoint 必須 HTTPS，禁止 RPC redirect。
-- Credential header 屬於 task，且只可給 exact HTTPS `bilibili.com` host／subdomain；其他 host 不得收到。TLS failure 是 terminal address failure，不得 downgrade。
+- Credential header 屬於 task，且只可給 exact HTTPS `bilibili.com` host／subdomain；其他 host 不得收到。傳輸前的單一候選安全預檢拒絕只可切換到下一個獨立候選，且每個候選都必須重新通過完整預檢；實際傳輸的 TLS failure 仍是 terminal failure，不得 retry 或 downgrade。
 - Runtime 啟動 packaged binary 前驗 sidecar digest，再由 RPC 驗 required feature。
 
 來源、六 RID real-binary gate、legacy migration 與 residual risk 見 `docs/operations/aria2-security.md`；RPC adapter 責任見 `docs/design-docs/aria2-rpc-client-ownership.md`。

@@ -52,6 +52,7 @@ internal enum DownloadTransferFailureKind
     ExpiredAddress,
     ResumeRejected,
     InvalidMedia,
+    CandidateRejected,
     Disk,
     Tls,
     Permanent

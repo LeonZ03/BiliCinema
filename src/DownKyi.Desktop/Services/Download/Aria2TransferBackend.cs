@@ -115,7 +115,7 @@ internal sealed partial class Aria2TransferBackend : ITransferBackend
                 _logger.LogWarningMessage(
                     $"aria2 download address was rejected; code={preparation.ErrorCode}");
                 return DownloadTransferResult.Failed(
-                    DownloadTransferFailureKind.Permanent,
+                    DownloadTransferFailureKind.CandidateRejected,
                     preparation.ErrorCode);
             }
 
