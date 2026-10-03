@@ -14,10 +14,7 @@ public sealed class DownloadTaskStateMachineTests
         var queued = CreateTask();
 
         var downloading = queued.Start(Epoch.AddSeconds(1)).RequireValue();
-        var progressing = downloading
-            .UpdateProgress(new DownloadProgress(50, 50, 100, 25), Epoch.AddSeconds(2))
-            .RequireValue();
-        var pausing = progressing.Pause(Epoch.AddSeconds(3)).RequireValue();
+        var pausing = downloading.Pause(Epoch.AddSeconds(3)).RequireValue();
         var paused = pausing.ConfirmPaused(Epoch.AddSeconds(4)).RequireValue();
         var resumed = paused.Resume(Epoch.AddSeconds(5)).RequireValue();
         var restarted = resumed.Start(Epoch.AddSeconds(6)).RequireValue();
@@ -32,8 +29,8 @@ public sealed class DownloadTaskStateMachineTests
         Assert.Equal(DownloadPhase.Paused, paused.Phase);
         Assert.Equal(DownloadPhase.Completed, completed.Phase);
         Assert.Equal(DownloadPhase.Deleted, deleted.Phase);
-        Assert.Equal(8, deleted.Version);
-        Assert.Equal(50, completed.Progress.Percentage);
+        Assert.Equal(7, deleted.Version);
+        Assert.Equal(DownloadProgress.None, completed.Progress);
         Assert.NotNull(completed.Completion);
     }
 
@@ -188,8 +185,8 @@ public sealed class DownloadTaskStateMachineTests
     {
         var downloading = CreateTask().Start(Epoch.AddSeconds(2)).RequireValue();
 
-        Assert.Throws<ArgumentOutOfRangeException>(() => downloading.UpdateProgress(
-            new DownloadProgress(1),
+        Assert.Throws<ArgumentOutOfRangeException>(() => downloading.UpdateTransferState(
+            DownloadTransferState.Empty,
             Epoch.AddSeconds(1)));
     }
 

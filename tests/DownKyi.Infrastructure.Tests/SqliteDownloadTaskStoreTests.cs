@@ -1887,8 +1887,9 @@ public sealed class SqliteDownloadTaskStoreTests : IDisposable
         task = task.UpdateTransferState(
             new DownloadTransferState("aria-gid", ["cover"], "video", "Paused", 4_000_000),
             _clock.UtcNow.AddSeconds(2)).RequireValue();
-        task = task.UpdateProgress(
+        task = task.UpdateProgressAndTransfer(
             new DownloadProgress(42.5, 425, 1000, 3_000_000, "425 B", "24 Mbps"),
+            task.Transfer,
             _clock.UtcNow.AddSeconds(3)).RequireValue();
         task = task.Pause(_clock.UtcNow.AddSeconds(4)).RequireValue();
         return task.ConfirmPaused(_clock.UtcNow.AddSeconds(5)).RequireValue();

@@ -185,30 +185,6 @@ public sealed partial class DownloadTask
         return TransitionTo(DownloadPhase.Completed, now, completion: completion);
     }
 
-    public OperationResult<DownloadTask> UpdateProgress(DownloadProgress progress, DateTimeOffset now)
-    {
-        ArgumentNullException.ThrowIfNull(progress);
-        if (Phase is not (DownloadPhase.Downloading or DownloadPhase.Pausing))
-        {
-            return InvalidTransition(Phase);
-        }
-
-        EnsureTimestampDoesNotMoveBackward(now);
-        return OperationResult.Success(new DownloadTask(
-            Id,
-            Metadata,
-            Plan,
-            Output,
-            Phase,
-            progress,
-            Transfer,
-            Failure,
-            Completion,
-            checked(Version + 1),
-            CreatedAtUtc,
-            now));
-    }
-
     public OperationResult<DownloadTask> UpdatePlan(
         DownloadPlan plan,
         DownloadTransferState transfer,
