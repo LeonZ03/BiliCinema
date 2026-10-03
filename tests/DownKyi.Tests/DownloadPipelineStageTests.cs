@@ -377,7 +377,7 @@ public sealed class DownloadPipelineStageTests
             ]
         };
 
-        Assert.Equal(DownloadMediaKind.Durl, DownloadMediaStage.DetectMediaKind(playUrl));
+        Assert.Equal(DownloadMediaKind.Durl, DownloadMediaContract.Detect(playUrl));
     }
 
     [Fact]
@@ -414,7 +414,7 @@ public sealed class DownloadPipelineStageTests
 
         Assert.Equal(
             DownloadMediaKind.Dash,
-            DownloadMediaStage.DetectMediaKind(context.PlayUrl));
+            DownloadMediaContract.Detect(context.PlayUrl));
         var selected = Assert.IsType<PlayUrlDashVideo>(
             DownloadMediaStage.SelectVideo(context));
         Assert.Same(video, selected);
