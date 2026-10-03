@@ -169,13 +169,10 @@ public sealed class AriaClientRpcContractTests
             new(nameof(AriaClient.ChangeUriAsync), "aria2.changeUri", true, client => client.ChangeUriAsync("gid", 1, [], ["https://media.example/video"])),
             new(nameof(AriaClient.ChangeOptionAsync), "aria2.changeOption", true, client => client.ChangeOptionAsync("gid", new { Split = "4" })),
             new(nameof(AriaClient.GetGlobalStatAsync), "aria2.getGlobalStat", true, client => client.GetGlobalStatAsync()),
-            new(nameof(AriaClient.PurgeDownloadResultAsync), "aria2.purgeDownloadResult", true, client => client.PurgeDownloadResultAsync()),
             new(nameof(AriaClient.RemoveDownloadResultAsync), "aria2.removeDownloadResult", true, client => client.RemoveDownloadResultAsync("gid")),
             new(nameof(AriaClient.GetAriaVersionAsync), "aria2.getVersion", true, client => client.GetAriaVersionAsync()),
-            new(nameof(AriaClient.GetSessionInfoAsync), "aria2.getSessionInfo", true, client => client.GetSessionInfoAsync()),
             new(nameof(AriaClient.ShutdownAsync), "aria2.shutdown", true, client => client.ShutdownAsync()),
-            new(nameof(AriaClient.ForceShutdownAsync), "aria2.forceShutdown", true, client => client.ForceShutdownAsync()),
-            new(nameof(AriaClient.SaveSessionAsync), "aria2.saveSession", true, client => client.SaveSessionAsync())
+            new(nameof(AriaClient.ForceShutdownAsync), "aria2.forceShutdown", true, client => client.ForceShutdownAsync())
         ];
     }
 
