@@ -8,7 +8,6 @@ using DownKyi.Core.BiliApi.Login;
 using DownKyi.Core.BiliApi.Login.Models;
 using DownKyi.Core.BiliApi.Users;
 using DownKyi.Core.Storage;
-using DownKyi.Core.Utils;
 using Microsoft.Extensions.Logging;
 
 namespace DownKyi.Services.Account;
@@ -94,7 +93,7 @@ internal sealed class LoginCoordinator : ILoginCoordinator
         var cookies = MergeCookies(
             loginStatus.Cookies,
             callbackCookies,
-            ObjectHelper.ParseCookie(redirectUri));
+            LoginHelper.ParseCookie(redirectUri));
         return await CommitLoginCookiesAsync(cookies, cancellationToken).ConfigureAwait(false);
     }
 
