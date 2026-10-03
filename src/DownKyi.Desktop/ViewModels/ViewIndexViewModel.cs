@@ -225,12 +225,7 @@ internal class ViewIndexViewModel : ViewModelBase
 
         _logger.LogDebugMessage("Processing search input.");
         InputText = Regex.Replace(InputText, @"[【]*[^【]*[^】]*[】 ]", "");
-        var isSupport = _searchService.BiliInput(InputText, AppRoute.Index);
-        if (!isSupport)
-        {
-            // 关键词搜索
-            SearchService.SearchKey(InputText, AppRoute.Index);
-        }
+        _searchService.BiliInput(InputText, AppRoute.Index);
 
         InputText = string.Empty;
     }
