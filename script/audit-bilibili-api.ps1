@@ -95,7 +95,6 @@ $probes = @(
     @{ Name = 'seasons-series'; Uri = 'https://api.bilibili.com/x/polymer/web-space/seasons_series_list?mid=2&page_num=1&page_size=1'; Kind = 'json' }
     @{ Name = 'series-metadata'; Uri = 'https://api.bilibili.com/x/series/series?series_id=1'; Kind = 'json' }
     @{ Name = 'ranking-region'; Uri = 'https://api.bilibili.com/x/web-interface/ranking/region?rid=1&day=3&ps=0'; Kind = 'json' }
-    @{ Name = 'dynamic-region'; Uri = 'https://api.bilibili.com/x/web-interface/dynamic/region?rid=1&pn=1&ps=1'; Kind = 'json' }
     @{ Name = 'bangumi-season'; Uri = 'https://api.bilibili.com/pgc/view/web/season?ep_id=21495'; Kind = 'json' }
     @{ Name = 'bangumi-play-v2'; Uri = 'https://api.bilibili.com/pgc/player/web/v2/playurl?ep_id=21495&qn=64&fnver=0&fnval=4048'; Kind = 'json' }
     @{ Name = 'cheese-season'; Uri = 'https://api.bilibili.com/pugv/view/web/season?ep_id=3489'; Kind = 'json' }
