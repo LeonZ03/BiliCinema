@@ -72,31 +72,6 @@ public static class UserRelation
         return BiliApiRequest.RequirePayload(relationFollower.Data);
     }
 
-    /// <summary>
-    /// 查询黑名单明细
-    /// </summary>
-    /// <param name="pn">页码</param>
-    /// <param name="ps">每页项数</param>
-    /// <returns></returns>
-    public static async Task<IReadOnlyList<RelationFollowInfo>?> GetBlacksAsync(
-        this IBilibiliApiClient client,
-        int pn,
-        int ps,
-        CancellationToken cancellationToken = default)
-    {
-        var url = $"https://api.bilibili.com/x/relation/blacks?pn={pn}&ps={ps}";
-        const string referer = "https://www.bilibili.com";
-        var relationBlack = await BiliApiRequest.RequestJsonAsync<RelationBlack>(
-            client,
-            url,
-            referer,
-            nameof(GetBlacksAsync),
-            "UserRelation",
-            cancellationToken: cancellationToken).ConfigureAwait(false);
-
-        return BiliApiRequest.RequirePayload(relationBlack.Data);
-    }
-
     #region 关注分组相关，只能查询当前登录账户的信息
 
     /// <summary>
