@@ -114,13 +114,13 @@ internal class ViewIndexViewModel : ViewModelBase
 
         TextLogo = LogoIcon.Current.TextLogo;
 
-        GeneralSearch = ButtonIcon.Current.GeneralSearch;
+        GeneralSearch = ButtonIcon.GeneralSearch;
 
-        Settings = ButtonIcon.Current.Settings;
+        Settings = ButtonIcon.Settings;
 
-        DownloadManager = ButtonIcon.Current.DownloadManage;
+        DownloadManager = ButtonIcon.DownloadManage;
 
-        Toolbox = ButtonIcon.Current.Toolbox;
+        Toolbox = ButtonIcon.Toolbox;
 
     }
 
@@ -299,7 +299,7 @@ internal class ViewIndexViewModel : ViewModelBase
         ArgumentNullException.ThrowIfNull(navigationContext);
         base.OnNavigatedTo(navigationContext);
 
-        DownloadManager = ButtonIcon.Current.DownloadManage;
+        DownloadManager = ButtonIcon.DownloadManage;
         DownloadManager.Height = 27;
         DownloadManager.Width = 32;
 

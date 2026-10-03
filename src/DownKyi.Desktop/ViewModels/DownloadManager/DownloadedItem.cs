@@ -19,11 +19,11 @@ internal class DownloadedItem : DownloadBaseItem
 
     #region 控制按钮
 
-    public VectorImage OpenFolder { get; } = ButtonIcon.Current.Folder;
+    public VectorImage OpenFolder { get; } = ButtonIcon.Folder;
 
-    public VectorImage OpenVideo { get; } = ButtonIcon.Current.Start;
+    public VectorImage OpenVideo { get; } = ButtonIcon.Start;
 
-    public VectorImage RemoveVideo { get; } = ButtonIcon.Current.Trash;
+    public VectorImage RemoveVideo { get; } = ButtonIcon.Trash;
 
     #endregion
 }

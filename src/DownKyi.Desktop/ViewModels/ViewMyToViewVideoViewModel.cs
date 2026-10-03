@@ -118,7 +118,7 @@ internal class ViewMyToViewVideoViewModel : ViewModelBase
         ArrowBack = NavigationIcon.CreateArrowBack();
 
         // 下载管理按钮
-        DownloadManage = ButtonIcon.Current.DownloadManage;
+        DownloadManage = ButtonIcon.DownloadManage;
         DownloadManage.Height = 24;
         DownloadManage.Width = 24;
 
@@ -340,7 +340,7 @@ internal class ViewMyToViewVideoViewModel : ViewModelBase
         ArgumentNullException.ThrowIfNull(navigationContext);
         base.OnNavigatedTo(navigationContext);
 
-        DownloadManage = ButtonIcon.Current.DownloadManage;
+        DownloadManage = ButtonIcon.DownloadManage;
         DownloadManage.Height = 24;
         DownloadManage.Width = 24;
 

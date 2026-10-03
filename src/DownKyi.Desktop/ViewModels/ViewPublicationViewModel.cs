@@ -161,7 +161,7 @@ namespace DownKyi.ViewModels
             _arrowBack = NavigationIcon.CreateArrowBack();
 
             // 下载管理按钮
-            _downloadManage = ButtonIcon.Current.DownloadManage;
+            _downloadManage = ButtonIcon.DownloadManage;
             _downloadManage.Height = 24;
             _downloadManage.Width = 24;
 

@@ -121,7 +121,7 @@ internal partial class ViewMyFavoritesViewModel
 
     private void InitView()
     {
-        DownloadManage = ButtonIcon.Current.DownloadManage;
+        DownloadManage = ButtonIcon.DownloadManage;
         DownloadManage.Height = 24;
         DownloadManage.Width = 24;
         ContentVisibility = false;
