@@ -134,13 +134,13 @@ cross-platform stress proof，不得移除。
 
 ## Desktop／Host 卡
 
-- **Use when**：Desktop、DI、Host lifecycle、navigation/dialog、theme、XAML。
-- **Owner**：產品組裝=Desktop composition；DI=唯一 Microsoft container；theme switch=`DesktopThemeController`；tokens=`DesignTokens.axaml`。
-- **Invariant**：Domain ← Application ← Infrastructure／Desktop；Infrastructure 不 reference Desktop。`DownKyi` 只組 concrete registrations；禁止 Prism、DryIoc、service locator、global services、第二 root。只有 theme controller 可寫 `RequestedThemeVariant`；presentation 不讀 `Application.Current`／`ResourceDictionary`。`DisableDefaults=true`；新 config provider 不改既有 paths。
-- **Do**：long-running work 用 linked scope：caller cancel local，Host stop cancel all。Theme 只用 Fluent + DataGrid；startup 與 settings 都委派 controller；保留 focus、DPI、localization、virtualization。
-- **Proof**：architecture tests、`DesktopThemeControllerTests`、Host XAML smoke、Windows packaged startup、CI platform matrix。
-- **Stop**：第二 container／router／lifecycle、反向 reference、global service 繞 composition。
-- **Details**：[Architecture：Current owner map](../ARCHITECTURE.md#current-owner-map)。
+- **Use when**：Desktop、DI、Host lifecycle、navigation/dialog、Shell menu、theme、XAML。
+- **Owner**：產品組裝=Desktop composition；DI=唯一 Microsoft container；navigation identity=`AppRoute`；route-to-ViewModel=local factory；presentation=`App.axaml` DataTemplates；theme switch=`DesktopThemeController`；tokens=`DesignTokens.axaml`。
+- **Invariant**：Domain ← Application ← Infrastructure／Desktop；Infrastructure 不 reference Desktop。`DownKyi` 只組 concrete registrations；禁止 Prism、DryIoc、service locator、global services、第二 root。Shell metadata 保持 local，parent route／payload 保持 caller-owned；route completeness 由既有 owners 與 tests 共同保護，不建立 global FeatureRegistry 或第二 router。只有 theme controller 可寫 `RequestedThemeVariant`；presentation 不讀 `Application.Current`／`ResourceDictionary`。`DisableDefaults=true`；新 config provider 不改既有 paths。
+- **Do**：新增或調整 routed feature 時核對 route → ViewModel → DI → DataTemplate 與受影響 Shell selection。Long-running work 用 linked scope：caller cancel local，Host stop cancel all。Theme 只用 Fluent + DataGrid；startup 與 settings 都委派 controller；保留 focus、DPI、localization、virtualization。
+- **Proof**：typed-route mapping、local composition、Host XAML smoke、`DesktopThemeControllerTests`、Windows packaged startup、CI platform matrix。
+- **Stop**：第二 container／router／lifecycle、global FeatureRegistry、反向 reference、global service 繞 composition。
+- **Details**：[Architecture：Current owner map](../ARCHITECTURE.md#current-owner-map)；[Desktop Feature Locality ADR](design-docs/desktop-feature-locality.md)。
 
 <a id="bilibili-wbi"></a>
 
