@@ -10,10 +10,8 @@ public sealed class DanmakuAndZoneContractTests
     [Fact]
     public void ZoneImageLookupUsesKnownAndFallbackKeys()
     {
-        var icons = VideoZoneIcon.Instance();
-
-        Assert.Equal("Zone.techDrawingImage", icons.GetZoneImageKey(36));
-        Assert.Equal("videoUpDrawingImage", icons.GetZoneImageKey(int.MaxValue));
+        Assert.Equal("Zone.techDrawingImage", VideoZoneIcon.GetZoneImageKey(36));
+        Assert.Equal("videoUpDrawingImage", VideoZoneIcon.GetZoneImageKey(int.MaxValue));
     }
 
     [Theory]

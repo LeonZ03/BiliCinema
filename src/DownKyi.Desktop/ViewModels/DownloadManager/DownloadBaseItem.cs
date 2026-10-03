@@ -22,7 +22,7 @@ namespace DownKyi.ViewModels.DownloadManager
                 _downloadBase = value;
 
                 ZoneImage = DictionaryResource.GetIfApplicationInitialized<DrawingImage>(
-                    VideoZoneIcon.Instance().GetZoneImageKey(DownloadBase.ZoneId));
+                    VideoZoneIcon.GetZoneImageKey(DownloadBase.ZoneId));
                 OnPropertyChanged();
                 OnPropertyChanged(nameof(Order));
                 OnPropertyChanged(nameof(MainTitle));
