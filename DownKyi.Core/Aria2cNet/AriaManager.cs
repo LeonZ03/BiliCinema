@@ -25,11 +25,6 @@ public sealed class AriaDownloadCompletedEventArgs(
     public string? Message { get; } = message;
 }
 
-public sealed class AriaGlobalStatusEventArgs(long speed) : EventArgs
-{
-    public long Speed { get; } = speed;
-}
-
 public sealed record AriaDownloadStatus(
     DownloadResult Result,
     string? ErrorCode,
@@ -72,14 +67,6 @@ public class AriaManager
     protected virtual void OnDownloadFinish(bool isSuccess, string? downloadPath, string gid, string? msg = null)
     {
         DownloadFinish?.Invoke(this, new AriaDownloadCompletedEventArgs(isSuccess, downloadPath, gid, msg));
-    }
-
-    // 全局下载状态
-    public event EventHandler<AriaGlobalStatusEventArgs>? GlobalStatus;
-
-    protected virtual void OnGlobalStatus(long speed)
-    {
-        GlobalStatus?.Invoke(this, new AriaGlobalStatusEventArgs(speed));
     }
 
     /// <summary>
@@ -259,26 +246,6 @@ public class AriaManager
             "paused" => AriaDownloadState.Paused,
             _ => AriaDownloadState.Unknown
         };
-    }
-
-    /// <summary>
-    /// 获取全局下载速度。
-    /// </summary>
-    public async Task GetGlobalStatusAsync(CancellationToken cancellationToken = default)
-    {
-        while (!cancellationToken.IsCancellationRequested)
-        {
-            var globalStatus = await _ariaClient.GetGlobalStatAsync().ConfigureAwait(false);
-            if (globalStatus?.Result == null)
-            {
-                await Task.Delay(PollDelayMilliseconds, cancellationToken).ConfigureAwait(false);
-                continue;
-            }
-
-            OnGlobalStatus(ParseLong(globalStatus.Result.DownloadSpeed));
-
-            await Task.Delay(PollDelayMilliseconds, cancellationToken).ConfigureAwait(false);
-        }
     }
 
     private static long ParseLong(string? value)

@@ -19,15 +19,12 @@ public sealed class EnumValueContractTests
         var manager = new TestAriaManager();
         AriaProgressEventArgs? progress = null;
         AriaDownloadCompletedEventArgs? completed = null;
-        AriaGlobalStatusEventArgs? global = null;
 
         manager.TellStatus += (_, e) => progress = e;
         manager.DownloadFinish += (_, e) => completed = e;
-        manager.GlobalStatus += (_, e) => global = e;
 
         manager.RaiseProgress(100, 40, 12, "gid-1");
         manager.RaiseCompleted(true, "output.mp4", "gid-1", "done");
-        manager.RaiseGlobalStatus(25);
 
         Assert.NotNull(progress);
         Assert.Equal(100, progress.TotalLength);
@@ -39,8 +36,6 @@ public sealed class EnumValueContractTests
         Assert.Equal("output.mp4", completed.DownloadPath);
         Assert.Equal("gid-1", completed.Gid);
         Assert.Equal("done", completed.Message);
-        Assert.NotNull(global);
-        Assert.Equal(25, global.Speed);
     }
 
     [Fact]
@@ -96,11 +91,6 @@ public sealed class EnumValueContractTests
         public void RaiseCompleted(bool isSuccess, string? downloadPath, string gid, string? message)
         {
             OnDownloadFinish(isSuccess, downloadPath, gid, message);
-        }
-
-        public void RaiseGlobalStatus(long speed)
-        {
-            OnGlobalStatus(speed);
         }
     }
 }
