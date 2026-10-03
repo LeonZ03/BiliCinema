@@ -12,16 +12,8 @@ public static class Number
     /// <returns></returns>
     public static long GetInt(string value)
     {
-        return IsInt(value) ? long.Parse(value, CultureInfo.InvariantCulture) : -1;
-    }
-
-    /// <summary>
-    /// 是否为数字
-    /// </summary>
-    /// <param name="value"></param>
-    /// <returns></returns>
-    public static bool IsInt(string value)
-    {
-        return Regex.IsMatch(value, @"^\d+$");
+        return Regex.IsMatch(value, @"^\d+$")
+            ? long.Parse(value, CultureInfo.InvariantCulture)
+            : -1;
     }
 }
