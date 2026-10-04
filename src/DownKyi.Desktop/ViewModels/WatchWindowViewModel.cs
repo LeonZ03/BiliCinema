@@ -863,11 +863,15 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
                         }
                     }
                     var buffering = await player.GetBufferingAsync(cancellationToken).ConfigureAwait(true);
-                    if (buffering != _lastBuffering && _room.Connected)
+                    if (buffering != _lastBuffering)
                     {
                         _lastBuffering = buffering;
-                        await _room.SendAsync(new { type = "buffering", buffering }, cancellationToken)
-                            .ConfigureAwait(true);
+                        Status = buffering ? "播放器正在缓冲音视频…" : "音视频缓冲完成。";
+                        if (_room.Connected)
+                        {
+                            await _room.SendAsync(new { type = "buffering", buffering }, cancellationToken)
+                                .ConfigureAwait(true);
+                        }
                     }
 
                     if (_lastSnapshot != null && _room.Connected)

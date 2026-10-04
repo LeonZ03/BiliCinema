@@ -58,9 +58,10 @@ internal sealed class MpvPlaybackSession : IDisposable
         foreach (var argument in new[]
                  {
                      "--no-config", "--no-ytdl", "--cookies=no", "--cache=yes",
-                     "--cache-on-disk=no", "--demuxer-max-bytes=64MiB",
-                     "--demuxer-max-back-bytes=16MiB", "--cache-secs=20",
-                     "--demuxer-readahead-secs=20", "--keep-open=no", "--idle=no",
+                     "--cache-on-disk=no", "--demuxer-max-bytes=192MiB",
+                     "--demuxer-max-back-bytes=16MiB", "--cache-secs=60",
+                     "--cache-pause-initial=yes", "--cache-pause-wait=5",
+                     "--keep-open=no", "--idle=no",
                      "--terminal=no", "--force-window=yes", "--referrer=https://www.bilibili.com/",
                      startPaused ? "--pause=yes" : "--pause=no",
                      $"--user-agent={userAgent}", $"--input-ipc-server={pipeName}"
@@ -155,7 +156,7 @@ internal sealed class MpvPlaybackSession : IDisposable
                 .ConfigureAwait(false);
             return data.RootElement.ValueKind == JsonValueKind.True;
         }
-        catch (InvalidOperationException) when (!_process.HasExited)
+        catch (MpvIpcCommandException error) when (error.Code == "property unavailable" && !_process.HasExited)
         {
             return false;
         }
