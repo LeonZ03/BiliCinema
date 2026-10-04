@@ -2,4 +2,4 @@
 
 # Windows
 *.bat text eol=crlf
-Start-Room-Server.cmd text eol=crlf
+*.cmd text eol=crlf
