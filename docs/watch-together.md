@@ -15,7 +15,7 @@
 ./script/start-watch.ps1 -DataDir ./artifacts/test-account-b
 ```
 
-`DOWNKYI_DATA_DIR` 是已有的数据目录覆盖入口。普通 DownKyi 下载模式仍从原程序入口启动。
+`DOWNKYI_DATA_DIR` 是已有的数据目录覆盖入口；网页播放器的私密会话也按该目录隔离。普通 DownKyi 下载模式仍从原程序入口启动。
 
 ## 房间服务
 

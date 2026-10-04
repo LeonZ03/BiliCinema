@@ -41,6 +41,7 @@ internal sealed class BilibiliWebPlaybackSession : IDisposable
 
         // The view is hosted in a private WebView2 profile. Copy only Bilibili cookies
         // from this application's QR login before the first request to the player.
+        browser.Navigate(new Uri("about:blank"));
         NativeWebViewCookieManager? cookieManager = null;
         for (var attempt = 0; attempt < 100 && cookieManager == null; attempt++)
         {

@@ -1,8 +1,10 @@
 using System;
+using System.IO;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Platform;
+using DownKyi.Core.Storage;
 using DownKyi.ViewModels;
 
 namespace DownKyi.Views;
@@ -20,9 +22,12 @@ internal sealed partial class WatchWindow : Window
                       ?? throw new InvalidOperationException("网页播放器未加载。");
         browser.EnvironmentRequested += (_, args) =>
         {
+            args.EnableDevTools = false;
             if (args is WindowsWebView2EnvironmentRequestedEventArgs windows)
             {
                 windows.IsInPrivateModeEnabled = true;
+                windows.UserDataFolder = Path.Combine(ApplicationStorage.GetRoot(), "WebView2");
+                windows.ProfileName = "BiliCinemaWatch";
                 windows.AdditionalBrowserArguments = "--autoplay-policy=no-user-gesture-required";
             }
         };
