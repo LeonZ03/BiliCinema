@@ -1,8 +1,6 @@
 name: Update mirrored FFmpeg assets
 
 on:
-  schedule:
-    - cron: '17 3 * * 1'
   workflow_dispatch:
     inputs:
       bootstrap:

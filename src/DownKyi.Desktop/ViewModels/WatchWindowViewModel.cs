@@ -52,8 +52,22 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
     private bool _isLoggedIn;
     public bool IsLoggedIn { get => _isLoggedIn; private set => SetProperty(ref _isLoggedIn, value); }
 
+    private string _accountStatus = "正在检查登录状态…";
+    public string AccountStatus { get => _accountStatus; private set => SetProperty(ref _accountStatus, value); }
+
     private Bitmap? _loginQrCode;
-    public Bitmap? LoginQrCode { get => _loginQrCode; private set => SetProperty(ref _loginQrCode, value); }
+    public Bitmap? LoginQrCode
+    {
+        get => _loginQrCode;
+        private set
+        {
+            if (SetProperty(ref _loginQrCode, value))
+            {
+                OnPropertyChanged(nameof(HasLoginQrCode));
+            }
+        }
+    }
+    public bool HasLoginQrCode => LoginQrCode != null;
 
     private string _videoInput = string.Empty;
     public string VideoInput { get => _videoInput; set => SetProperty(ref _videoInput, value); }
@@ -144,6 +158,10 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
         {
             var snapshot = await _session.RefreshAsync(_lifetime.Token).ConfigureAwait(true);
             IsLoggedIn = snapshot.UserInfo?.IsLogin == true;
+            AccountStatus = IsLoggedIn
+                ? $"已登录：{snapshot.UserInfo!.Name} · UID {snapshot.UserInfo.Mid}"
+                  + (snapshot.UserInfo.VipStatus == 1 ? " · 大会员" : string.Empty)
+                : "未登录 B 站账号";
             Status = IsLoggedIn ? "已登录。粘贴影片链接并解析。" : "未登录。请扫码登录。";
         }
         catch (OperationCanceledException) when (_lifetime.IsCancellationRequested)
@@ -152,6 +170,7 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
         }
         catch (Exception error) when (IsRoutineError(error))
         {
+            AccountStatus = "登录状态检查失败";
             Status = "登录状态检查失败，请检查网络后重试扫码。";
         }
     }
@@ -244,6 +263,7 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
             await _loginCancellation.CancelAsync().ConfigureAwait(true);
         }
         IsLoggedIn = false;
+        AccountStatus = "未登录 B 站账号";
         if (!LoginHelper.DeleteLoginInfoCookies())
         {
             Status = "本机登录信息清理失败，请检查数据目录权限。";

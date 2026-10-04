@@ -6,13 +6,18 @@
         Title="BiliCinema · 仅观影"
         Width="1100" Height="900" MinWidth="800" MinHeight="650"
         Background="{DynamicResource BrushSurfaceBase}">
-    <Grid Margin="24" RowDefinitions="Auto,Auto,*" RowSpacing="14">
+    <Grid x:Name="WatchLayout" Margin="24" RowDefinitions="Auto,Auto,*" RowSpacing="14">
         <Border Grid.Row="0" Background="Black" CornerRadius="{DynamicResource DownKyiRadiusMedium}">
             <NativeWebView x:Name="MovieWebView" Height="450" />
         </Border>
-        <TextBlock Grid.Row="1" Text="{Binding Status}" FontSize="14" TextWrapping="Wrap"
-                   Foreground="{DynamicResource BrushPrimary}" />
-        <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto">
+        <Grid Grid.Row="1" ColumnDefinitions="*,Auto" ColumnSpacing="12">
+            <TextBlock x:Name="PlaybackStatus" Grid.Column="0" Text="{Binding Status}" FontSize="14"
+                       TextWrapping="Wrap" VerticalAlignment="Center"
+                       Foreground="{DynamicResource BrushPrimary}" />
+            <Button x:Name="FullscreenButton" Grid.Column="1" Content="全屏播放" Click="OnFullscreenClick"
+                    ToolTip.Tip="全屏观看；按 Esc 或再次点击退出" />
+        </Grid>
+        <ScrollViewer x:Name="WatchDetails" Grid.Row="2" VerticalScrollBarVisibility="Auto">
         <StackPanel Spacing="14">
             <TextBlock Text="仅观影模式" FontSize="24" FontWeight="SemiBold"
                        Foreground="{DynamicResource BrushTextPrimary}" />
@@ -23,12 +28,14 @@
                     CornerRadius="{DynamicResource DownKyiRadiusMedium}">
                 <StackPanel Spacing="10">
                     <TextBlock Text="1  登录" FontSize="18" FontWeight="SemiBold" />
+                    <TextBlock Text="{Binding AccountStatus}" FontWeight="SemiBold"
+                               Foreground="{DynamicResource BrushPrimary}" />
                     <StackPanel Orientation="Horizontal" Spacing="8">
                         <Button Content="获取扫码二维码" Command="{Binding LoginCommand}" />
                         <Button Content="退出本机账号" Command="{Binding LogoutCommand}" />
                     </StackPanel>
                     <Image Source="{Binding LoginQrCode}" Width="170" Height="170"
-                           HorizontalAlignment="Left" />
+                           HorizontalAlignment="Left" IsVisible="{Binding HasLoginQrCode}" />
                 </StackPanel>
             </Border>
 
@@ -42,7 +49,7 @@
                         <Button Grid.Column="1" Content="解析" Command="{Binding ParseCommand}" />
                     </Grid>
                     <TextBlock Text="{Binding FilmTitle}" TextWrapping="Wrap" />
-                    <TextBlock Text="画质和音轨请在播放器画面内选择；4K 是否可用由 B 站账号和影片决定。" TextWrapping="Wrap" />
+                    <TextBlock Text="画质和音轨请在播放器画面内选择；可用画质由 B 站账号、影片和设备决定。" TextWrapping="Wrap" />
                     <TextBlock Text="{Binding MediaInfo}" TextWrapping="Wrap" />
                 </StackPanel>
             </Border>
