@@ -12,9 +12,82 @@ $stampDirectory = Join-Path $repositoryRoot 'artifacts\watch-startup'
 $stampPath = Join-Path $stampDirectory 'source-stamp.txt'
 $env:DOTNET_CLI_TELEMETRY_OPTOUT = '1'
 $env:AVALONIA_TELEMETRY_OPTOUT = '1'
+$requiredSdkVersion = (Get-Content (Join-Path $repositoryRoot 'global.json') -Raw |
+    ConvertFrom-Json).sdk.version
+$localSdkRoot = Join-Path $env:LOCALAPPDATA 'BiliCinema\dotnet'
+$localDotnet = Join-Path $localSdkRoot 'dotnet.exe'
 
 if ($DataDir) {
     $env:DOWNKYI_DATA_DIR = [IO.Path]::GetFullPath($DataDir)
+}
+
+function Test-RequiredSdk([string]$dotnetPath) {
+    if (-not [IO.File]::Exists($dotnetPath)) {
+        return $false
+    }
+
+    try {
+        $detected = (& $dotnetPath --version 2>$null | Select-Object -Last 1)
+        if ($LASTEXITCODE -ne 0) {
+            return $false
+        }
+
+        $required = [Version]$requiredSdkVersion
+        $available = [Version]$detected
+        return $available.Major -eq $required.Major -and
+            $available.Minor -eq $required.Minor -and
+            $available.Build -ge $required.Build
+    } catch {
+        return $false
+    }
+}
+
+function Use-DotNetRoot([string]$dotnetPath) {
+    $dotnetRoot = Split-Path -Parent $dotnetPath
+    $env:DOTNET_ROOT = $dotnetRoot
+    $env:PATH = "$dotnetRoot;$env:PATH"
+}
+
+function Get-RequiredSdk {
+    if (Test-RequiredSdk $localDotnet) {
+        Use-DotNetRoot $localDotnet
+        return $localDotnet
+    }
+
+    $systemDotnet = Get-Command dotnet.exe -ErrorAction SilentlyContinue
+    if ($null -ne $systemDotnet -and (Test-RequiredSdk $systemDotnet.Source)) {
+        Use-DotNetRoot $systemDotnet.Source
+        return $systemDotnet.Source
+    }
+
+    $previouslyBundledDotnet = Join-Path $env:TEMP 'downkyi-dotnet\dotnet.exe'
+    if (Test-RequiredSdk $previouslyBundledDotnet) {
+        Use-DotNetRoot $previouslyBundledDotnet
+        return $previouslyBundledDotnet
+    }
+
+    [IO.Directory]::CreateDirectory($stampDirectory) | Out-Null
+    $installerPath = Join-Path $stampDirectory 'dotnet-install.ps1'
+    Write-Host "No compatible .NET SDK found. Downloading SDK $requiredSdkVersion for this user..."
+    try {
+        [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+        Invoke-WebRequest -Uri 'https://dot.net/v1/dotnet-install.ps1' -UseBasicParsing `
+            -OutFile $installerPath -ErrorAction Stop
+        & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $installerPath `
+            -Version $requiredSdkVersion -InstallDir $localSdkRoot -NoPath | Out-Host
+        $installerExitCode = $LASTEXITCODE
+        if ($installerExitCode -ne 0 -or -not (Test-RequiredSdk $localDotnet)) {
+            throw "SDK installation did not complete (exit code $installerExitCode)."
+        }
+    } catch {
+        Write-Host "Could not install .NET SDK $requiredSdkVersion automatically: $($_.Exception.Message)" `
+            -ForegroundColor Red
+        Write-Host 'Install the .NET 10 SDK from https://dotnet.microsoft.com/download/dotnet/10.0 and try again.'
+        exit 1
+    }
+
+    Use-DotNetRoot $localDotnet
+    return $localDotnet
 }
 
 function Get-SourceManifest([string]$directory) {
@@ -55,19 +128,7 @@ $currentBuild = [IO.File]::Exists($application) -and [IO.File]::Exists($stampPat
     [IO.File]::ReadAllText($stampPath) -ceq $sourceStamp
 
 if (-not $currentBuild) {
-    $bundledDotnet = Join-Path $env:TEMP 'downkyi-dotnet\dotnet.exe'
-    if ([IO.File]::Exists($bundledDotnet)) {
-        $dotnet = $bundledDotnet
-        $env:DOTNET_ROOT = Split-Path -Parent $bundledDotnet
-        $env:PATH = "$env:DOTNET_ROOT;$env:PATH"
-    } else {
-        $command = Get-Command dotnet.exe -ErrorAction SilentlyContinue
-        if ($null -eq $command) {
-            Write-Error '.NET 10 SDK was not found. Install it and double-click Start-Watch.cmd again.'
-            exit 1
-        }
-        $dotnet = $command.Source
-    }
+    $dotnet = Get-RequiredSdk
 
     $restoreInputs = @(
         foreach ($relativeDirectory in $projectDirectories) {
@@ -102,6 +163,21 @@ if (-not $currentBuild) {
 
     [IO.Directory]::CreateDirectory($stampDirectory) | Out-Null
     [IO.File]::WriteAllText($stampPath, $sourceStamp)
+}
+
+# A locally installed SDK also supplies the runtime when the cached build is reused.
+if (Test-RequiredSdk $localDotnet) {
+    Use-DotNetRoot $localDotnet
+} else {
+    $systemDotnet = Get-Command dotnet.exe -ErrorAction SilentlyContinue
+    if ($null -ne $systemDotnet -and (Test-RequiredSdk $systemDotnet.Source)) {
+        Use-DotNetRoot $systemDotnet.Source
+    } else {
+        $previouslyBundledDotnet = Join-Path $env:TEMP 'downkyi-dotnet\dotnet.exe'
+        if (Test-RequiredSdk $previouslyBundledDotnet) {
+            Use-DotNetRoot $previouslyBundledDotnet
+        }
+    }
 }
 
 if ($BuildOnly) {
