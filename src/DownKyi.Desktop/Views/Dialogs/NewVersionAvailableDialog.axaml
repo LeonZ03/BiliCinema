@@ -3,8 +3,66 @@
              Width="520"
              Height="400"
              xmlns:vmd="clr-namespace:DownKyi.ViewModels.Dialogs"
+             xmlns:custom="using:DownKyi.CustomControl"
              x:DataType="vmd:NewVersionAvailableDialogViewModel"
              x:Class="DownKyi.Views.Dialogs.NewVersionAvailableDialog">
+
+    <UserControl.Styles>
+        <Style Selector="TextBlock.release-notes-body">
+            <Setter Property="FontSize" Value="{DynamicResource DownKyiFontSizeBody}" />
+            <Setter Property="Foreground" Value="{DynamicResource BrushTextPrimary}" />
+        </Style>
+        <Style Selector="TextBlock.release-notes-heading">
+            <Setter Property="FontWeight" Value="Bold" />
+            <Setter Property="Foreground" Value="{DynamicResource BrushTextPrimary}" />
+        </Style>
+        <Style Selector="TextBlock.release-notes-h1">
+            <Setter Property="FontSize" Value="{DynamicResource DownKyiFontSizeTitle}" />
+        </Style>
+        <Style Selector="TextBlock.release-notes-h2">
+            <Setter Property="FontSize" Value="{DynamicResource DownKyiFontSizeSectionTitle}" />
+        </Style>
+        <Style Selector="TextBlock.release-notes-h3">
+            <Setter Property="FontSize" Value="16" />
+        </Style>
+        <Style Selector="TextBlock.release-notes-h4, TextBlock.release-notes-h5, TextBlock.release-notes-h6">
+            <Setter Property="FontSize" Value="{DynamicResource DownKyiFontSizeBody}" />
+        </Style>
+        <Style Selector="Span.release-notes-strong">
+            <Setter Property="FontWeight" Value="Bold" />
+        </Style>
+        <Style Selector="Span.release-notes-emphasis, Span.release-notes-image-alt">
+            <Setter Property="FontStyle" Value="Italic" />
+        </Style>
+        <Style Selector="Span.release-notes-link">
+            <Setter Property="Foreground" Value="{DynamicResource BrushPrimary}" />
+            <Setter Property="TextDecorations" Value="Underline" />
+        </Style>
+        <Style Selector="Run.release-notes-inline-code">
+            <Setter Property="FontFamily" Value="Cascadia Mono,Consolas,Menlo,Monaco,monospace" />
+        </Style>
+        <Style Selector="TextBlock.release-notes-list-marker">
+            <Setter Property="Foreground" Value="{DynamicResource BrushPrimary}" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+        </Style>
+        <Style Selector="Border.release-notes-quote">
+            <Setter Property="Padding" Value="12,8" />
+            <Setter Property="Background" Value="{DynamicResource BrushSurfaceSunken}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource BrushPrimary}" />
+            <Setter Property="BorderThickness" Value="3,0,0,0" />
+        </Style>
+        <Style Selector="Border.release-notes-code-block">
+            <Setter Property="Padding" Value="10,8" />
+            <Setter Property="Background" Value="{DynamicResource BrushSurfaceSunken}" />
+            <Setter Property="CornerRadius" Value="{DynamicResource DownKyiRadiusSmall}" />
+        </Style>
+        <Style Selector="TextBlock.release-notes-code-text">
+            <Setter Property="FontFamily" Value="Cascadia Mono,Consolas,Menlo,Monaco,monospace" />
+        </Style>
+        <Style Selector="Separator.release-notes-rule">
+            <Setter Property="Background" Value="{DynamicResource BrushBorderSubtle}" />
+        </Style>
+    </UserControl.Styles>
 
     <Border Background="{DynamicResource BrushBackground}"
             CornerRadius="8"
@@ -42,9 +100,9 @@
             <ScrollViewer Grid.Row="1"
                           VerticalScrollBarVisibility="Auto"
                           Padding="0 8">
-                <TextBlock Margin="15,0,0,0"
-                           Text="{Binding MarkdownText}"
-                           TextWrapping="Wrap"/>
+                <custom:ReleaseNotesMarkdownView Name="ReleaseNotesMarkdown"
+                                                 Margin="15,0,0,0"
+                                                 Markdown="{Binding MarkdownText}" />
             </ScrollViewer>
             
     
