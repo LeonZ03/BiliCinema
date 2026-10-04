@@ -7,15 +7,15 @@
         Width="1100" Height="900" MinWidth="800" MinHeight="650"
         Background="{DynamicResource BrushSurfaceBase}">
     <Grid x:Name="WatchLayout" Margin="24" RowDefinitions="Auto,Auto,*" RowSpacing="14">
-        <Border Grid.Row="0" Background="Black" CornerRadius="{DynamicResource DownKyiRadiusMedium}">
+        <Border x:Name="PlayerSurface" Grid.Row="0" Background="Black" CornerRadius="{DynamicResource DownKyiRadiusMedium}">
             <NativeWebView x:Name="MovieWebView" Height="450" />
         </Border>
-        <Grid Grid.Row="1" ColumnDefinitions="*,Auto" ColumnSpacing="12">
+        <Grid x:Name="PlaybackToolbar" Grid.Row="1" ColumnDefinitions="*,Auto" ColumnSpacing="12">
             <TextBlock x:Name="PlaybackStatus" Grid.Column="0" Text="{Binding Status}" FontSize="14"
                        TextWrapping="Wrap" VerticalAlignment="Center"
                        Foreground="{DynamicResource BrushPrimary}" />
             <Button x:Name="FullscreenButton" Grid.Column="1" Content="全屏播放" Click="OnFullscreenClick"
-                    ToolTip.Tip="全屏观看；按 Esc 或再次点击退出" />
+                    ToolTip.Tip="全屏观看；按 Esc 退出" />
         </Grid>
         <ScrollViewer x:Name="WatchDetails" Grid.Row="2" VerticalScrollBarVisibility="Auto">
         <StackPanel Spacing="14">

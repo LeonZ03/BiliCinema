@@ -35,13 +35,34 @@ internal sealed class BilibiliWebPlaybackSession : IDisposable
                 }
             }
             if (!player) return false;
+            window.__biliCinemaPlayerRoot = player;
+            if (!window.__biliCinemaPageActionGuard) {
+                window.__biliCinemaPageActionGuard = true;
+                for (const type of ['click', 'pointerdown', 'submit']) {
+                    document.addEventListener(type, event => {
+                        const root = window.__biliCinemaPlayerRoot;
+                        if (root && !root.contains(event.target)) {
+                            event.preventDefault();
+                            event.stopImmediatePropagation();
+                        }
+                    }, true);
+                }
+            }
             document.documentElement.style.background = '#000';
             document.documentElement.style.overflow = 'hidden';
             document.body.style.background = '#000';
             document.body.style.overflow = 'hidden';
             document.body.style.margin = '0';
             document.body.style.visibility = 'visible';
-            for (let parent = player.parentElement; parent && parent !== document.body; parent = parent.parentElement) {
+            for (let kept = player; kept && kept !== document.body; kept = kept.parentElement) {
+                const parent = kept.parentElement;
+                if (!parent) break;
+                for (const sibling of parent.children) {
+                    if (sibling !== kept) {
+                        sibling.style.setProperty('display', 'none', 'important');
+                        sibling.style.setProperty('pointer-events', 'none', 'important');
+                    }
+                }
                 parent.style.setProperty('overflow', 'visible', 'important');
                 parent.style.setProperty('transform', 'none', 'important');
             }
@@ -165,8 +186,12 @@ internal sealed class BilibiliWebPlaybackSession : IDisposable
     }
 
     public async Task<double> GetPositionAsync(CancellationToken cancellationToken)
-        => ParseNumber(await InvokeAsync($"{Video}?.currentTime ?? 0", cancellationToken)
+    {
+        // The site can add its header and other navigation after the player loads.
+        await InvokeAsync(FocusPlayerScript, cancellationToken).ConfigureAwait(true);
+        return ParseNumber(await InvokeAsync($"{Video}?.currentTime ?? 0", cancellationToken)
             .ConfigureAwait(true));
+    }
 
     public async Task<double> GetDurationAsync(CancellationToken cancellationToken)
         => ParseNumber(await InvokeAsync($"{Video}?.duration ?? 0", cancellationToken)

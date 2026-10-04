@@ -3,6 +3,7 @@ using System.IO;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
+using Avalonia.Media;
 using Avalonia.Platform;
 using Avalonia.Threading;
 using DownKyi.Core.Storage;
@@ -12,9 +13,24 @@ namespace DownKyi.Views;
 
 internal sealed partial class WatchWindow : Window
 {
+    private const string FullscreenStateScript = """
+        (() => {
+            if (!window.__biliCinemaEscapeHook) {
+                window.__biliCinemaEscapeHook = true;
+                window.addEventListener('keydown', event => {
+                    if (event.key === 'Escape') window.__biliCinemaEscapeRequested = true;
+                }, true);
+            }
+            const exit = window.__biliCinemaEscapeRequested === true;
+            window.__biliCinemaEscapeRequested = false;
+            return (document.fullscreenElement ? 1 : 0) + (exit ? 2 : 0);
+        })()
+        """;
     private readonly WatchWindowViewModel _viewModel;
     private readonly Grid _watchLayout;
+    private readonly Border _playerSurface;
     private readonly NativeWebView _browser;
+    private readonly Grid _playbackToolbar;
     private readonly ScrollViewer _watchDetails;
     private readonly TextBlock _playbackStatus;
     private readonly Button _fullscreenButton;
@@ -25,6 +41,8 @@ internal sealed partial class WatchWindow : Window
     private bool _fullscreenFromBrowser;
     private bool _checkingFullscreen;
     private bool _windowClosing;
+    private readonly IBrush? _normalBackground;
+    private readonly Avalonia.CornerRadius _normalCornerRadius;
 
     public WatchWindow(WatchWindowViewModel viewModel)
     {
@@ -33,14 +51,20 @@ internal sealed partial class WatchWindow : Window
         DataContext = _viewModel;
         _watchLayout = this.FindControl<Grid>("WatchLayout")
                        ?? throw new InvalidOperationException("观影布局未加载。");
+        _playerSurface = this.FindControl<Border>("PlayerSurface")
+                         ?? throw new InvalidOperationException("播放器容器未加载。");
         _browser = this.FindControl<NativeWebView>("MovieWebView")
                       ?? throw new InvalidOperationException("网页播放器未加载。");
+        _playbackToolbar = this.FindControl<Grid>("PlaybackToolbar")
+                           ?? throw new InvalidOperationException("播放工具栏未加载。");
         _watchDetails = this.FindControl<ScrollViewer>("WatchDetails")
                         ?? throw new InvalidOperationException("观影详情未加载。");
         _playbackStatus = this.FindControl<TextBlock>("PlaybackStatus")
                           ?? throw new InvalidOperationException("播放状态未加载。");
         _fullscreenButton = this.FindControl<Button>("FullscreenButton")
                             ?? throw new InvalidOperationException("全屏按钮未加载。");
+        _normalBackground = Background;
+        _normalCornerRadius = _playerSurface.CornerRadius;
         _browser.EnvironmentRequested += (_, args) =>
         {
             args.EnableDevTools = false;
@@ -125,13 +149,26 @@ internal sealed partial class WatchWindow : Window
         _checkingFullscreen = true;
         try
         {
-            var result = await _browser.InvokeScript("!!document.fullscreenElement").ConfigureAwait(true);
+            var result = await _browser.InvokeScript(FullscreenStateScript).ConfigureAwait(true);
             if (_windowClosing)
             {
                 return;
             }
 
-            var wantsFullscreen = string.Equals(result?.Trim('"'), "true", StringComparison.OrdinalIgnoreCase);
+            var state = int.TryParse(result?.Trim('"'), out var parsed) ? parsed : 0;
+            var wantsFullscreen = (state & 1) != 0;
+            if ((state & 2) != 0 && _isFullscreen)
+            {
+                _browserFullscreen = wantsFullscreen;
+                _fullscreenFromBrowser = false;
+                ToggleFullscreen();
+                if (wantsFullscreen)
+                {
+                    await _browser.InvokeScript("document.exitFullscreen?.()").ConfigureAwait(true);
+                }
+                return;
+            }
+
             if (wantsFullscreen == _browserFullscreen)
             {
                 return;
@@ -168,11 +205,14 @@ internal sealed partial class WatchWindow : Window
         if (_isFullscreen)
         {
             WindowState = _previousWindowState;
+            Background = _normalBackground;
             _watchLayout.Margin = new Avalonia.Thickness(24);
             _watchLayout.RowDefinitions = new RowDefinitions("Auto,Auto,*");
             _watchLayout.RowSpacing = 14;
+            _playerSurface.CornerRadius = _normalCornerRadius;
             _browser.Height = 450;
             _watchDetails.IsVisible = true;
+            _playbackToolbar.IsVisible = true;
             _playbackStatus.IsVisible = true;
             _fullscreenButton.Content = "全屏播放";
             _isFullscreen = false;
@@ -180,13 +220,15 @@ internal sealed partial class WatchWindow : Window
         else
         {
             _previousWindowState = WindowState;
+            Background = Brushes.Black;
             _watchLayout.Margin = new Avalonia.Thickness(0);
-            _watchLayout.RowDefinitions = new RowDefinitions("*,Auto,0");
+            _watchLayout.RowDefinitions = new RowDefinitions("*,0,0");
             _watchLayout.RowSpacing = 0;
+            _playerSurface.CornerRadius = new Avalonia.CornerRadius(0);
             _browser.Height = double.NaN;
             _watchDetails.IsVisible = false;
+            _playbackToolbar.IsVisible = false;
             _playbackStatus.IsVisible = false;
-            _fullscreenButton.Content = "退出全屏 (Esc)";
             _isFullscreen = true;
             WindowState = WindowState.FullScreen;
         }
