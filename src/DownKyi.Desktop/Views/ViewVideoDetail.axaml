@@ -30,9 +30,12 @@
             <views:VideoDetailSummaryView Grid.Row="0" />
             <Grid Grid.Row="1"
                   Margin="10"
-                  RowDefinitions="*,60">
+                  RowDefinitions="*,60,Auto">
                 <views:VideoDetailSelectionView Grid.Row="0" />
                 <views:VideoDetailActionsView Grid.Row="1" Margin="0,8,0,0" />
+                <TextBlock Grid.Row="2" Margin="8,4,0,0"
+                           Text="{Binding UiState.OnlinePlaybackInfo}"
+                           Foreground="{DynamicResource BrushTextSecondary}" />
             </Grid>
         </Grid>
 

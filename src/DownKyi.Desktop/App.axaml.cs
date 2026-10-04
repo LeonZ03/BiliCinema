@@ -27,6 +27,7 @@ namespace DownKyi;
 
 internal partial class App : Avalonia.Application, IAsyncDisposable
 {
+    internal static bool WatchMode { get; set; }
     private readonly object _disposeSync = new();
     private Task? _disposeTask;
 
@@ -45,7 +46,7 @@ internal partial class App : Avalonia.Application, IAsyncDisposable
     public override void Initialize()
     {
 #if !DEBUG
-        if (!SingleInstanceGuard.TryAcquire(
+        if (!WatchMode && !SingleInstanceGuard.TryAcquire(
                 AppConstant.RepoOwner,
                 AppConstant.RepoName,
                 out _processInstanceGuard))
@@ -58,7 +59,7 @@ internal partial class App : Avalonia.Application, IAsyncDisposable
         CreateHost();
         AttachUnhandledExceptionLogging();
         _logger?.LogInformationMessage(
-            $"Application initialized. Version={new AppInfo().VersionName}; Portable={ApplicationStorage.IsPortableMode()}");
+            $"Application initialized. Version={new AppInfo().VersionName}; Portable={ApplicationStorage.IsPortableMode()}; WatchMode={WatchMode}");
         if (_logProvider != null)
         {
             ObserveBackgroundTask(
@@ -77,11 +78,26 @@ internal partial class App : Avalonia.Application, IAsyncDisposable
         var host = _host ?? throw new InvalidOperationException("The application Host is not initialized.");
         desktop.ShutdownMode = ShutdownMode.OnMainWindowClose;
 
-        _applicationLifecycle = host.Services.GetRequiredService<AvaloniaApplicationLifecycle>();
-        _applicationLifecycle.AttachHost(host);
-
         var desktopContext = host.Services.GetRequiredService<AvaloniaDesktopContext>();
         desktopContext.AttachLifetime(desktop);
+
+        if (WatchMode)
+        {
+            var watchWindow = host.Services.GetRequiredService<WatchWindow>();
+            desktopContext.AttachMainWindow(watchWindow);
+            desktop.MainWindow = watchWindow;
+            host.Services.GetRequiredService<DesktopThemeController>().ApplySavedMode();
+            base.OnFrameworkInitializationCompleted();
+            if (!Design.IsDesignMode)
+            {
+                Dispatcher.UIThread.Post(StartHost, DispatcherPriority.Background);
+            }
+
+            return;
+        }
+
+        _applicationLifecycle = host.Services.GetRequiredService<AvaloniaApplicationLifecycle>();
+        _applicationLifecycle.AttachHost(host);
         var imageLoader = host.Services.GetRequiredService<IAsyncImageLoader>();
         ImageLoader.AsyncImageLoader = imageLoader;
         ImageBrushLoader.AsyncImageLoader = imageLoader;
@@ -116,6 +132,12 @@ internal partial class App : Avalonia.Application, IAsyncDisposable
                 await _applicationLifecycle
                     .RequestShutdownAsync(CancellationToken.None)
                     .ConfigureAwait(false);
+            }
+            else if (WatchMode && _host != null)
+            {
+                await _host.StopAsync(CancellationToken.None).ConfigureAwait(false);
+                await _host.Services.GetRequiredService<ISettingsStore>()
+                    .FlushAsync(CancellationToken.None).ConfigureAwait(false);
             }
         }
         finally
@@ -174,7 +196,16 @@ internal partial class App : Avalonia.Application, IAsyncDisposable
         });
         _logger = _loggerFactory.CreateLogger<App>();
         _host = DownKyiHost.Create(services =>
-            services.AddDownKyiDesktop(_loggerFactory, _logProvider));
+        {
+            if (WatchMode)
+            {
+                services.AddDownKyiWatch(_loggerFactory, _logProvider);
+            }
+            else
+            {
+                services.AddDownKyiDesktop(_loggerFactory, _logProvider);
+            }
+        });
     }
 
     private void AttachUnhandledExceptionLogging()
@@ -216,6 +247,12 @@ internal partial class App : Avalonia.Application, IAsyncDisposable
 
     private void StartHost()
     {
+        if (WatchMode && _host != null)
+        {
+            ObserveBackgroundTask(_host.StartAsync(), "Watch mode Host startup failed.");
+            return;
+        }
+
         if (_applicationLifecycle != null)
         {
             ObserveBackgroundTask(_applicationLifecycle.StartHostAsync(), "Application Host startup failed.");

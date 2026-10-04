@@ -33,6 +33,40 @@ namespace DownKyi.Composition;
 
 internal static class DesktopComposition
 {
+    public static IServiceCollection AddDownKyiWatch(
+        this IServiceCollection services,
+        ILoggerFactory loggerFactory,
+        IApplicationLogService logService)
+    {
+        services.AddSingleton(loggerFactory);
+        services.AddSingleton(logService);
+        services.AddSingleton<ISettingsStore, SettingsStore>();
+        services.AddSingleton<DesktopThemeController>();
+        services.AddSingleton<IBilibiliCookieProvider, BilibiliCookieProvider>();
+        services.AddDownKyiBilibiliInfrastructure(provider =>
+        {
+            var network = provider.GetRequiredService<ISettingsStore>().Current.Network;
+            return network.NetworkProxy switch
+            {
+                NetworkProxy.None => new BilibiliNetworkOptions(network.UserAgent, false, null),
+                NetworkProxy.Custom => new BilibiliNetworkOptions(network.UserAgent, true,
+                    network.CustomNetworkProxy),
+                _ => new BilibiliNetworkOptions(network.UserAgent, true, null)
+            };
+        });
+        services.AddSingleton<IWbiKeyProvider, WbiKeyProvider>();
+        services.AddSingleton<IVideoTagProvider, VideoTagProvider>();
+        services.AddSingleton<VideoParseCoordinator>();
+        services.AddSingleton<IUserSessionCoordinator, UserSessionCoordinator>();
+        services.AddSingleton<ILoginCoordinator, LoginCoordinator>();
+        services.AddSingleton<ILoginQrCodeRenderer, LoginQrCodeRenderer>();
+        services.AddSingleton<AvaloniaDesktopContext>();
+        services.AddSingleton<IClipboardService, AvaloniaClipboardService>();
+        services.AddSingleton<WatchWindowViewModel>();
+        services.AddSingleton<WatchWindow>();
+        return services;
+    }
+
     public static IServiceCollection AddDownKyiDesktop(
         this IServiceCollection services,
         ILoggerFactory loggerFactory,

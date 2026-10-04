@@ -1,4 +1,8 @@
-# DownKyi Core
+# BiliCinema
+
+本仓库基于 [DownKyi Core](https://github.com/crazysmile-PhD/downkyicore) 增量开发，保留原有下载功能，并新增 Windows 仅观影入口、在线音视频播放与双人同步房间。观影模式的启动、房间服务和当前验证范围见 [观影使用说明](docs/watch-together.md)。下方徽章与原有下载说明指向上游项目；本仓库当前以源码开发和验证为主。
+
+## 上游项目：DownKyi Core
 
 <div align="center">
 

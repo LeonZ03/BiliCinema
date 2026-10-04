@@ -1,3 +1,4 @@
+using System.IO;
 using System.Runtime.Versioning;
 using System.Threading;
 using Avalonia;
@@ -14,6 +15,10 @@ public static class DesktopApplication
         {
             return;
         }
+
+        App.WatchMode = args.Contains("--watch", StringComparer.OrdinalIgnoreCase)
+                        || string.Equals(Path.GetFileNameWithoutExtension(Environment.ProcessPath),
+                            "DownKyi.Watch", StringComparison.OrdinalIgnoreCase);
 
         var appBuilder = BuildAvaloniaApp();
         try

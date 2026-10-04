@@ -1,6 +1,16 @@
 
 # Third-Party Notices
 
+## mpv (optional Windows watch package)
+
+The separately launched mpv player is not part of the DownKyi source tree.
+The local Windows watch package uses the mpv project's first-party CI full build
+`v0.41.0-dev-g413ff0b1c` from
+<https://github.com/mpv-player/mpv/releases/tag/git-release>.
+It is distributed under GPLv3; its `LICENSE.GPL` is included beside `mpv.exe`
+in the watch package. The app communicates with mpv over a local named pipe.
+
+
 ## BBDown
 
 The built-in HTTP range download pipeline is adapted from BBDown's range segmentation,
