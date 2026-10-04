@@ -16,7 +16,9 @@ pwsh -File src/DownKyi.RoomServer/smoke.ps1
 
 ## Private internet deployment
 
-Run the service on a host you control with the default loopback listener and place a TLS reverse proxy in front. For example, a Caddy site can use:
+For temporary remote viewing, run `Start-Room-Server.cmd` on the host PC and install `cloudflared` from the [official downloads page](https://developers.cloudflare.com/tunnel/downloads/). In the watch window, creating a room from the default local address starts a Quick Tunnel, waits for its public health check, and puts its `wss://…trycloudflare.com/ws` address into the invitation. The guest needs only the invitation. The server stays bound to loopback; closing the host watch window ends its Tunnel, and a new Tunnel gets a new address. Quick Tunnels are intended for temporary use and have no uptime guarantee.
+
+For a stable hostname, set up a named Cloudflare Tunnel or run the service on a host you control with a TLS reverse proxy. Keep the default loopback listener. For example, a Caddy site can use:
 
 ```caddyfile
 room.example.com {

@@ -16,6 +16,7 @@ if errorlevel 1 goto bundled_server
 
 echo Room server: ws://127.0.0.1:5077/ws
 echo Health check: http://127.0.0.1:5077/health
+echo Create a room in BiliCinema to generate a Cloudflare invite.
 echo Press Ctrl+C to stop the server.
 echo.
 "%DOTNET_EXE%" run --project "src\DownKyi.RoomServer\DownKyi.RoomServer.csproj" -c Release --no-launch-profile --verbosity quiet
@@ -26,6 +27,7 @@ goto finished
 if not exist "artifacts\RoomServer-win-x64\DownKyi.RoomServer.exe" goto missing_runtime
 echo Room server: ws://127.0.0.1:5077/ws
 echo Health check: http://127.0.0.1:5077/health
+echo Create a room in BiliCinema to generate a Cloudflare invite.
 echo Press Ctrl+C to stop the server.
 echo.
 "artifacts\RoomServer-win-x64\DownKyi.RoomServer.exe"

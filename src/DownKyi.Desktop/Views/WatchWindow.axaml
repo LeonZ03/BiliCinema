@@ -84,6 +84,8 @@
                     <TextBlock Text="4  私人同步房间" FontSize="18" FontWeight="SemiBold" />
                     <TextBlock Text="房主控制选片、播放、暂停、跳转与倍速；每台电脑都用自己的登录状态取流。"
                                TextWrapping="Wrap" />
+                    <TextBlock Text="房主先启动本机房间服务，创建房间时自动生成 Cloudflare 邀请地址；加入方只需粘贴邀请。"
+                               TextWrapping="Wrap" />
                     <Grid ColumnDefinitions="Auto,*" ColumnSpacing="8">
                         <TextBlock Grid.Column="0" Text="服务地址" VerticalAlignment="Center" />
                         <TextBox Grid.Column="1" Text="{Binding ServiceAddress, Mode=TwoWay}" />

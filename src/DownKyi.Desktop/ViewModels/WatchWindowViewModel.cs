@@ -27,6 +27,7 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
     private readonly IClipboardService _clipboard;
     private readonly VideoParseCoordinator _parser;
     private readonly WatchRoomClient _room = new();
+    private readonly QuickRoomTunnel _quickTunnel = new();
     private readonly CancellationTokenSource _lifetime = new();
     private readonly SemaphoreSlim _snapshotGate = new(1, 1);
     private readonly Task _monitorTask;
@@ -502,6 +503,7 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
 
     private async Task CreateRoomAsync()
     {
+        InviteText = string.Empty;
         if (_page?.EpisodeId is not > 0)
         {
             Status = "请先解析一部影片。";
@@ -513,6 +515,13 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
             if (_room.Connected)
             {
                 await LeaveRoomAsync().ConfigureAwait(true);
+            }
+
+            if (ServiceAddress == "ws://127.0.0.1:5077/ws"
+                || ServiceAddress == _quickTunnel.ServiceAddress)
+            {
+                RoomState = "正在生成 Cloudflare 房间地址…";
+                ServiceAddress = await _quickTunnel.StartAsync(_lifetime.Token).ConfigureAwait(true);
             }
 
             var snapshot = await _room.ConnectAsync(ServiceAddress, create: true, null,
@@ -530,9 +539,15 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
             await StartPlaybackAsync(true, _lifetime.Token).ConfigureAwait(true);
             await ApplySnapshotAsync(snapshot).ConfigureAwait(true);
         }
+        catch (OperationCanceledException) when (_lifetime.IsCancellationRequested)
+        {
+            return;
+        }
         catch (Exception error) when (IsRoutineError(error))
         {
-            RoomState = "创建房间失败，请检查服务地址和网络。";
+            RoomState = error is InvalidOperationException
+                ? error.Message
+                : "创建房间失败，请检查服务地址和网络。";
         }
     }
 
@@ -760,6 +775,13 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
                 await _player.SetPausedAsync(true, _lifetime.Token).ConfigureAwait(true);
             }
 
+            if (ServiceAddress == _quickTunnel.ServiceAddress && !_quickTunnel.IsRunning)
+            {
+                InviteText = string.Empty;
+                RoomState = "Cloudflare 地址已失效；请重新创建房间并分享新邀请。";
+                return;
+            }
+
             for (var attempt = 1; attempt <= 3; attempt++)
             {
                 try
@@ -940,6 +962,7 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
     public void StopForWindowClose()
     {
         _lifetime.Cancel();
+        _quickTunnel.Dispose();
         StopPlayback();
     }
 
@@ -962,6 +985,7 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
         _room.Disconnected -= OnRoomDisconnected;
         _room.Closed -= OnRoomClosed;
         await _room.DisposeAsync().ConfigureAwait(false);
+        _quickTunnel.Dispose();
         StopPlayback();
         LoginQrCode?.Dispose();
         LoginQrCode = null;
