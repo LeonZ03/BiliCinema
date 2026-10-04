@@ -109,7 +109,7 @@ namespace DownKyi.Core.Aria2cNet.Server
                     }
 
                     var executablePath = Path.Combine(
-                        AppContext.BaseDirectory,
+                        Environment.GetEnvironmentVariable("BILICINEMA_TOOL_ROOT") ?? AppContext.BaseDirectory,
                         "aria2",
                         executeName);
                     AriaBinaryIntegrityVerifier.Verify(executablePath);

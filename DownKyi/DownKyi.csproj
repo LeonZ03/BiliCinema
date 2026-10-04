@@ -1,6 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
     <PropertyGroup>
         <OutputType>WinExe</OutputType>
+        <AssemblyName Condition="'$(PublishSingleFile)' == 'true'">BiliCinema</AssemblyName>
         <TargetFramework>net10.0</TargetFramework>
         <ImplicitUsings>enable</ImplicitUsings>
         <Nullable>enable</Nullable>
@@ -27,11 +28,13 @@
               CopyToOutputDirectory="PreserveNewest"
               CopyToPublishDirectory="PreserveNewest" />
         <None Include="..\DownKyi.Core\Binary\$(DownKyiAssetRuntimeIdentifier)\aria2\*"
+              Condition="'$(PublishSingleFile)' != 'true'"
               Link="aria2\%(Filename)%(Extension)"
               Visible="false"
               CopyToOutputDirectory="PreserveNewest"
               CopyToPublishDirectory="PreserveNewest" />
         <None Include="..\DownKyi.Core\Binary\$(DownKyiAssetRuntimeIdentifier)\ffmpeg\*"
+              Condition="'$(PublishSingleFile)' != 'true'"
               Link="ffmpeg\%(Filename)%(Extension)"
               Visible="false"
               CopyToOutputDirectory="PreserveNewest"

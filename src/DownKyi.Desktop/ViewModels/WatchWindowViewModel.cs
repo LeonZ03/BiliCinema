@@ -2,6 +2,8 @@ using System;
 using System.Globalization;
 using System.Linq;
 using System.Net.WebSockets;
+using System.Net.Http;
+using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using Avalonia.Controls;
@@ -16,6 +18,8 @@ using DownKyi.Presentation;
 using DownKyi.Services.Account;
 using DownKyi.Services.Video;
 using DownKyi.Services.Watch;
+using DownKyi.RoomServer;
+using Microsoft.Extensions.Hosting;
 
 namespace DownKyi.ViewModels;
 
@@ -26,6 +30,7 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
     private readonly IUserSessionCoordinator _session;
     private readonly IClipboardService _clipboard;
     private readonly VideoParseCoordinator _parser;
+    private readonly MainWindowViewModel _downloadContent;
     private readonly WatchRoomClient _room = new();
     private readonly QuickRoomTunnel _quickTunnel = new();
     private readonly CancellationTokenSource _lifetime = new();
@@ -35,6 +40,8 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
     private BilibiliWebPlaybackSession? _player;
     private NativeWebView? _browser;
     private VideoPage? _page;
+    private VideoPage? _onlinePage;
+    private VideoPage? _roomPage;
     private WatchRoomSnapshot? _lastSnapshot;
     private long _lastSnapshotReceivedAtUnixMs;
     private long _lastVersion = -1;
@@ -46,6 +53,26 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
     private bool _startWhenReady;
     private int _recoveries;
     private bool _disposed;
+    private bool _isPreparing;
+    public bool IsPreparing { get => _isPreparing; private set => SetProperty(ref _isPreparing, value); }
+    private bool _downloadLoaded;
+    private bool _assistedLoginPending;
+    private string _connectAddress = "ws://127.0.0.1:5077/ws";
+    private string? _roomParsedInput;
+    private IHost? _localServer;
+
+    public MainWindowViewModel DownloadContent => _downloadContent;
+    private string _selectedSection = "Online";
+    public bool ShowLogin => _selectedSection == "Login";
+    public bool ShowOnline => _selectedSection == "Online";
+    public bool ShowRoom => _selectedSection == "Room";
+    public bool ShowDownload => _selectedSection == "Download";
+    public bool ShowPlayer => ShowOnline || ShowRoom;
+
+    public IRelayCommand ShowLoginCommand { get; }
+    public IRelayCommand ShowOnlineCommand { get; }
+    public IRelayCommand ShowRoomCommand { get; }
+    public IRelayCommand ShowDownloadCommand { get; }
 
     private string _status = "未登录。请扫码登录。";
     public string Status { get => _status; private set => SetProperty(ref _status, value); }
@@ -70,11 +97,37 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
     }
     public bool HasLoginQrCode => LoginQrCode != null;
 
+    private Bitmap? _hostAssistedQrCode;
+    public Bitmap? HostAssistedQrCode
+    {
+        get => _hostAssistedQrCode;
+        private set
+        {
+            if (SetProperty(ref _hostAssistedQrCode, value))
+            {
+                OnPropertyChanged(nameof(HasHostAssistedQrCode));
+            }
+        }
+    }
+    public bool HasHostAssistedQrCode => HostAssistedQrCode != null;
+
+    private string _roomLoginStatus = string.Empty;
+    public string RoomLoginStatus { get => _roomLoginStatus; private set => SetProperty(ref _roomLoginStatus, value); }
+
+    private bool _useHostAccount;
+    public bool UseHostAccount { get => _useHostAccount; set => SetProperty(ref _useHostAccount, value); }
+
     private string _videoInput = string.Empty;
     public string VideoInput { get => _videoInput; set => SetProperty(ref _videoInput, value); }
 
-    private string _filmTitle = string.Empty;
-    public string FilmTitle { get => _filmTitle; private set => SetProperty(ref _filmTitle, value); }
+    private string _roomVideoInput = string.Empty;
+    public string RoomVideoInput { get => _roomVideoInput; set => SetProperty(ref _roomVideoInput, value); }
+
+    private string _onlineFilmTitle = string.Empty;
+    public string OnlineFilmTitle { get => _onlineFilmTitle; private set => SetProperty(ref _onlineFilmTitle, value); }
+
+    private string _roomFilmTitle = string.Empty;
+    public string RoomFilmTitle { get => _roomFilmTitle; private set => SetProperty(ref _roomFilmTitle, value); }
 
     private string _mediaInfo = string.Empty;
     public string MediaInfo { get => _mediaInfo; private set => SetProperty(ref _mediaInfo, value); }
@@ -109,6 +162,7 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
     public bool CanControl => !_room.Connected || _room.IsHost;
 
     public IAsyncRelayCommand LoginCommand { get; }
+    public IAsyncRelayCommand RetryAssistedLoginCommand { get; }
     public IAsyncRelayCommand LogoutCommand { get; }
     public IAsyncRelayCommand ParseCommand { get; }
     public IAsyncRelayCommand PlayCommand { get; }
@@ -127,17 +181,26 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
         ILoginQrCodeRenderer qrRenderer,
         IUserSessionCoordinator session,
         IClipboardService clipboard,
-        VideoParseCoordinator parser)
+        VideoParseCoordinator parser,
+        MainWindowViewModel downloadContent)
     {
         _login = login;
         _qrRenderer = qrRenderer;
         _session = session;
         _clipboard = clipboard;
         _parser = parser;
+        _downloadContent = downloadContent;
         _room.SnapshotReceived += OnSnapshotReceived;
         _room.Disconnected += OnRoomDisconnected;
         _room.Closed += OnRoomClosed;
+        _room.LoginQrReceived += OnLoginQrReceived;
+        _room.GuestLoginCompleted += OnGuestLoginCompleted;
+        ShowLoginCommand = new RelayCommand(() => SelectSection("Login"));
+        ShowOnlineCommand = new RelayCommand(() => SelectSection("Online"));
+        ShowRoomCommand = new RelayCommand(() => SelectSection("Room"));
+        ShowDownloadCommand = new RelayCommand(() => _ = OpenDownloadAsync());
         LoginCommand = new AsyncRelayCommand(StartLoginAsync);
+        RetryAssistedLoginCommand = new AsyncRelayCommand(RetryAssistedLoginAsync);
         LogoutCommand = new AsyncRelayCommand(LogoutAsync);
         ParseCommand = new AsyncRelayCommand(ParseAsync);
         PlayCommand = new AsyncRelayCommand(() => RunControlSafelyAsync(PlayAsync));
@@ -155,6 +218,7 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
 
     public async Task InitializeAsync()
     {
+        IsPreparing = true;
         try
         {
             var snapshot = await _session.RefreshAsync(_lifetime.Token).ConfigureAwait(true);
@@ -174,9 +238,101 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
             AccountStatus = "登录状态检查失败";
             Status = "登录状态检查失败，请检查网络后重试扫码。";
         }
+        finally
+        {
+            IsPreparing = false;
+        }
     }
 
-    public void AttachBrowser(NativeWebView browser) => _browser = browser;
+    public void AttachBrowser(NativeWebView browser)
+    {
+        _browser = browser;
+        browser.WebMessageReceived += OnWebMessageReceived;
+    }
+
+    private void SelectSection(string section)
+    {
+        _selectedSection = section;
+        OnPropertyChanged(nameof(ShowLogin));
+        OnPropertyChanged(nameof(ShowOnline));
+        OnPropertyChanged(nameof(ShowRoom));
+        OnPropertyChanged(nameof(ShowDownload));
+        OnPropertyChanged(nameof(ShowPlayer));
+    }
+
+    private async Task OpenDownloadAsync()
+    {
+        SelectSection("Download");
+        if (_downloadLoaded)
+        {
+            return;
+        }
+
+        _downloadLoaded = true;
+        IsPreparing = true;
+        try
+        {
+            await Task.Run(BundledTools.EnsureDownloadTools, _lifetime.Token).ConfigureAwait(true);
+            _downloadContent.LoadedCommand?.Execute(null);
+        }
+        catch (Exception error) when (IsRoutineError(error))
+        {
+            Status = "下载工具准备失败，请检查本机存储空间或重新构建程序。";
+            _downloadLoaded = false;
+        }
+        finally
+        {
+            IsPreparing = false;
+        }
+    }
+
+    private void OnWebMessageReceived(object? sender, WebMessageReceivedEventArgs args)
+    {
+        if (!_room.Connected || !_room.IsHost || _player == null || _disposed)
+        {
+            return;
+        }
+
+        try
+        {
+            using var message = JsonDocument.Parse(args.Body ?? string.Empty);
+            var root = message.RootElement;
+            if (root.ValueKind != JsonValueKind.Object
+                || !root.TryGetProperty("source", out var source)
+                || source.ValueKind != JsonValueKind.String
+                || source.GetString() != "biliCinemaPlayer"
+                || !root.TryGetProperty("type", out var type)
+                || type.ValueKind != JsonValueKind.String)
+            {
+                return;
+            }
+
+            object? command = type.GetString() switch
+            {
+                "play" => new { type = "play" },
+                "pause" => new { type = "pause" },
+                "seeked" when root.TryGetProperty("position", out var position)
+                              && position.ValueKind == JsonValueKind.Number
+                              && position.TryGetDouble(out var seconds)
+                              && double.IsFinite(seconds) && seconds is >= 0 and <= 86400
+                    => new { type = "seek", positionSeconds = seconds },
+                "ratechange" when root.TryGetProperty("rate", out var rate)
+                                  && rate.ValueKind == JsonValueKind.Number
+                                  && rate.TryGetDouble(out var speed)
+                                  && double.IsFinite(speed) && speed is >= 0.25 and <= 3
+                    => new { type = "rate", rate = speed },
+                _ => null
+            };
+            if (command != null)
+            {
+                _ = RunControlSafelyAsync(() => SendHostControlAsync(command));
+            }
+        }
+        catch (JsonException)
+        {
+            // Ignore unrelated messages from the Bilibili page.
+        }
+    }
 
     private async Task StartLoginAsync()
     {
@@ -201,7 +357,17 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
             var uri = new Uri(loginUrl.Data.QrCodeAddress, UriKind.Absolute);
             LoginQrCode?.Dispose();
             LoginQrCode = _qrRenderer.Render(uri);
-            Status = "请用哔哩哔哩 App 扫码并确认。";
+            if (_assistedLoginPending && _room.Connected && !_room.IsHost)
+            {
+                await _room.SendAsync(new { type = "login_qr", loginUrl = uri.AbsoluteUri }, cancellationToken)
+                    .ConfigureAwait(true);
+                RoomLoginStatus = "二维码已发送给房主，请等待房主用哔哩哔哩 App 扫码。";
+                Status = "等待房主协助扫码登录…";
+            }
+            else
+            {
+                Status = "请用哔哩哔哩 App 扫码并确认。";
+            }
             while (!cancellationToken.IsCancellationRequested)
             {
                 await Task.Delay(1000, cancellationToken).ConfigureAwait(true);
@@ -216,6 +382,11 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
                 if (data.Code == 86038)
                 {
                     Status = "二维码已过期，请重新获取。";
+                    if (_assistedLoginPending)
+                    {
+                        RoomLoginStatus = "二维码已过期，请重新加入房间或重新获取二维码。";
+                        _assistedLoginPending = false;
+                    }
                     return;
                 }
 
@@ -232,6 +403,21 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
                     await InitializeAsync().ConfigureAwait(true);
                     LoginQrCode?.Dispose();
                     LoginQrCode = null;
+                    if (_assistedLoginPending)
+                    {
+                        _assistedLoginPending = false;
+                        RoomLoginStatus = "房主已帮您登录：" + AccountStatus;
+                        if (_room.Connected)
+                        {
+                            await _room.SendAsync(new { type = "login_done" }, cancellationToken)
+                                .ConfigureAwait(true);
+                            if (_lastSnapshot != null)
+                            {
+                                _lastVersion = -1;
+                                await ApplySnapshotAsync(_lastSnapshot).ConfigureAwait(true);
+                            }
+                        }
+                    }
                     return;
                 }
             }
@@ -244,6 +430,19 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
         {
             Status = "扫码登录失败，请检查网络并重试。";
         }
+    }
+
+    private Task RetryAssistedLoginAsync()
+    {
+        if (!_room.Connected || _room.IsHost)
+        {
+            RoomLoginStatus = "请先以加入者身份进入房间。";
+            return Task.CompletedTask;
+        }
+
+        _assistedLoginPending = true;
+        RoomLoginStatus = "正在重新生成二维码…";
+        return StartLoginAsync();
     }
 
     private async Task LogoutAsync()
@@ -277,9 +476,33 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
             : "已删除本机登录信息；请关闭观影窗口以结束网页会话。";
     }
 
-    private Task ParseAsync() => ParseInputAsync(VideoInput, _lifetime.Token);
+    private async Task ParseAsync()
+    {
+        if (ShowOnline && _room.Connected)
+        {
+            Status = "请先离开观影房间，再独立在线播放。";
+            return;
+        }
 
-    private async Task ParseInputAsync(string input, CancellationToken cancellationToken)
+        if (ShowRoom && _room.Connected && !_room.IsHost)
+        {
+            Status = "房间内由房主选择影片。";
+            return;
+        }
+
+        await ParseInputAsync(ShowRoom ? RoomVideoInput : VideoInput, ShowRoom, _lifetime.Token)
+            .ConfigureAwait(true);
+        if (ShowRoom && _room.IsHost && _roomPage?.EpisodeId is > 0)
+        {
+            await SendHostControlAsync(new
+            {
+                type = "select",
+                media = new { episodeId = _roomPage.EpisodeId }
+            }).ConfigureAwait(true);
+        }
+    }
+
+    private async Task ParseInputAsync(string input, bool roomContext, CancellationToken cancellationToken)
     {
         if (!IsLoggedIn)
         {
@@ -320,10 +543,23 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
                 _resumeAtSeconds = 0;
             }
             _page = page;
-            VideoInput = input.Trim();
+            if (roomContext)
+            {
+                _roomPage = page;
+                _roomParsedInput = input.Trim();
+                RoomFilmTitle = $"{detail.VideoInfoView?.Title} · {page.Name}";
+                if (_room.Connected && !_room.IsHost)
+                {
+                    RoomVideoInput = input.Trim();
+                }
+            }
+            else
+            {
+                _onlinePage = page;
+                OnlineFilmTitle = $"{detail.VideoInfoView?.Title} · {page.Name}";
+            }
             DurationSeconds = 1;
             SeekPositionSeconds = 0;
-            FilmTitle = $"{detail.VideoInfoView?.Title} · {page.Name}";
             Status = "影片已就绪。画质和音轨在 B 站网页播放器内选择。";
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
@@ -373,6 +609,12 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
 
     private Task PlayAsync()
     {
+        if (ShowOnline && _room.Connected)
+        {
+            Status = "请先离开观影房间，再独立在线播放。";
+            return Task.CompletedTask;
+        }
+
         if (_room.Connected && _player == null)
         {
             return StartPlaybackAsync(true, _lifetime.Token);
@@ -385,6 +627,10 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
 
     private async Task StartOrResumeLocalAsync()
     {
+        if (ShowOnline)
+        {
+            _page = _onlinePage;
+        }
         if (_player == null)
         {
             await StartPlaybackAsync(false, _lifetime.Token).ConfigureAwait(true);
@@ -504,11 +750,23 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
     private async Task CreateRoomAsync()
     {
         InviteText = string.Empty;
-        if (_page?.EpisodeId is not > 0)
+        if (string.IsNullOrWhiteSpace(RoomVideoInput))
         {
-            Status = "请先解析一部影片。";
+            Status = "请在观影房间页面填写影片链接。";
             return;
         }
+
+        if (!string.Equals(_roomParsedInput, RoomVideoInput.Trim(), StringComparison.Ordinal))
+        {
+            await ParseInputAsync(RoomVideoInput, true, _lifetime.Token).ConfigureAwait(true);
+        }
+        if (_roomPage?.EpisodeId is not > 0)
+        {
+            Status = "请先在观影房间页面解析影片链接。";
+            return;
+        }
+
+        _page = _roomPage;
 
         try
         {
@@ -520,11 +778,18 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
             if (ServiceAddress == "ws://127.0.0.1:5077/ws"
                 || ServiceAddress == _quickTunnel.ServiceAddress)
             {
+                IsPreparing = true;
+                await EnsureLocalRoomServerAsync(_lifetime.Token).ConfigureAwait(true);
                 RoomState = "正在生成 Cloudflare 房间地址…";
                 ServiceAddress = await _quickTunnel.StartAsync(_lifetime.Token).ConfigureAwait(true);
+                _connectAddress = "ws://127.0.0.1:5077/ws";
+            }
+            else
+            {
+                _connectAddress = ServiceAddress;
             }
 
-            var snapshot = await _room.ConnectAsync(ServiceAddress, create: true, null,
+            var snapshot = await _room.ConnectAsync(_connectAddress, create: true, null,
                 _lifetime.Token).ConfigureAwait(true);
             _lastVersion = -1;
             _startWhenReady = true;
@@ -549,6 +814,10 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
                 ? error.Message
                 : "创建房间失败，请检查服务地址和网络。";
         }
+        finally
+        {
+            IsPreparing = false;
+        }
     }
 
     private async Task JoinRoomAsync()
@@ -562,17 +831,82 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
             }
 
             ServiceAddress = address;
+            _connectAddress = address;
             RoomState = "正在加入房间…";
             var snapshot = await _room.ConnectAsync(address, create: false, code,
                 _lifetime.Token).ConfigureAwait(true);
             _lastVersion = -1;
             OnPropertyChanged(nameof(CanControl));
+            if (UseHostAccount)
+            {
+                _assistedLoginPending = true;
+                StopPlayback();
+                RoomLoginStatus = "正在生成登录二维码并发送给房主…";
+            }
             await ApplySnapshotAsync(snapshot).ConfigureAwait(true);
+            if (UseHostAccount)
+            {
+                _ = StartLoginAsync();
+            }
         }
         catch (Exception error) when (IsRoutineError(error))
         {
             RoomState = "加入失败，请检查邀请、人数和服务连接。";
         }
+    }
+
+    private async Task EnsureLocalRoomServerAsync(CancellationToken cancellationToken)
+    {
+        if (_localServer != null)
+        {
+            return;
+        }
+
+        using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(2) };
+        try
+        {
+            using var response = await client.GetAsync(new Uri("http://127.0.0.1:5077/health"), cancellationToken)
+                .ConfigureAwait(true);
+            if (response.IsSuccessStatusCode)
+            {
+                return;
+            }
+        }
+        catch (HttpRequestException)
+        {
+        }
+        catch (TaskCanceledException) when (!cancellationToken.IsCancellationRequested)
+        {
+        }
+
+        _localServer = RoomServerHost.Build();
+        await _localServer.StartAsync(cancellationToken).ConfigureAwait(true);
+    }
+
+    private void OnLoginQrReceived(string loginUrl)
+    {
+        Dispatcher.UIThread.Post(() =>
+        {
+            if (!_room.IsHost || !Uri.TryCreate(loginUrl, UriKind.Absolute, out var uri)
+                || uri.Scheme != Uri.UriSchemeHttps || uri.Host != "passport.bilibili.com")
+            {
+                return;
+            }
+
+            HostAssistedQrCode?.Dispose();
+            HostAssistedQrCode = _qrRenderer.Render(uri);
+            RoomLoginStatus = "加入者请求使用房主账号：请用哔哩哔哩 App 扫描此二维码并确认。";
+        });
+    }
+
+    private void OnGuestLoginCompleted()
+    {
+        Dispatcher.UIThread.Post(() =>
+        {
+            HostAssistedQrCode?.Dispose();
+            HostAssistedQrCode = null;
+            RoomLoginStatus = "加入者已完成登录。";
+        });
     }
 
     private static (string Address, string Code) ParseInvite(string invite, string defaultAddress)
@@ -596,6 +930,14 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
 
     private async Task LeaveRoomAsync()
     {
+        if (_assistedLoginPending && _loginCancellation != null)
+        {
+            await _loginCancellation.CancelAsync().ConfigureAwait(true);
+        }
+        _assistedLoginPending = false;
+        RoomLoginStatus = string.Empty;
+        HostAssistedQrCode?.Dispose();
+        HostAssistedQrCode = null;
         if (_room.Connected)
         {
             try
@@ -680,6 +1022,11 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
                             : snapshot.Guest?.Buffering == true || snapshot.Host.Buffering
                                 ? "一方缓冲中，等待恢复"
                                 : "双方在线，已同步";
+            ClearHostQrIfGuestOffline(snapshot);
+            if (_assistedLoginPending)
+            {
+                return;
+            }
             if (snapshot.Media is not { EpisodeId: > 0 } media)
             {
                 return;
@@ -692,16 +1039,21 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
                 await _room.SendAsync(new { type = "play" }, _lifetime.Token).ConfigureAwait(true);
             }
 
-            if (_page?.EpisodeId != media.EpisodeId)
+            if (_roomPage?.EpisodeId != media.EpisodeId)
             {
                 await ParseInputAsync($"https://www.bilibili.com/bangumi/play/ep{media.EpisodeId}",
-                    _lifetime.Token).ConfigureAwait(true);
-                if (_page?.EpisodeId != media.EpisodeId)
+                    true, _lifetime.Token).ConfigureAwait(true);
+                if (_roomPage?.EpisodeId != media.EpisodeId)
                 {
                     RoomState = "本机未能打开此影片，请检查账号权限。";
                     return;
                 }
 
+            }
+
+            _page = _roomPage;
+            if (_player == null)
+            {
                 await StartPlaybackAsync(true, _lifetime.Token).ConfigureAwait(true);
             }
 
@@ -710,6 +1062,16 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
         finally
         {
             _snapshotGate.Release();
+        }
+    }
+
+    private void ClearHostQrIfGuestOffline(WatchRoomSnapshot snapshot)
+    {
+        if (_room.IsHost && snapshot.Guest?.Online != true && HostAssistedQrCode != null)
+        {
+            HostAssistedQrCode.Dispose();
+            HostAssistedQrCode = null;
+            RoomLoginStatus = string.Empty;
         }
     }
 
@@ -731,15 +1093,32 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
         }
 
         var actual = await _player.GetPositionAsync(cancellationToken).ConfigureAwait(true);
-        SyncStatus = $"影片时间差 {Math.Abs(expected - actual):0.00} 秒 · 往返延迟 {_room.RoundTripMilliseconds:0} 毫秒";
-        if (Math.Abs(expected - actual) > 0.45)
+        var drift = expected - actual;
+        SyncStatus = $"影片时间差 {Math.Abs(drift):0.00} 秒 · 往返延迟 {_room.RoundTripMilliseconds:0} 毫秒";
+        if (Math.Abs(drift) > 1.5)
         {
             await _player.SeekAsync(expected, cancellationToken).ConfigureAwait(true);
         }
 
-        await _player.SetSpeedAsync(snapshot.Rate, cancellationToken).ConfigureAwait(true);
-        await _player.SetPausedAsync(!snapshot.Playing || snapshot.WaitingForReady
-            || snapshot.Host?.Online != true, cancellationToken).ConfigureAwait(true);
+        var shouldPause = !snapshot.Playing || snapshot.WaitingForReady
+            || snapshot.Host?.Online != true;
+        var targetRate = snapshot.Rate;
+        if (!shouldPause && Math.Abs(drift) is > 0.45 and <= 1.5)
+        {
+            // A small rate adjustment avoids repeatedly jumping a few frames.
+            targetRate = Math.Clamp(snapshot.Rate + drift * 0.08,
+                snapshot.Rate * 0.96, snapshot.Rate * 1.04);
+        }
+
+        if (Math.Abs(await _player.GetSpeedAsync(cancellationToken).ConfigureAwait(true) - targetRate) > 0.015)
+        {
+            await _player.SetSpeedAsync(targetRate, cancellationToken).ConfigureAwait(true);
+        }
+
+        if (await _player.GetPausedAsync(cancellationToken).ConfigureAwait(true) != shouldPause)
+        {
+            await _player.SetPausedAsync(shouldPause, cancellationToken).ConfigureAwait(true);
+        }
     }
 
     private void OnRoomDisconnected()
@@ -754,6 +1133,9 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
             _lastSnapshot = null;
             _startWhenReady = false;
             RoomState = "房间已结束。";
+            HostAssistedQrCode?.Dispose();
+            HostAssistedQrCode = null;
+            RoomLoginStatus = string.Empty;
             OnPropertyChanged(nameof(CanControl));
             StopPlayback();
         });
@@ -787,7 +1169,7 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
                 try
                 {
                     await Task.Delay(TimeSpan.FromSeconds(attempt), _lifetime.Token).ConfigureAwait(true);
-                    var snapshot = await _room.ConnectAsync(ServiceAddress, create: false, code,
+                    var snapshot = await _room.ConnectAsync(_connectAddress, create: false, code,
                         _lifetime.Token).ConfigureAwait(true);
                     _lastVersion = -1;
                     if (_player != null)
@@ -953,7 +1335,9 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
     private static bool IsRoutineError(Exception error)
     {
         return error is InvalidOperationException or ArgumentException or FormatException
-            or System.IO.IOException or System.Net.Http.HttpRequestException
+            or System.IO.IOException or UnauthorizedAccessException
+            or System.Security.Cryptography.CryptographicException
+            or System.Net.Http.HttpRequestException
             or WebSocketException or System.ComponentModel.Win32Exception
             or Newtonsoft.Json.JsonException or System.Text.Json.JsonException
             or System.Runtime.InteropServices.COMException or ObjectDisposedException;
@@ -984,11 +1368,25 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
         _room.SnapshotReceived -= OnSnapshotReceived;
         _room.Disconnected -= OnRoomDisconnected;
         _room.Closed -= OnRoomClosed;
+        _room.LoginQrReceived -= OnLoginQrReceived;
+        _room.GuestLoginCompleted -= OnGuestLoginCompleted;
         await _room.DisposeAsync().ConfigureAwait(false);
         _quickTunnel.Dispose();
+        if (_localServer != null)
+        {
+            await _localServer.StopAsync(CancellationToken.None).ConfigureAwait(false);
+            _localServer.Dispose();
+            _localServer = null;
+        }
+        if (_browser != null)
+        {
+            _browser.WebMessageReceived -= OnWebMessageReceived;
+        }
         StopPlayback();
         LoginQrCode?.Dispose();
         LoginQrCode = null;
+        HostAssistedQrCode?.Dispose();
+        HostAssistedQrCode = null;
         _snapshotGate.Dispose();
         _lifetime.Dispose();
     }

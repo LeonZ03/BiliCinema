@@ -38,12 +38,14 @@ internal sealed class QuickRoomTunnel : IDisposable
             || error is TaskCanceledException && !cancellationToken.IsCancellationRequested)
         {
             throw new InvalidOperationException(
-                "本机房间服务未运行。请先双击 Start-Room-Server.cmd，再创建房间。", error);
+                "本机房间服务未响应。请检查 5077 端口是否被其他程序占用，再重试创建房间。", error);
         }
 
         var adjacentExecutable = Path.Combine(AppContext.BaseDirectory, "cloudflared.exe");
-        var start = new ProcessStartInfo(File.Exists(adjacentExecutable)
-            ? adjacentExecutable : "cloudflared.exe")
+        var bundledExecutable = await Task.Run(BundledTools.EnsureTunnelTool, cancellationToken)
+            .ConfigureAwait(false);
+        var start = new ProcessStartInfo(bundledExecutable ?? (File.Exists(adjacentExecutable)
+            ? adjacentExecutable : "cloudflared.exe"))
         {
             UseShellExecute = false,
             CreateNoWindow = true,

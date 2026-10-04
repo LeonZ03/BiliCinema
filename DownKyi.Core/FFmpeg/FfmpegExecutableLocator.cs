@@ -13,6 +13,15 @@ internal static class FfmpegExecutableLocator
         var fileName = RuntimeInformation.IsOSPlatform(OSPlatform.Windows)
             ? $"{name}.exe"
             : name;
+        var toolRoot = Environment.GetEnvironmentVariable("BILICINEMA_TOOL_ROOT");
+        if (!string.IsNullOrWhiteSpace(toolRoot))
+        {
+            var extractedPath = Path.Combine(toolRoot, "ffmpeg", fileName);
+            if (File.Exists(extractedPath))
+            {
+                return extractedPath;
+            }
+        }
         var bundledPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "ffmpeg", fileName);
         return File.Exists(bundledPath) ? bundledPath : name;
     }

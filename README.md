@@ -1,94 +1,21 @@
 # BiliCinema
 
-本仓库基于 [DownKyi Core](https://github.com/crazysmile-PhD/downkyicore) 增量开发，保留原有下载功能，并新增 Windows 仅观影入口、在线音视频播放与双人同步房间。观影模式的启动、房间服务和当前验证范围见 [观影使用说明](docs/watch-together.md)。下方徽章与原有下载说明指向上游项目；本仓库当前以源码开发和验证为主。
+BiliCinema 基于 [DownKyi Core](https://github.com/crazysmile-PhD/downkyicore) 开发，保留原项目的影片下载能力，并提供 B 站网页在线播放与双人同步观影。Windows 主界面分为登录、在线播放、观影房间、下载影片四页。
 
-## 上游项目：DownKyi Core
+## 直接运行
 
-<div align="center">
+双击 `artifacts/BiliCinema-win-x64/BiliCinema.exe`。它是 Windows x64 自包含单文件程序；目标电脑无需 .NET SDK，也不用另开房间服务窗口。播放 B 站网页视频需要系统具备 Microsoft Edge WebView2 Runtime。此目录是本地构建产物，不提交到 Git，也不发布压缩包。
 
-[![GitHub Repo stars](https://img.shields.io/github/stars/crazysmile-PhD/downkyicore)](https://github.com/crazysmile-PhD/downkyicore/stargazers)
-[![GitHub forks](https://img.shields.io/github/forks/crazysmile-PhD/downkyicore)](https://github.com/crazysmile-PhD/downkyicore/network)
-[![GitHub issues](https://img.shields.io/github/issues/crazysmile-PhD/downkyicore)](https://github.com/crazysmile-PhD/downkyicore/issues)
-[![LICENSE](https://img.shields.io/github/license/crazysmile-PhD/downkyicore)](https://github.com/crazysmile-PhD/downkyicore/blob/main/LICENSE)
+首次进入下载页或创建房间时，程序会把内置的下载工具或 Cloudflare Tunnel 客户端释放到 `%LOCALAPPDATA%\BiliCinema\Tools`，并显示准备进度。视频播放走本机 WebView2 与 B 站；房间服务只传控制与临时扫码请求。
 
-</div>
+当前使用和房间同步说明见 [观影使用说明](docs/watch-together.md)。
 
-DownKyi Core 是基于哔哩下载姬 Windows 版与 Avalonia 的跨平台 B 站视频下载工具。项目使用 .NET 10、Avalonia 12、Microsoft Generic Host、Microsoft DI 与 CommunityToolkit MVVM。
+## 构建
 
-## 下载
+在 Windows x64 开发电脑双击 `Build-BiliCinema.cmd`。构建需要 .NET 10 SDK，并会下载仓库清单中锁定哈希的 aria2、FFmpeg，以及锁定版本和哈希的 cloudflared。完成后只交付 `artifacts/BiliCinema-win-x64/BiliCinema.exe`。程序源码可运行 `dotnet run --project DownKyi/DownKyi.csproj`；原 DownKyi 完整旧界面可用参数 `--legacy-downkyi` 启动，供维护时对照。
 
-[![GitHub release](https://img.shields.io/github/v/release/crazysmile-PhD/downkyicore)](https://github.com/crazysmile-PhD/downkyicore/releases/latest)
-[![GitHub Release Date](https://img.shields.io/github/release-date/crazysmile-PhD/downkyicore)](https://github.com/crazysmile-PhD/downkyicore/releases/latest)
-[![GitHub downloads](https://img.shields.io/github/downloads/crazysmile-PhD/downkyicore/total)](https://github.com/crazysmile-PhD/downkyicore/releases/latest)
+默认数据目录沿用 DownKyi 的 `%APPDATA%\DownKyi`。可设置 `DOWNKYI_DATA_DIR` 隔离测试账号。下载器仍使用原项目的配置、断点续传和媒体处理逻辑。
 
-- Windows：`DownKyi-*-win-x64.zip` 或 `DownKyi-*-win-x86.zip`
-- macOS：`DownKyi-*-osx-arm64.dmg` 或 `DownKyi-*-osx-x64.dmg`
-- Linux：AppImage / deb / rpm
+## 仓库
 
-Windows ZIP 必须完整解压到新目录后再运行。`DownKyi.exe` 旁必须保留 `aria2` 与 `ffmpeg` 子目录；若程序报告缺少 `aria2/aria2c.exe`，请重新下载官方 Release 并完整解压，不要单独补放执行文件。
-
-版本变化见 [CHANGELOG.md](CHANGELOG.md)，安装包见 [GitHub Releases](https://github.com/crazysmile-PhD/downkyicore/releases)。
-
-## 功能
-
-- 解析视频、合集、番剧、课程、收藏、历史记录和稍后再看等入口。
-- 下载音频、视频、封面、弹幕、普通字幕和 AI 字幕。
-- 支持 aria2 与内置下载器，并保留断点续传需要的状态。
-- 删除下载中任务时，同步停止下载器并清理已产生的媒体和临时文件。
-- 导出会脱敏 Cookie、token、邮箱、uid 和本机用户路径的诊断日志。
-
-## 运行与数据目录
-
-发布包已包含 .NET、FFmpeg 和 aria2，不需要另外安装运行环境。FFmpeg 优先无损 stream copy；必须转码时会探测可用的硬件 encoder，失败则记录原因并回退到软件编码。
-
-默认数据目录：
-
-- Windows：`%APPDATA%\DownKyi`
-- macOS：`~/Library/Application Support/DownKyi`
-- Linux：`$XDG_CONFIG_HOME/DownKyi`，未设置时通常为 `~/.config/DownKyi`
-
-常用子目录：
-
-- `Media`：默认下载目录
-- `Logs`：应用和诊断日志
-- `Storage`：SQLite 下载数据库
-- `Config`：设置与登录信息
-- `Cache`：图片和运行缓存
-- `Aria`：aria2 session 与日志
-
-设置 `DOWNKYI_DATA_DIR` 可指定数据根目录。设置 `DOWNKYI_PORTABLE=1`，或在程序目录放置 `portable`、`.portable`、`DownKyi.portable`，可启用便携模式。
-
-## 登录
-
-无法扫码时，可在登录页面粘贴已登录 Bilibili 请求中的 `Cookie` header。程序会沿用二维码登录的保存和验证流程；验证失败、网络异常或取消时恢复原有凭据。Cookie 会保持已经编码的传输形式，正式 `Login` 文件由程序管理，无需手动编辑。
-
-## 诊断
-
-关于页面可打开日志目录或导出诊断日志，用于排查网络请求、下载器启停和续传、字幕／弹幕／封面处理、音视频合并以及退出清理。导出过程会过滤普通调试噪音并遮蔽敏感信息。
-
-## 开发者入口
-
-开发需要 .NET 10 SDK。按问题类型进入唯一 owner：
-
-- [AGENTS.md](AGENTS.md)：修改协议、导航顺序和禁止事项。
-- [ARCHITECTURE.md](ARCHITECTURE.md)：当前拓扑、边界、invariant 与可执行防线。
-- [docs/maintenance.md](docs/maintenance.md)：按领域组织的维护卡。
-- [docs/testing/README.md](docs/testing/README.md)：测试基础设施和失败分类。
-- [docs/operations/verification-and-rollback.md](docs/operations/verification-and-rollback.md)：正式验证与回滚命令。
-- [GitHub Issue #137](https://github.com/crazysmile-PhD/downkyicore/issues/137)：当前 workboard；历史执行结果以 Git、PR 与关闭的 Issue 为准。
-
-本机运行：
-
-```powershell
-dotnet run --project .\DownKyi\DownKyi.csproj
-```
-
-## 免责声明
-
-1. 本软件只提供视频解析，不提供资源上传或服务器存储功能。
-2. 本软件仅解析来自 B 站的内容；格式修复、分段拼接或硬件加速流程可能进行转码和索引重建。
-3. 解析内容的版权归原作者所有，内容提供者与上传者应承担相应责任。
-4. 所有内容仅供学习交流；未经授权不得用于其他用途，请支持原始发布者与原创内容。
-5. 因使用本软件产生的版权问题，软件作者概不负责。
-
-许可与第三方归属见 [LICENSE](LICENSE) 和 [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md)。
+开发文档位于 [ARCHITECTURE.md](ARCHITECTURE.md)、[docs/maintenance.md](docs/maintenance.md) 和 [测试说明](docs/testing/README.md)。许可和第三方归属见 [LICENSE](LICENSE) 与 [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md)。

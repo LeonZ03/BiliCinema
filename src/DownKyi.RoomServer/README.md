@@ -1,6 +1,6 @@
 # DownKyi private room server
 
-This .NET 10 service relays **control state only**. Each desktop client resolves and plays its own Bilibili media. The server never receives cookies, account IDs, signed media URLs, video, or audio. Room state is held in memory and is lost on restart.
+This .NET 10 service relays room control state and, when the guest requests assisted login, a short-lived Bilibili QR login URL. Each desktop client resolves and plays its own Bilibili media. The server never receives cookies, account IDs, signed media URLs, video, or audio. QR URLs are forwarded only to the host and are not stored in room snapshots. Room state is held in memory and is lost on restart.
 
 ## Start locally
 
@@ -8,7 +8,7 @@ This .NET 10 service relays **control state only**. Each desktop client resolves
 dotnet run --project src/DownKyi.RoomServer/DownKyi.RoomServer.csproj -c Release
 ```
 
-The default endpoint is `ws://127.0.0.1:5077/ws`; `http://127.0.0.1:5077/health` is a basic process check. Override the listening address with `RoomServer__ListenUrl` or `RoomServer:ListenUrl` in configuration. The local smoke test is:
+The BiliCinema EXE starts this service in-process when the host creates a room, so normal users do not need to start it separately. The default endpoint is `ws://127.0.0.1:5077/ws`; `http://127.0.0.1:5077/health` is a basic process check. For standalone development, override the listening address with `RoomServer__ListenUrl` or `RoomServer:ListenUrl` in configuration. The local smoke test is:
 
 ```powershell
 pwsh -File src/DownKyi.RoomServer/smoke.ps1
@@ -16,7 +16,7 @@ pwsh -File src/DownKyi.RoomServer/smoke.ps1
 
 ## Private internet deployment
 
-For temporary remote viewing, run `Start-Room-Server.cmd` on the host PC and install `cloudflared` from the [official downloads page](https://developers.cloudflare.com/tunnel/downloads/). In the watch window, creating a room from the default local address starts a Quick Tunnel, waits for its public health check, and puts its `wss://…trycloudflare.com/ws` address into the invitation. The guest needs only the invitation. The server stays bound to loopback; closing the host watch window ends its Tunnel, and a new Tunnel gets a new address. Quick Tunnels are intended for temporary use and have no uptime guarantee.
+For temporary remote viewing, the BiliCinema EXE starts its bundled `cloudflared` client, waits for the public health check, and puts a `wss://…trycloudflare.com/ws` address into the invitation. The host connects locally; the guest uses the public invitation. The service stays bound to loopback; closing the host application ends its Tunnel, and a new Tunnel gets a new address. Quick Tunnels are intended for temporary use and have no uptime guarantee.
 
 For a stable hostname, set up a named Cloudflare Tunnel or run the service on a host you control with a TLS reverse proxy. Keep the default loopback listener. For example, a Caddy site can use:
 
@@ -71,5 +71,14 @@ Both members may send:
 ```
 
 `ready:false` and `buffering:false` clear those flags. Ping may include a short `nonce`; pong echoes `clientTimeUnixMs` and the optional `nonce`, and includes `serverTimeUnixMs`. A guest `leave` frees their slot; host `leave` closes the room. The service emits `{"type":"left"}` to a departing guest or `{"type":"closed"}` when the room ends. Invalid commands produce `{"type":"error","code":"..."}`; a guest sending host commands receives `host_only`. The client should treat closure or transport loss as a visible room state, preserve its own playback position, and reconnect only with its own `clientId` while the relevant grace period remains.
+
+Only the guest may send an assisted-login QR URL from `https://passport.bilibili.com` (maximum 1024 characters), and the host receives it as an ephemeral relay message:
+
+```json
+{"type":"login_qr","loginUrl":"https://passport.bilibili.com/..."}
+{"type":"login_done"}
+```
+
+The guest polls Bilibili and commits the new login on its own computer after the host scans; `login_done` only clears the host's QR display. Neither side sends authentication cookies or login callback URLs through this protocol. A QR URL is a live authentication challenge, so room invitations and QR displays should be shared only with the intended participant.
 
 The server does not synchronize the local player's volume, fullscreen mode, quality, or signed stream URL. Each side selects quality and resolves media locally. After receiving a remote snapshot, clients must apply it without re-emitting the resulting player event as a new host command.

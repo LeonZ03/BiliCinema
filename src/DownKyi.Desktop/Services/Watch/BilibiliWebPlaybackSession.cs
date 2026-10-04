@@ -36,6 +36,23 @@ internal sealed class BilibiliWebPlaybackSession : IDisposable
             }
             if (!player) return false;
             window.__biliCinemaPlayerRoot = player;
+            if (!video.__biliCinemaBound) {
+                video.__biliCinemaBound = true;
+                for (const type of ['play', 'pause', 'seeked', 'ratechange']) {
+                    video.addEventListener(type, () => {
+                        const ignored = window.__biliCinemaRemoteEvents?.[type];
+                        if (ignored && performance.now() < ignored.until
+                            && (type !== 'seeked' || Math.abs(video.currentTime - ignored.position) < 0.4)) {
+                            delete window.__biliCinemaRemoteEvents[type];
+                            return;
+                        }
+                        if (typeof invokeCSharpAction === 'function') {
+                            invokeCSharpAction(JSON.stringify({ source: 'biliCinemaPlayer',
+                                type, position: video.currentTime, rate: video.playbackRate }));
+                        }
+                    });
+                }
+            }
             if (!window.__biliCinemaPageActionGuard) {
                 window.__biliCinemaPageActionGuard = true;
                 for (const type of ['click', 'pointerdown', 'submit']) {
@@ -116,6 +133,8 @@ internal sealed class BilibiliWebPlaybackSession : IDisposable
             throw new InvalidOperationException("网页播放器未能启动。请确认 WebView2 Runtime 已安装。");
         }
 
+        await ClearBilibiliCookiesAsync(browser).ConfigureAwait(true);
+
         var cookies = LoginHelper.GetLoginInfoCookies()
             .Where(cookie => !string.IsNullOrWhiteSpace(cookie.Name)
                 && !string.IsNullOrWhiteSpace(cookie.Value)
@@ -193,6 +212,16 @@ internal sealed class BilibiliWebPlaybackSession : IDisposable
             .ConfigureAwait(true));
     }
 
+    public async Task<bool> GetPausedAsync(CancellationToken cancellationToken)
+    {
+        var result = await InvokeAsync($"!!{Video}?.paused", cancellationToken).ConfigureAwait(true);
+        return string.Equals(result.Trim('"'), "true", StringComparison.OrdinalIgnoreCase);
+    }
+
+    public async Task<double> GetSpeedAsync(CancellationToken cancellationToken)
+        => ParseNumber(await InvokeAsync($"{Video}?.playbackRate ?? 1", cancellationToken)
+            .ConfigureAwait(true));
+
     public async Task<double> GetDurationAsync(CancellationToken cancellationToken)
         => ParseNumber(await InvokeAsync($"{Video}?.duration ?? 0", cancellationToken)
             .ConfigureAwait(true));
@@ -217,7 +246,7 @@ internal sealed class BilibiliWebPlaybackSession : IDisposable
     {
         if (double.IsFinite(seconds) && seconds >= 0)
         {
-            await InvokeAsync($"if ({Video}) {Video}.currentTime = {seconds.ToString("R", CultureInfo.InvariantCulture)}",
+            await InvokeAsync($"if ({Video}) {{ window.__biliCinemaRemoteEvents ||= {{}}; window.__biliCinemaRemoteEvents.seeked = {{ until: performance.now() + 3000, position: {seconds.ToString("R", CultureInfo.InvariantCulture)} }}; {Video}.currentTime = {seconds.ToString("R", CultureInfo.InvariantCulture)}; }}",
                 cancellationToken).ConfigureAwait(true);
         }
     }
@@ -225,16 +254,16 @@ internal sealed class BilibiliWebPlaybackSession : IDisposable
     public async Task SetPausedAsync(bool paused, CancellationToken cancellationToken)
     {
         await InvokeAsync(paused
-                ? $"{Video}?.pause()"
-                : $"{Video}?.play().catch(() => {{}})", cancellationToken)
+                ? $"if ({Video} && !{Video}.paused) {{ window.__biliCinemaRemoteEvents ||= {{}}; window.__biliCinemaRemoteEvents.pause = {{ until: performance.now() + 800 }}; {Video}.pause(); }}"
+                : $"if ({Video}?.paused) {{ window.__biliCinemaRemoteEvents ||= {{}}; window.__biliCinemaRemoteEvents.play = {{ until: performance.now() + 800 }}; {Video}.play().catch(() => {{}}); }}", cancellationToken)
             .ConfigureAwait(true);
     }
 
     public async Task SetSpeedAsync(double speed, CancellationToken cancellationToken)
     {
-        if (double.IsFinite(speed) && speed is >= 0.5 and <= 2)
+        if (double.IsFinite(speed) && speed is >= 0.25 and <= 3)
         {
-            await InvokeAsync($"if ({Video}) {Video}.playbackRate = {speed.ToString("R", CultureInfo.InvariantCulture)}",
+            await InvokeAsync($"if ({Video} && Math.abs({Video}.playbackRate - {speed.ToString("R", CultureInfo.InvariantCulture)}) > 0.005) {{ window.__biliCinemaRemoteEvents ||= {{}}; window.__biliCinemaRemoteEvents.ratechange = {{ until: performance.now() + 800 }}; {Video}.playbackRate = {speed.ToString("R", CultureInfo.InvariantCulture)}; }}",
                 cancellationToken).ConfigureAwait(true);
         }
     }

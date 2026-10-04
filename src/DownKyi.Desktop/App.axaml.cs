@@ -46,9 +46,9 @@ internal partial class App : Avalonia.Application, IAsyncDisposable
     public override void Initialize()
     {
 #if !DEBUG
-        if (!WatchMode && !SingleInstanceGuard.TryAcquire(
-                AppConstant.RepoOwner,
-                AppConstant.RepoName,
+        if (!SingleInstanceGuard.TryAcquire(
+                WatchMode ? "LeonZ03" : AppConstant.RepoOwner,
+                WatchMode ? "BiliCinema" : AppConstant.RepoName,
                 out _processInstanceGuard))
         {
             Environment.Exit(0);
@@ -83,6 +83,11 @@ internal partial class App : Avalonia.Application, IAsyncDisposable
 
         if (WatchMode)
         {
+            _applicationLifecycle = host.Services.GetRequiredService<AvaloniaApplicationLifecycle>();
+            _applicationLifecycle.AttachHost(host);
+            var watchImageLoader = host.Services.GetRequiredService<IAsyncImageLoader>();
+            ImageLoader.AsyncImageLoader = watchImageLoader;
+            ImageBrushLoader.AsyncImageLoader = watchImageLoader;
             var watchWindow = host.Services.GetRequiredService<WatchWindow>();
             desktopContext.AttachMainWindow(watchWindow);
             desktop.MainWindow = watchWindow;
@@ -247,12 +252,6 @@ internal partial class App : Avalonia.Application, IAsyncDisposable
 
     private void StartHost()
     {
-        if (WatchMode && _host != null)
-        {
-            ObserveBackgroundTask(_host.StartAsync(), "Watch mode Host startup failed.");
-            return;
-        }
-
         if (_applicationLifecycle != null)
         {
             ObserveBackgroundTask(_applicationLifecycle.StartHostAsync(), "Application Host startup failed.");

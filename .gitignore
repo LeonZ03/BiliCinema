@@ -15,6 +15,7 @@ __pycache__/
 *.pyc
 script/pupnet/output
 .tools/
+src/DownKyi.Desktop/EmbeddedTools/
 artifacts/
 script/macos/*.dmg
 script/macos/*.app

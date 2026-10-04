@@ -28,11 +28,9 @@ internal sealed partial class WatchWindow : Window
         """;
     private readonly WatchWindowViewModel _viewModel;
     private readonly Grid _watchLayout;
+    private readonly Border _sidebar;
     private readonly Border _playerSurface;
     private readonly NativeWebView _browser;
-    private readonly Grid _playbackToolbar;
-    private readonly ScrollViewer _watchDetails;
-    private readonly TextBlock _playbackStatus;
     private readonly Button _fullscreenButton;
     private readonly DispatcherTimer _fullscreenTimer;
     private WindowState _previousWindowState;
@@ -51,16 +49,12 @@ internal sealed partial class WatchWindow : Window
         DataContext = _viewModel;
         _watchLayout = this.FindControl<Grid>("WatchLayout")
                        ?? throw new InvalidOperationException("观影布局未加载。");
+        _sidebar = this.FindControl<Border>("Sidebar")
+                   ?? throw new InvalidOperationException("导航栏未加载。");
         _playerSurface = this.FindControl<Border>("PlayerSurface")
                          ?? throw new InvalidOperationException("播放器容器未加载。");
         _browser = this.FindControl<NativeWebView>("MovieWebView")
                       ?? throw new InvalidOperationException("网页播放器未加载。");
-        _playbackToolbar = this.FindControl<Grid>("PlaybackToolbar")
-                           ?? throw new InvalidOperationException("播放工具栏未加载。");
-        _watchDetails = this.FindControl<ScrollViewer>("WatchDetails")
-                        ?? throw new InvalidOperationException("观影详情未加载。");
-        _playbackStatus = this.FindControl<TextBlock>("PlaybackStatus")
-                          ?? throw new InvalidOperationException("播放状态未加载。");
         _fullscreenButton = this.FindControl<Button>("FullscreenButton")
                             ?? throw new InvalidOperationException("全屏按钮未加载。");
         _normalBackground = Background;
@@ -90,13 +84,6 @@ internal sealed partial class WatchWindow : Window
         };
         _browser.NewWindowRequested += (_, args) => args.Handled = true;
         _viewModel.AttachBrowser(_browser);
-        var seekSlider = this.FindControl<Slider>("SeekSlider")
-                         ?? throw new InvalidOperationException("观影进度条未加载。");
-        seekSlider.AddHandler(InputElement.PointerPressedEvent,
-            (_, _) => _viewModel.BeginSeekDrag(), RoutingStrategies.Tunnel, handledEventsToo: true);
-        seekSlider.AddHandler(InputElement.PointerReleasedEvent,
-            async (_, _) => await _viewModel.EndSeekDragAsync().ConfigureAwait(true),
-            RoutingStrategies.Bubble, handledEventsToo: true);
         _fullscreenTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(500) };
         _fullscreenTimer.Tick += OnFullscreenTimerTick;
         Opened += OnOpened;
@@ -206,14 +193,12 @@ internal sealed partial class WatchWindow : Window
         {
             WindowState = _previousWindowState;
             Background = _normalBackground;
-            _watchLayout.Margin = new Avalonia.Thickness(24);
+            _sidebar.IsVisible = true;
+            _watchLayout.Margin = new Avalonia.Thickness(22);
             _watchLayout.RowDefinitions = new RowDefinitions("Auto,Auto,*");
             _watchLayout.RowSpacing = 14;
             _playerSurface.CornerRadius = _normalCornerRadius;
             _browser.Height = 450;
-            _watchDetails.IsVisible = true;
-            _playbackToolbar.IsVisible = true;
-            _playbackStatus.IsVisible = true;
             _fullscreenButton.Content = "全屏播放";
             _isFullscreen = false;
         }
@@ -221,14 +206,12 @@ internal sealed partial class WatchWindow : Window
         {
             _previousWindowState = WindowState;
             Background = Brushes.Black;
+            _sidebar.IsVisible = false;
             _watchLayout.Margin = new Avalonia.Thickness(0);
             _watchLayout.RowDefinitions = new RowDefinitions("*,0,0");
             _watchLayout.RowSpacing = 0;
             _playerSurface.CornerRadius = new Avalonia.CornerRadius(0);
             _browser.Height = double.NaN;
-            _watchDetails.IsVisible = false;
-            _playbackToolbar.IsVisible = false;
-            _playbackStatus.IsVisible = false;
             _isFullscreen = true;
             WindowState = WindowState.FullScreen;
         }

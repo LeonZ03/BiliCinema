@@ -16,9 +16,7 @@ public static class DesktopApplication
             return;
         }
 
-        App.WatchMode = args.Contains("--watch", StringComparer.OrdinalIgnoreCase)
-                        || string.Equals(Path.GetFileNameWithoutExtension(Environment.ProcessPath),
-                            "DownKyi.Watch", StringComparison.OrdinalIgnoreCase);
+        App.WatchMode = !args.Contains("--legacy-downkyi", StringComparer.OrdinalIgnoreCase);
 
         var appBuilder = BuildAvaloniaApp();
         try

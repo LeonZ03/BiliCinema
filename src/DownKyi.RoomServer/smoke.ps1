@@ -1,9 +1,11 @@
-param([string]$DotnetPath = "dotnet")
+param([string]$DotnetPath = "dotnet", [string]$Configuration = "Release", [switch]$SkipBuild)
 
 $ErrorActionPreference = "Stop"
 $project = Join-Path $PSScriptRoot "DownKyi.RoomServer.csproj"
-& $DotnetPath build $project -c Release --nologo -v quiet
-if ($LASTEXITCODE -ne 0) { throw "Room server build failed." }
+if (-not $SkipBuild) {
+    & $DotnetPath build $project -c $Configuration --nologo -v quiet
+    if ($LASTEXITCODE -ne 0) { throw "Room server build failed." }
+}
 
 $listener = [Net.Sockets.TcpListener]::new([Net.IPAddress]::Loopback, 0)
 $listener.Start()
@@ -12,7 +14,7 @@ $listener.Stop()
 
 $oldListenUrl = [Environment]::GetEnvironmentVariable("RoomServer__ListenUrl", "Process")
 [Environment]::SetEnvironmentVariable("RoomServer__ListenUrl", "http://127.0.0.1:$port", "Process")
-$dll = Join-Path $PSScriptRoot "bin/Release/net10.0/DownKyi.RoomServer.dll"
+$dll = Join-Path $PSScriptRoot "bin/$Configuration/net10.0/DownKyi.RoomServer.dll"
 $server = Start-Process -FilePath $DotnetPath -ArgumentList @($dll) -PassThru -WindowStyle Hidden
 [Environment]::SetEnvironmentVariable("RoomServer__ListenUrl", $oldListenUrl, "Process")
 
@@ -78,6 +80,19 @@ try {
         throw "Second client did not receive an independent guest identity."
     }
 
+    $qrUrl = 'https://passport.bilibili.com/h5-app/passport/login/scan?key=smoke'
+    Send-Json $guest ('{"type":"login_qr","loginUrl":"' + $qrUrl + '"}')
+    $forwardedQr = Read-Until $hostSocket 'login_qr'
+    if ($forwardedQr.loginUrl -ne $qrUrl) { throw 'Guest QR was not relayed to the host.' }
+    Send-Json $guest '{"type":"login_done"}'
+    [void](Read-Until $hostSocket 'login_done')
+    Send-Json $guest '{"type":"login_qr","loginUrl":"https://example.invalid/qr"}'
+    $badQr = Read-Until $guest 'error'
+    if ($badQr.code -ne 'invalid_login_qr') { throw 'External QR URL was accepted.' }
+    Send-Json $hostSocket ('{"type":"login_qr","loginUrl":"' + $qrUrl + '"}')
+    $hostQr = Read-Until $hostSocket 'error'
+    if ($hostQr.code -ne 'guest_only') { throw 'Host QR relay was accepted.' }
+
     Send-Json $guest '{"type":"pause"}'
     $permission = Read-Until $guest "error"
     if ($permission.code -ne "host_only") { throw "Guest authority was not enforced." }
@@ -131,7 +146,7 @@ try {
     Send-Json $guest '{"type":"ready","ready":true}'
     $startedTogether = Read-Until $hostSocket "snapshot" { param($m) $m.snapshot.playing -eq $true }
     Send-Json $hostSocket '{"type":"close"}'
-    Write-Host "Room server smoke passed: create/join, host authority, media URL rejection, ready/play, seek, buffering recovery, reconnect, close, and deferred start."
+    Write-Host "Room server smoke passed: create/join, QR relay validation, host authority, media URL rejection, ready/play, seek, buffering recovery, reconnect, close, and deferred start."
 } finally {
     if ($null -ne $guest) { $guest.Dispose() }
     if ($null -ne $hostSocket) { $hostSocket.Dispose() }

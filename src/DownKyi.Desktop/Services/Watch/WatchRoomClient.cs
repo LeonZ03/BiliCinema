@@ -20,6 +20,8 @@ internal sealed class WatchRoomClient : IAsyncDisposable
     public event Action<WatchRoomSnapshot>? SnapshotReceived;
     public event Action? Disconnected;
     public event Action? Closed;
+    public event Action<string>? LoginQrReceived;
+    public event Action? GuestLoginCompleted;
 
     public string? RoomCode { get; private set; }
     public string? ClientId { get; private set; }
@@ -147,6 +149,10 @@ internal sealed class WatchRoomClient : IAsyncDisposable
                 using var message = await ReceiveOneAsync(socket, cancellationToken).ConfigureAwait(false);
                 var root = message.RootElement;
                 var type = root.GetProperty("type").GetString();
+                if (TryHandleLoginMessage(root, type))
+                {
+                    continue;
+                }
                 if (type == "snapshot")
                 {
                     var snapshot = root.GetProperty("snapshot")
@@ -164,9 +170,17 @@ internal sealed class WatchRoomClient : IAsyncDisposable
                     var sentMs = sent.GetInt64();
                     if (sentMs == _lastPingUnixMs && now >= sentMs)
                     {
-                        RoundTripMilliseconds = now - sentMs;
-                        ClockOffsetMilliseconds = server.GetInt64() - (sentMs + now) / 2.0;
-                        HasClockEstimate = true;
+                        var roundTrip = now - sentMs;
+                        var offset = server.GetInt64() - (sentMs + now) / 2.0;
+                        // Reject unusually slow samples. A tunnel can occasionally queue a ping.
+                        if (!HasClockEstimate || roundTrip < Math.Max(250, RoundTripMilliseconds * 2))
+                        {
+                            ClockOffsetMilliseconds = HasClockEstimate
+                                ? ClockOffsetMilliseconds * 0.75 + offset * 0.25 : offset;
+                            RoundTripMilliseconds = HasClockEstimate
+                                ? RoundTripMilliseconds * 0.75 + roundTrip * 0.25 : roundTrip;
+                            HasClockEstimate = true;
+                        }
                     }
                 }
                 else if (type == "closed")
@@ -192,6 +206,32 @@ internal sealed class WatchRoomClient : IAsyncDisposable
                 Disconnected?.Invoke();
             }
         }
+    }
+
+    private bool TryHandleLoginMessage(JsonElement root, string? type)
+    {
+        if (type == "login_qr")
+        {
+            if (IsHost && root.TryGetProperty("loginUrl", out var url)
+                && url.ValueKind == JsonValueKind.String && url.GetString() is { } loginUrl)
+            {
+                LoginQrReceived?.Invoke(loginUrl);
+            }
+
+            return true;
+        }
+
+        if (type == "login_done")
+        {
+            if (IsHost)
+            {
+                GuestLoginCompleted?.Invoke();
+            }
+
+            return true;
+        }
+
+        return false;
     }
 
     private static async Task<JsonDocument> ReceiveOneAsync(

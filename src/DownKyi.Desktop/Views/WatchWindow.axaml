@@ -3,110 +3,152 @@
         xmlns:vm="clr-namespace:DownKyi.ViewModels"
         x:Class="DownKyi.Views.WatchWindow"
         x:DataType="vm:WatchWindowViewModel"
-        Title="BiliCinema · 仅观影"
-        Width="1100" Height="900" MinWidth="800" MinHeight="650"
+        Title="BiliCinema" Width="1180" Height="860" MinWidth="860" MinHeight="620"
         Background="{DynamicResource BrushSurfaceBase}">
-    <Grid x:Name="WatchLayout" Margin="24" RowDefinitions="Auto,Auto,*" RowSpacing="14">
-        <Border x:Name="PlayerSurface" Grid.Row="0" Background="Black" CornerRadius="{DynamicResource DownKyiRadiusMedium}">
-            <NativeWebView x:Name="MovieWebView" Height="450" />
+    <Window.Styles>
+        <Style Selector="Button.nav">
+            <Setter Property="HorizontalContentAlignment" Value="Left" />
+            <Setter Property="Padding" Value="14,11" />
+            <Setter Property="FontSize" Value="15" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+        </Style>
+        <Style Selector="Button.nav.selected">
+            <Setter Property="Background" Value="{DynamicResource BrushSurfaceSunken}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource BrushPrimary}" />
+            <Setter Property="BorderThickness" Value="3,0,0,0" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+        </Style>
+    </Window.Styles>
+    <Grid ColumnDefinitions="Auto,*">
+        <Border x:Name="Sidebar" Grid.Column="0" Width="200" Padding="16,24"
+                Background="{DynamicResource BrushSurfaceRaised}">
+            <DockPanel LastChildFill="True">
+                <StackPanel DockPanel.Dock="Top" Spacing="10">
+                    <TextBlock Text="BiliCinema" FontSize="23" FontWeight="Bold"
+                               Foreground="{DynamicResource BrushPrimary}" Margin="7,0,0,26" />
+                    <ProgressBar IsVisible="{Binding IsPreparing}" IsIndeterminate="True" Height="4" />
+                    <Button Classes="nav" Classes.selected="{Binding ShowLogin}" Content="登录" Command="{Binding ShowLoginCommand}" />
+                    <Button Classes="nav" Classes.selected="{Binding ShowOnline}" Content="在线播放" Command="{Binding ShowOnlineCommand}" />
+                    <Button Classes="nav" Classes.selected="{Binding ShowRoom}" Content="观影房间" Command="{Binding ShowRoomCommand}" />
+                    <Button Classes="nav" Classes.selected="{Binding ShowDownload}" Content="下载影片" Command="{Binding ShowDownloadCommand}" />
+                </StackPanel>
+                <TextBlock Text="B 站影片播放与同步" VerticalAlignment="Bottom" Margin="7,0,0,0"
+                           Foreground="{DynamicResource BrushTextSecondary}" FontSize="12" />
+            </DockPanel>
         </Border>
-        <Grid x:Name="PlaybackToolbar" Grid.Row="1" ColumnDefinitions="*,Auto" ColumnSpacing="12">
-            <TextBlock x:Name="PlaybackStatus" Grid.Column="0" Text="{Binding Status}" FontSize="14"
-                       TextWrapping="Wrap" VerticalAlignment="Center"
-                       Foreground="{DynamicResource BrushPrimary}" />
-            <Button x:Name="FullscreenButton" Grid.Column="1" Content="全屏播放" Click="OnFullscreenClick"
-                    ToolTip.Tip="全屏观看；按 Esc 退出" />
+
+        <Grid x:Name="WatchLayout" Grid.Column="1" Margin="22" RowDefinitions="Auto,Auto,*" RowSpacing="14">
+            <Border x:Name="PlayerSurface" Grid.Row="0" Background="Black"
+                    IsVisible="{Binding ShowPlayer}"
+                    CornerRadius="{DynamicResource DownKyiRadiusMedium}">
+                <NativeWebView x:Name="MovieWebView" Height="440" />
+            </Border>
+            <Grid x:Name="PlaybackToolbar" Grid.Row="1" ColumnDefinitions="*,Auto" ColumnSpacing="12"
+                  IsVisible="{Binding ShowPlayer}">
+                <TextBlock x:Name="PlaybackStatus" Grid.Column="0" Text="{Binding Status}" FontSize="14"
+                           TextWrapping="Wrap" VerticalAlignment="Center"
+                           Foreground="{DynamicResource BrushPrimary}" />
+                <Button x:Name="FullscreenButton" Grid.Column="1" Content="全屏播放" Click="OnFullscreenClick"
+                        ToolTip.Tip="也可以使用播放器内的全屏按钮；按 Esc 退出" />
+            </Grid>
+
+            <ScrollViewer x:Name="WatchDetails" Grid.Row="2" VerticalScrollBarVisibility="Auto"
+                          IsVisible="{Binding ShowPlayer}">
+                <StackPanel Spacing="14">
+                    <Border IsVisible="{Binding ShowOnline}" Padding="20"
+                            Background="{DynamicResource BrushSurfaceRaised}"
+                            CornerRadius="{DynamicResource DownKyiRadiusMedium}">
+                        <StackPanel Spacing="12">
+                            <TextBlock Text="在线播放" FontSize="24" FontWeight="SemiBold" />
+                            <TextBlock Text="使用 B 站网页播放器直接播放；画质、音量、进度和倍速都可在画面内操作。"
+                                       TextWrapping="Wrap" Foreground="{DynamicResource BrushTextSecondary}" />
+                            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="9">
+                                <TextBox Grid.Column="0" PlaceholderText="粘贴 B 站电影或番剧链接"
+                                         Text="{Binding VideoInput, Mode=TwoWay}" />
+                                <Button Grid.Column="1" Content="解析影片" Command="{Binding ParseCommand}" />
+                            </Grid>
+                            <TextBlock Text="{Binding OnlineFilmTitle}" TextWrapping="Wrap" FontWeight="SemiBold" />
+                            <StackPanel Orientation="Horizontal" Spacing="9">
+                                <Button Content="开始播放" Command="{Binding PlayCommand}" />
+                                <Button Content="停止播放" Command="{Binding StopCommand}" />
+                                <TextBlock Text="{Binding PositionText}" VerticalAlignment="Center" />
+                            </StackPanel>
+                            <TextBlock Text="{Binding MediaInfo}" TextWrapping="Wrap"
+                                       Foreground="{DynamicResource BrushTextSecondary}" />
+                        </StackPanel>
+                    </Border>
+
+                    <Border IsVisible="{Binding ShowRoom}" Padding="20"
+                            Background="{DynamicResource BrushSurfaceRaised}"
+                            CornerRadius="{DynamicResource DownKyiRadiusMedium}">
+                        <StackPanel Spacing="12">
+                            <TextBlock Text="观影房间" FontSize="24" FontWeight="SemiBold" />
+                            <TextBlock Text="房主选片并控制播放；影片仍由每台电脑直接从 B 站播放。"
+                                       TextWrapping="Wrap" Foreground="{DynamicResource BrushTextSecondary}" />
+                            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="9">
+                                <TextBox Grid.Column="0" PlaceholderText="房间影片链接（与在线播放分开）"
+                                         Text="{Binding RoomVideoInput, Mode=TwoWay}" />
+                                <Button Grid.Column="1" Content="解析影片" Command="{Binding ParseCommand}"
+                                        IsEnabled="{Binding CanControl}" />
+                            </Grid>
+                            <TextBlock Text="{Binding RoomFilmTitle}" TextWrapping="Wrap" FontWeight="SemiBold" />
+                            <Grid ColumnDefinitions="Auto,*" ColumnSpacing="8">
+                                <TextBlock Text="服务地址" VerticalAlignment="Center" />
+                                <TextBox Grid.Column="1" Text="{Binding ServiceAddress, Mode=TwoWay}" />
+                            </Grid>
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <Button Content="创建房间" Command="{Binding CreateRoomCommand}" />
+                                <Button Content="复制邀请" Command="{Binding CopyInviteCommand}" />
+                                <Button Content="离开房间" Command="{Binding LeaveRoomCommand}" />
+                                <Button Content="结束房间" Command="{Binding EndRoomCommand}" />
+                            </StackPanel>
+                            <CheckBox Content="加入时使用房主账号（由房主扫码，登录到本机）"
+                                      IsChecked="{Binding UseHostAccount, Mode=TwoWay}" />
+                            <Button Content="重新请求房主扫码" Command="{Binding RetryAssistedLoginCommand}"
+                                    HorizontalAlignment="Left" />
+                            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                                <TextBox Grid.Column="0" PlaceholderText="粘贴房间邀请地址"
+                                         Text="{Binding InviteText, Mode=TwoWay}" />
+                                <Button Grid.Column="1" Content="加入房间" Command="{Binding JoinRoomCommand}" />
+                            </Grid>
+                            <TextBlock Text="{Binding RoomState}" TextWrapping="Wrap" />
+                            <TextBlock Text="{Binding SyncStatus}" TextWrapping="Wrap" />
+                            <TextBlock Text="{Binding RoomLoginStatus}" TextWrapping="Wrap"
+                                       Foreground="{DynamicResource BrushPrimary}" />
+                            <Image Source="{Binding HostAssistedQrCode}" Width="180" Height="180"
+                                   HorizontalAlignment="Left" IsVisible="{Binding HasHostAssistedQrCode}" />
+                        </StackPanel>
+                    </Border>
+                </StackPanel>
+            </ScrollViewer>
+
+            <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto" IsVisible="{Binding ShowLogin}">
+                <Border Padding="24" Background="{DynamicResource BrushSurfaceRaised}"
+                        CornerRadius="{DynamicResource DownKyiRadiusMedium}">
+                    <StackPanel Spacing="16">
+                        <TextBlock Text="登录" FontSize="26" FontWeight="SemiBold" />
+                        <TextBlock Text="{Binding AccountStatus}" FontSize="16" FontWeight="SemiBold"
+                                   Foreground="{DynamicResource BrushPrimary}" />
+                        <TextBlock Text="扫码后即可在线播放及下载支持的影片。" TextWrapping="Wrap"
+                                   Foreground="{DynamicResource BrushTextSecondary}" />
+                        <StackPanel Orientation="Horizontal" Spacing="9">
+                            <Button Content="获取登录二维码" Command="{Binding LoginCommand}" />
+                            <Button Content="退出本机账号" Command="{Binding LogoutCommand}" />
+                        </StackPanel>
+                        <Image Source="{Binding LoginQrCode}" Width="190" Height="190"
+                               HorizontalAlignment="Left" IsVisible="{Binding HasLoginQrCode}" />
+                        <TextBlock Text="{Binding Status}" TextWrapping="Wrap" />
+                    </StackPanel>
+                </Border>
+            </ScrollViewer>
+
+            <Grid Grid.Row="0" Grid.RowSpan="3" IsVisible="{Binding ShowDownload}">
+                <Grid RowDefinitions="Auto,*" RowSpacing="12">
+                    <TextBlock Grid.Row="0" Text="下载影片" FontSize="24" FontWeight="SemiBold" />
+                    <ContentControl Grid.Row="1" Content="{Binding DownloadContent.MainContent}" />
+                </Grid>
+            </Grid>
         </Grid>
-        <ScrollViewer x:Name="WatchDetails" Grid.Row="2" VerticalScrollBarVisibility="Auto">
-        <StackPanel Spacing="14">
-            <TextBlock Text="仅观影模式" FontSize="24" FontWeight="SemiBold"
-                       Foreground="{DynamicResource BrushTextPrimary}" />
-            <TextBlock Text="B 站网页播放器在本机取流；房间只同步选片和控制状态。"
-                       Foreground="{DynamicResource BrushTextSecondary}" />
-
-            <Border Padding="16" Background="{DynamicResource BrushSurfaceRaised}"
-                    CornerRadius="{DynamicResource DownKyiRadiusMedium}">
-                <StackPanel Spacing="10">
-                    <TextBlock Text="1  登录" FontSize="18" FontWeight="SemiBold" />
-                    <TextBlock Text="{Binding AccountStatus}" FontWeight="SemiBold"
-                               Foreground="{DynamicResource BrushPrimary}" />
-                    <StackPanel Orientation="Horizontal" Spacing="8">
-                        <Button Content="获取扫码二维码" Command="{Binding LoginCommand}" />
-                        <Button Content="退出本机账号" Command="{Binding LogoutCommand}" />
-                    </StackPanel>
-                    <Image Source="{Binding LoginQrCode}" Width="170" Height="170"
-                           HorizontalAlignment="Left" IsVisible="{Binding HasLoginQrCode}" />
-                </StackPanel>
-            </Border>
-
-            <Border Padding="16" Background="{DynamicResource BrushSurfaceRaised}"
-                    CornerRadius="{DynamicResource DownKyiRadiusMedium}">
-                <StackPanel Spacing="10">
-                    <TextBlock Text="2  影片" FontSize="18" FontWeight="SemiBold" />
-                    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
-                        <TextBox Grid.Column="0" PlaceholderText="粘贴 B 站影片链接"
-                                 Text="{Binding VideoInput, Mode=TwoWay}" />
-                        <Button Grid.Column="1" Content="解析" Command="{Binding ParseCommand}" />
-                    </Grid>
-                    <TextBlock Text="{Binding FilmTitle}" TextWrapping="Wrap" />
-                    <TextBlock Text="画质和音轨请在播放器画面内选择；可用画质由 B 站账号、影片和设备决定。" TextWrapping="Wrap" />
-                    <TextBlock Text="{Binding MediaInfo}" TextWrapping="Wrap" />
-                </StackPanel>
-            </Border>
-
-            <Border Padding="16" Background="{DynamicResource BrushSurfaceRaised}"
-                    CornerRadius="{DynamicResource DownKyiRadiusMedium}">
-                <StackPanel Spacing="10">
-                    <TextBlock Text="3  播放控制" FontSize="18" FontWeight="SemiBold" />
-                    <StackPanel Orientation="Horizontal" Spacing="8">
-                        <Button Content="在线播放 / 继续" Command="{Binding PlayCommand}" />
-                        <Button Content="暂停" Command="{Binding PauseCommand}" />
-                        <Button Content="停止并清理" Command="{Binding StopCommand}" />
-                        <TextBlock Text="{Binding PositionText}" VerticalAlignment="Center" />
-                    </StackPanel>
-                    <Slider x:Name="SeekSlider" Minimum="0" Maximum="{Binding DurationSeconds}"
-                            Value="{Binding SeekPositionSeconds, Mode=TwoWay}"
-                            ToolTip.Tip="拖动后松开即可跳转；房间内由房主操作" />
-                    <StackPanel Orientation="Horizontal" Spacing="8">
-                        <TextBlock Text="跳转秒数" VerticalAlignment="Center" />
-                        <TextBox Width="95" Text="{Binding SeekSeconds, Mode=TwoWay}" />
-                        <Button Content="跳转" Command="{Binding SeekCommand}" />
-                        <TextBlock Text="倍速" VerticalAlignment="Center" Margin="16,0,0,0" />
-                        <TextBox Width="70" Text="{Binding RateText, Mode=TwoWay}" />
-                        <Button Content="设置倍速" Command="{Binding RateCommand}" />
-                    </StackPanel>
-                </StackPanel>
-            </Border>
-
-            <Border Padding="16" Background="{DynamicResource BrushSurfaceRaised}"
-                    CornerRadius="{DynamicResource DownKyiRadiusMedium}">
-                <StackPanel Spacing="10">
-                    <TextBlock Text="4  私人同步房间" FontSize="18" FontWeight="SemiBold" />
-                    <TextBlock Text="房主控制选片、播放、暂停、跳转与倍速；每台电脑都用自己的登录状态取流。"
-                               TextWrapping="Wrap" />
-                    <TextBlock Text="房主先启动本机房间服务，创建房间时自动生成 Cloudflare 邀请地址；加入方只需粘贴邀请。"
-                               TextWrapping="Wrap" />
-                    <Grid ColumnDefinitions="Auto,*" ColumnSpacing="8">
-                        <TextBlock Grid.Column="0" Text="服务地址" VerticalAlignment="Center" />
-                        <TextBox Grid.Column="1" Text="{Binding ServiceAddress, Mode=TwoWay}" />
-                    </Grid>
-                    <StackPanel Orientation="Horizontal" Spacing="8">
-                        <Button Content="创建房间" Command="{Binding CreateRoomCommand}" />
-                        <Button Content="复制邀请" Command="{Binding CopyInviteCommand}" />
-                        <Button Content="离开房间" Command="{Binding LeaveRoomCommand}" />
-                        <Button Content="结束房间" Command="{Binding EndRoomCommand}" />
-                    </StackPanel>
-                    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
-                        <TextBox Grid.Column="0" PlaceholderText="粘贴邀请地址或邀请码"
-                                 Text="{Binding InviteText, Mode=TwoWay}" />
-                        <Button Grid.Column="1" Content="加入房间" Command="{Binding JoinRoomCommand}" />
-                    </Grid>
-                    <TextBlock Text="{Binding RoomState}" TextWrapping="Wrap" />
-                    <TextBlock Text="{Binding SyncStatus}" TextWrapping="Wrap" />
-                </StackPanel>
-            </Border>
-
-        </StackPanel>
-        </ScrollViewer>
     </Grid>
 </Window>

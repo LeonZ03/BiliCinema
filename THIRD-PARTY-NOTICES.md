@@ -1,6 +1,18 @@
 
 # Third-Party Notices
 
+## Bundled Windows tools
+
+The Windows single-file build embeds cloudflared 2026.9.0 from
+<https://github.com/cloudflare/cloudflared/releases/tag/2026.9.0>, aria2 1.37.0
+from <https://github.com/crazysmile-PhD/downkyi-aria2-static-build>, and the
+FFmpeg build identified in `script/assets/external-assets.json` from
+<https://github.com/BtbN/FFmpeg-Builds>. Build inputs are verified with SHA-256
+before embedding. These tools are extracted only when their feature is used.
+The FFmpeg build includes its GPLv3 license text in the source asset archive;
+the BiliCinema repository's GPLv3 text is in `LICENSE`. Consult the upstream
+projects for their source code and complete license notices.
+
 ## Avalonia.Controls.WebView
 
 The watch window embeds Bilibili's official player through Avalonia.Controls.WebView

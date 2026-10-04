@@ -29,7 +29,8 @@ internal sealed record WireMessage(
     bool? Ready = null,
     bool? Buffering = null,
     string? Nonce = null,
-    long? ClientTimeUnixMs = null);
+    long? ClientTimeUnixMs = null,
+    string? LoginUrl = null);
 
 internal static class WireProtocol
 {
@@ -143,6 +144,20 @@ internal static class WireProtocol
                 return new(type,
                     Nonce: root.TryGetProperty("nonce", out _) ? RequiredString(root, "nonce", 1, 64) : null,
                     ClientTimeUnixMs: RequiredPositiveInteger(root, "clientTimeUnixMs"));
+            case "login_qr":
+                RequireFields(root, "type", "loginUrl");
+                string loginUrl = RequiredString(root, "loginUrl", 20, 1024);
+                if (!Uri.TryCreate(loginUrl, UriKind.Absolute, out var loginUri)
+                    || loginUri.Scheme != Uri.UriSchemeHttps
+                    || loginUri.Host != "passport.bilibili.com")
+                {
+                    throw new RoomProtocolException("invalid_login_qr");
+                }
+
+                return new(type, LoginUrl: loginUrl);
+            case "login_done":
+                RequireFields(root, "type");
+                return new(type);
             case "play":
             case "pause":
             case "leave":
