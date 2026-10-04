@@ -1,10 +1,10 @@
 using System;
-using System.Collections.ObjectModel;
 using System.Globalization;
 using System.Linq;
 using System.Net.WebSockets;
 using System.Threading;
 using System.Threading.Tasks;
+using Avalonia.Controls;
 using Avalonia.Media.Imaging;
 using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -12,7 +12,6 @@ using CommunityToolkit.Mvvm.Input;
 using DownKyi.Application.Desktop;
 using DownKyi.Core.BiliApi.BiliUtils;
 using DownKyi.Core.BiliApi.Login;
-using DownKyi.Core.Settings;
 using DownKyi.Presentation;
 using DownKyi.Services.Account;
 using DownKyi.Services.Video;
@@ -25,7 +24,6 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
     private readonly ILoginCoordinator _login;
     private readonly ILoginQrCodeRenderer _qrRenderer;
     private readonly IUserSessionCoordinator _session;
-    private readonly ISettingsStore _settings;
     private readonly IClipboardService _clipboard;
     private readonly VideoParseCoordinator _parser;
     private readonly WatchRoomClient _room = new();
@@ -33,7 +31,8 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
     private readonly SemaphoreSlim _snapshotGate = new(1, 1);
     private readonly Task _monitorTask;
     private CancellationTokenSource? _loginCancellation;
-    private MpvPlaybackSession? _player;
+    private BilibiliWebPlaybackSession? _player;
+    private NativeWebView? _browser;
     private VideoPage? _page;
     private WatchRoomSnapshot? _lastSnapshot;
     private long _lastSnapshotReceivedAtUnixMs;
@@ -92,14 +91,6 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
     private string _syncStatus = string.Empty;
     public string SyncStatus { get => _syncStatus; private set => SetProperty(ref _syncStatus, value); }
 
-    private WatchQualityOption? _selectedQuality;
-    public WatchQualityOption? SelectedQuality { get => _selectedQuality; set => SetProperty(ref _selectedQuality, value); }
-
-    private WatchAudioOption? _selectedAudio;
-    public WatchAudioOption? SelectedAudio { get => _selectedAudio; set => SetProperty(ref _selectedAudio, value); }
-
-    public ObservableCollection<WatchQualityOption> QualityOptions { get; } = [];
-    public ObservableCollection<WatchAudioOption> AudioOptions { get; } = [];
     public bool CanControl => !_room.Connected || _room.IsHost;
 
     public IAsyncRelayCommand LoginCommand { get; }
@@ -120,14 +111,12 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
         ILoginCoordinator login,
         ILoginQrCodeRenderer qrRenderer,
         IUserSessionCoordinator session,
-        ISettingsStore settings,
         IClipboardService clipboard,
         VideoParseCoordinator parser)
     {
         _login = login;
         _qrRenderer = qrRenderer;
         _session = session;
-        _settings = settings;
         _clipboard = clipboard;
         _parser = parser;
         _room.SnapshotReceived += OnSnapshotReceived;
@@ -166,6 +155,8 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
             Status = "登录状态检查失败，请检查网络后重试扫码。";
         }
     }
+
+    public void AttachBrowser(NativeWebView browser) => _browser = browser;
 
     private async Task StartLoginAsync()
     {
@@ -239,6 +230,15 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
     {
         await LeaveRoomAsync().ConfigureAwait(true);
         StopPlayback();
+        var browserCookiesCleared = true;
+        try
+        {
+            await BilibiliWebPlaybackSession.ClearBilibiliCookiesAsync(_browser).ConfigureAwait(true);
+        }
+        catch (Exception error) when (IsRoutineError(error))
+        {
+            browserCookiesCleared = false;
+        }
         if (_loginCancellation != null)
         {
             await _loginCancellation.CancelAsync().ConfigureAwait(true);
@@ -251,7 +251,9 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
         }
 
         await InitializeAsync().ConfigureAwait(true);
-        Status = "已退出本机 B 站账号。";
+        Status = browserCookiesCleared
+            ? "已退出本机 B 站账号。"
+            : "已删除本机登录信息；请关闭观影窗口以结束网页会话。";
     }
 
     private Task ParseAsync() => ParseInputAsync(VideoInput, _lifetime.Token);
@@ -285,16 +287,12 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
                 Status = "没有找到可播放剧集，请检查影片链接。";
                 return;
             }
-
-            var stream = await _parser.LoadPageStreamAsync(input.Trim(), page, refresh: false,
-                cancellationToken).ConfigureAwait(true);
-            if (stream?.PlayUrl == null)
+            if (page.EpisodeId <= 0)
             {
-                Status = "媒体解析失败，请检查登录状态或影片权限。";
+                Status = "仅观影模式目前支持 B 站番剧和电影剧集链接。";
                 return;
             }
 
-            page.PlayUrl = stream.PlayUrl;
             if (_resumeEpisodeId != page.EpisodeId)
             {
                 _resumeEpisodeId = null;
@@ -302,17 +300,10 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
             }
             _page = page;
             VideoInput = input.Trim();
-            DurationSeconds = Math.Max(1, page.PlayUrl.Dash.Duration);
+            DurationSeconds = 1;
             SeekPositionSeconds = 0;
             FilmTitle = $"{detail.VideoInfoView?.Title} · {page.Name}";
-            PopulateTracks(page);
-            Status = SelectedQuality == null
-                ? "此片当前没有 4K 轨道；请选择可用清晰度后播放。"
-                : "解析完成。已选 4K，可直接在线播放。";
-            if (SelectedAudio?.Id == 30232 && AudioOptions.Any(option => option.Id == 30280))
-            {
-                Status += " 在线播放默认中质量音轨以改善跳转；可手动选择高质量。";
-            }
+            Status = "影片已就绪。画质和音轨在 B 站网页播放器内选择。";
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
@@ -324,60 +315,28 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
         }
     }
 
-    private void PopulateTracks(VideoPage page)
-    {
-        QualityOptions.Clear();
-        AudioOptions.Clear();
-        var playUrl = page.PlayUrl!;
-        foreach (var track in playUrl.Dash.Video
-                     .OrderByDescending(track => track.Id)
-                     .ThenByDescending(track => track.CodecId))
-        {
-            var label = PlaybackQualityCatalog.GetResolutions()
-                .FirstOrDefault(quality => quality.Id == track.Id)?.Name ?? $"质量 {track.Id}";
-            QualityOptions.Add(new WatchQualityOption(track.Id, track.CodecId,
-                $"{label} · {track.Width}×{track.Height} · {track.Codecs}"));
-        }
-
-        var audioTracks = playUrl.Dash.Audio
-            .Concat(playUrl.Dash.Dolby?.Audio ?? [])
-            .Concat(playUrl.Dash.Flac?.Audio is { } flac ? [flac] : []);
-        foreach (var track in audioTracks.OrderByDescending(track => track.Id))
-        {
-            var label = PlaybackQualityCatalog.GetAudioQualities()
-                .FirstOrDefault(audio => audio.Id == track.Id)?.Name ?? $"音轨 {track.Id}";
-            AudioOptions.Add(new WatchAudioOption(track.Id, $"{label} · {track.Codecs}"));
-        }
-
-        SelectedQuality = QualityOptions.FirstOrDefault(option => option.Quality == 120);
-        SelectedAudio = AudioOptions.FirstOrDefault(option => option.Id == 30232)
-                        ?? AudioOptions.FirstOrDefault();
-    }
-
     private async Task StartPlaybackAsync(bool startPaused, CancellationToken cancellationToken)
     {
-        if (_page == null || SelectedQuality == null || SelectedAudio == null)
+        if (_page?.EpisodeId is not > 0 || _browser == null)
         {
-            Status = "请选择可播放的视频和音轨。";
+            Status = "请先解析影片，并等待网页播放器准备好。";
             return;
         }
 
         try
         {
-            var tracks = PlaybackTrackSelector.Select(_page, SelectedQuality.Quality,
-                SelectedQuality.CodecId, SelectedAudio.Id);
             StopPlayback();
-            Status = "正在缓冲音视频…";
-            _player = await MpvPlaybackSession.StartAsync(tracks,
-                _settings.Current.Network.UserAgent, cancellationToken, startPaused).ConfigureAwait(true);
+            Status = "正在打开 B 站网页播放器…";
+            _player = await BilibiliWebPlaybackSession.StartAsync(_browser, _page,
+                startPaused, cancellationToken).ConfigureAwait(true);
             if (_resumeEpisodeId == _page.EpisodeId && _resumeAtSeconds > 0)
             {
                 await _player.SeekAsync(_resumeAtSeconds, cancellationToken).ConfigureAwait(true);
                 _resumeEpisodeId = null;
                 _resumeAtSeconds = 0;
             }
-            MediaInfo = $"已选轨道：{tracks.Width} × {tracks.Height} · {tracks.VideoCodec} · 音频 {tracks.AudioCodec}；等待解码确认";
-            Status = startPaused ? "已缓冲，等待房间同步。" : "在线播放中。";
+            MediaInfo = "网页播放器已连接；可在画面内选择画质和音轨。";
+            Status = startPaused ? "播放器已就绪，等待房间同步。" : "B 站网页在线播放中。";
             _recoveries = 0;
             if (_room.Connected)
             {
@@ -387,7 +346,7 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
         }
         catch (Exception error) when (IsRoutineError(error))
         {
-            Status = error is InvalidOperationException ? error.Message : "播放失败，请检查网络与 mpv。";
+            Status = error is InvalidOperationException ? error.Message : "网页播放失败，请检查网络和登录状态。";
         }
     }
 
@@ -518,7 +477,7 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
         }
 
         StopPlayback();
-        Status = "播放已停止，临时缓存已释放。";
+        Status = "网页播放器已停止。";
     }
 
     private async Task CreateRoomAsync()
@@ -702,9 +661,9 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
             {
                 await ParseInputAsync($"https://www.bilibili.com/bangumi/play/ep{media.EpisodeId}",
                     _lifetime.Token).ConfigureAwait(true);
-                if (_page?.EpisodeId != media.EpisodeId || SelectedQuality == null)
+                if (_page?.EpisodeId != media.EpisodeId)
                 {
-                    RoomState = "本机未取得此片 4K；请选择轨道后点击播放。";
+                    RoomState = "本机未能打开此影片，请检查账号权限。";
                     return;
                 }
 
@@ -832,8 +791,7 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
 
                 if (player.HasExited)
                 {
-                    if (_page?.PlayUrl?.Dash.Duration is > 0
-                        && _lastPosition >= _page.PlayUrl.Dash.Duration - 3)
+                    if (DurationSeconds > 1 && _lastPosition >= DurationSeconds - 3)
                     {
                         Status = "播放完成。";
                         StopPlayback();
@@ -849,18 +807,20 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
                 try
                 {
                     _lastPosition = await player.GetPositionAsync(cancellationToken).ConfigureAwait(true);
+                    var duration = await player.GetDurationAsync(cancellationToken).ConfigureAwait(true);
+                    if (duration > 1)
+                    {
+                        DurationSeconds = duration;
+                    }
                     PositionText = TimeSpan.FromSeconds(_lastPosition).ToString(@"hh\:mm\:ss", CultureInfo.InvariantCulture);
                     if (!_seekDragging)
                     {
                         SeekPositionSeconds = Math.Clamp(_lastPosition, 0, DurationSeconds);
                     }
-                    if (SelectedQuality != null && SelectedAudio != null)
+                    var decoded = await player.GetDecodedDimensionsAsync(cancellationToken).ConfigureAwait(true);
+                    if (decoded is { } size)
                     {
-                        var decoded = await player.GetDecodedDimensionsAsync(cancellationToken).ConfigureAwait(true);
-                        if (decoded is { } size)
-                        {
-                            MediaInfo = $"播放器解码：{size.Width} × {size.Height} · 已选 {SelectedQuality.Display} · 音频 {SelectedAudio.Display}";
-                        }
+                        MediaInfo = $"网页播放器实际解码：{size.Width} × {size.Height}；画质和音轨由 B 站播放器控制";
                     }
                     var buffering = await player.GetBufferingAsync(cancellationToken).ConfigureAwait(true);
                     if (buffering != _lastBuffering)
@@ -904,29 +864,22 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
     {
         if (_page == null || _recoveries >= 2)
         {
-            Status = "播放已结束，或刷新地址失败。可重新解析再播放。";
+            Status = "播放已结束，或网页播放器恢复失败。可重新播放。";
             StopPlayback();
             return;
         }
 
         _recoveries++;
-        Status = "媒体连接中断，正在重新解析并恢复进度…";
+        Status = "网页播放器连接中断，正在重新打开并恢复进度…";
         try
         {
-            var result = await _parser.LoadPageStreamAsync(VideoInput, _page,
-                refresh: true, cancellationToken).ConfigureAwait(true);
-            if (result?.PlayUrl == null)
+            if (_browser == null)
             {
-                throw new InvalidOperationException("媒体地址刷新失败。");
+                throw new InvalidOperationException("网页播放器不可用。");
             }
-
-            _page.PlayUrl = result.PlayUrl;
-            var quality = SelectedQuality ?? throw new InvalidOperationException("视频轨道未选定。");
-            var audio = SelectedAudio ?? throw new InvalidOperationException("音轨未选定。");
-            var tracks = PlaybackTrackSelector.Select(_page, quality.Quality, quality.CodecId, audio.Id);
             StopPlayback();
-            _player = await MpvPlaybackSession.StartAsync(tracks,
-                _settings.Current.Network.UserAgent, cancellationToken, startPaused: true).ConfigureAwait(true);
+            _player = await BilibiliWebPlaybackSession.StartAsync(_browser, _page,
+                startPaused: true, cancellationToken).ConfigureAwait(true);
             await _player.SeekAsync(_lastPosition, cancellationToken).ConfigureAwait(true);
             if (_lastSnapshot != null && _room.Connected)
             {
@@ -943,7 +896,7 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
         {
             _resumeEpisodeId = _page?.EpisodeId;
             _resumeAtSeconds = _lastPosition;
-            Status = "地址刷新失败；若登录已过期，请重新扫码后继续。";
+            Status = "网页播放器恢复失败；若登录已过期，请重新扫码后继续。";
         }
     }
 
@@ -960,7 +913,8 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
         return error is InvalidOperationException or ArgumentException or FormatException
             or System.IO.IOException or System.Net.Http.HttpRequestException
             or WebSocketException or System.ComponentModel.Win32Exception
-            or Newtonsoft.Json.JsonException or System.Text.Json.JsonException;
+            or Newtonsoft.Json.JsonException or System.Text.Json.JsonException
+            or System.Runtime.InteropServices.COMException or ObjectDisposedException;
     }
 
     public void StopForWindowClose()
@@ -995,6 +949,3 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
         _lifetime.Dispose();
     }
 }
-
-internal sealed record WatchQualityOption(int Quality, int CodecId, string Display);
-internal sealed record WatchAudioOption(int Id, string Display);

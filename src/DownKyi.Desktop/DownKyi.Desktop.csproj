@@ -14,6 +14,7 @@
   <ItemGroup>
     <PackageReference Include="Avalonia" />
     <PackageReference Include="Avalonia.Controls.DataGrid" />
+    <PackageReference Include="Avalonia.Controls.WebView" />
     <PackageReference Include="Avalonia.Desktop" />
     <PackageReference Condition="'$(Configuration)' == 'Debug'" Include="AvaloniaUI.DiagnosticsSupport" />
     <PackageReference Include="Avalonia.Themes.Fluent" />

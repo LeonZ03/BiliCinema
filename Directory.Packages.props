@@ -2,6 +2,7 @@
   <ItemGroup>
     <PackageVersion Include="Avalonia" Version="12.1.0" />
     <PackageVersion Include="Avalonia.Controls.DataGrid" Version="12.1.0" />
+    <PackageVersion Include="Avalonia.Controls.WebView" Version="12.1.0" />
     <PackageVersion Include="Avalonia.Desktop" Version="12.1.0" />
     <PackageVersion Include="Avalonia.Headless" Version="12.1.0" />
     <PackageVersion Include="Avalonia.Headless.XUnit" Version="12.1.0" />
