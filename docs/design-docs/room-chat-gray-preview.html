@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>BiliCinema 房间聊天 · 灰色轻透预览</title>
+  <style>
+    * { box-sizing: border-box; }
+    html, body { margin: 0; width: 1440px; height: 960px; overflow: hidden; }
+    body { background: #f1f2f3; color: #303438; font-family: "Microsoft YaHei", "Segoe UI", sans-serif; }
+    .board { width: 1440px; height: 960px; padding: 30px 40px; }
+    .masthead { height: 66px; display: flex; align-items: start; justify-content: space-between; }
+    h1 { margin: 0; font-size: 25px; line-height: 34px; font-weight: 650; letter-spacing: .2px; }
+    .sub { margin: 2px 0 0; font-size: 13px; color: #777e83; }
+    .tag { margin-top: 7px; padding: 7px 12px; border-radius: 999px; background: #e3e6e8; color: #586168; font-size: 12px; }
+    .screen { width: 1360px; height: 800px; position: relative; overflow: hidden; border-radius: 13px; background: #13191b; box-shadow: 0 16px 42px #20272b2b; }
+    .scene { position: absolute; inset: 0; width: 100%; height: 100%; }
+    .scene-shade { position: absolute; inset: 0; background: linear-gradient(180deg, #00000014, transparent 26%, transparent 64%, #000000b5); }
+    .player-controls { position: absolute; left: 32px; right: 398px; bottom: 32px; color: #fff; opacity: .84; }
+    .track { width: 100%; height: 3px; background: #ffffff78; border-radius: 2px; }
+    .track span { display: block; width: 28%; height: 3px; background: #83cbdc; border-radius: 2px; }
+    .control-row { display: flex; justify-content: space-between; align-items: center; padding-top: 20px; font: 14px "Segoe UI", sans-serif; }
+    .play { display: flex; align-items: center; gap: 19px; }
+    .play-glyph { width: 0; height: 0; border-top: 8px solid transparent; border-bottom: 8px solid transparent; border-left: 12px solid #fff; }
+    .chat { position: absolute; top: 0; right: 0; bottom: 0; width: 366px; display: flex; flex-direction: column; color: #f8f9fa;
+      background: rgba(52, 54, 56, .72); backdrop-filter: blur(14px) saturate(.75);
+      border-left: 1px solid #ffffff2a; box-shadow: -14px 0 34px #00000024; }
+    .chat-head { height: 74px; padding: 22px 23px; border-bottom: 1px solid #ffffff29; display: flex; align-items: center; justify-content: space-between; }
+    .chat-head strong { font-size: 19px; font-weight: 650; }
+    .room-count { display: flex; align-items: center; gap: 8px; color: #e4e8e9; font-size: 13px; }
+    .room-count i { width: 8px; height: 8px; border-radius: 50%; background: #a6c7b9; box-shadow: 0 0 0 3px #a6c7b922; }
+    .messages { flex: 1; padding: 22px 20px; }
+    .message { display: flex; gap: 11px; margin-bottom: 25px; }
+    .avatar { width: 32px; height: 32px; flex: 0 0 32px; display: grid; place-items: center; border-radius: 50%; background: #8999a1; color: #fff; font-size: 13px; font-weight: 700; }
+    .message.guest .avatar { background: #99918e; }
+    .message-content { flex: 1; min-width: 0; }
+    .message-meta { display: flex; justify-content: space-between; align-items: baseline; margin: 0 0 7px; }
+    .message-meta b { color: #e3ebee; font-size: 13px; font-weight: 650; }
+    .message.guest .message-meta b { color: #e5e1de; }
+    .message-meta time { color: #c8cfd1; font: 11px "Segoe UI", sans-serif; }
+    .message p { margin: 0; font-size: 14px; line-height: 1.5; color: #fff; }
+    .compose { min-height: 149px; padding: 17px 19px 19px; border-top: 1px solid #ffffff2a; }
+    .input { height: 72px; width: 100%; border: 1px solid #ffffff55; border-radius: 10px; padding: 13px 14px; color: #e4e7e8; font-size: 13px; background: #ffffff20; }
+    .compose-row { display: flex; align-items: center; justify-content: space-between; padding-top: 11px; }
+    .hint { color: #d4d9da; font-size: 11px; }
+    button { border: 1px solid #ffffff38; border-radius: 9px; min-width: 78px; height: 37px; background: #84929a; color: white; font: 650 13px "Microsoft YaHei", sans-serif; }
+    .footer { display: flex; align-items: center; gap: 17px; height: 64px; color: #687177; font-size: 13px; }
+    .swatch { width: 17px; height: 17px; border-radius: 5px; background: #343638; opacity: .72; border: 1px solid #858b8d; }
+    .swatch.button { background: #84929a; opacity: 1; border: 0; }
+    .footer b { color: #424b50; font-weight: 600; }
+  </style>
+</head>
+<body>
+  <main class="board">
+    <header class="masthead">
+      <div><h1>BiliCinema · 房间聊天</h1><p class="sub">全屏时从右边缘呼出的灰色轻透版本</p></div>
+      <span class="tag">视觉预览</span>
+    </header>
+    <section class="screen" aria-label="全屏观影与聊天面板预览">
+      <svg class="scene" viewBox="0 0 1360 800" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
+        <defs>
+          <linearGradient id="sky" x2="0" y2="1"><stop stop-color="#697982"/><stop offset=".51" stop-color="#abb6b2"/><stop offset="1" stop-color="#6c746e"/></linearGradient>
+          <linearGradient id="water" x2="0" y2="1"><stop stop-color="#707d7b"/><stop offset="1" stop-color="#26373a"/></linearGradient>
+          <radialGradient id="sun"><stop stop-color="#fff0cd" stop-opacity=".92"/><stop offset="1" stop-color="#fff0cd" stop-opacity="0"/></radialGradient>
+          <filter id="blur"><feGaussianBlur stdDeviation="3"/></filter>
+        </defs>
+        <rect width="1360" height="800" fill="url(#sky)"/>
+        <ellipse cx="525" cy="297" rx="295" ry="215" fill="url(#sun)"/>
+        <path d="M0 374 Q165 307 305 340 T586 327 T837 342 T1123 298 T1360 341 V570 H0Z" fill="#657270" filter="url(#blur)"/>
+        <path d="M0 419 Q178 360 311 399 T578 380 T880 384 T1103 376 T1360 398 V614 H0Z" fill="#354644"/>
+        <path d="M0 492 Q214 455 412 475 T797 456 T1146 474 T1360 448 V800 H0Z" fill="url(#water)"/>
+        <path d="M0 561 Q241 545 433 561 T838 535 T1360 569" fill="none" stroke="#d5ded8" stroke-width="3" opacity=".28"/>
+        <path d="M0 620 Q208 601 388 620 T786 605 T1360 617" fill="none" stroke="#d6ddd6" stroke-width="2" opacity=".2"/>
+        <path d="M0 674 Q199 658 404 675 T864 661 T1360 680" fill="none" stroke="#f2eee1" stroke-width="2" opacity=".13"/>
+        <path d="M0 800 V497 Q81 488 160 504 T332 513 V800Z" fill="#182a2b" opacity=".91"/>
+        <path d="M194 800 L244 522 L272 522 L322 800Z" fill="#1d2d2d"/>
+        <circle cx="261" cy="492" r="28" fill="#1b292a"/>
+        <path d="M160 800 L468 800 L382 642 Q317 622 242 665Z" fill="#1a2929"/>
+        <path d="M763 800 L850 571 L932 800Z" fill="#243837" opacity=".75"/>
+        <path d="M855 800 L947 505 L1055 800Z" fill="#1e3232" opacity=".73"/>
+        <rect width="1360" height="800" fill="#0b1418" opacity=".13"/>
+      </svg>
+      <div class="scene-shade"></div>
+      <div class="player-controls"><div class="track"><span></span></div><div class="control-row"><div class="play"><span class="play-glyph"></span><span>00:32:18 / 01:54:06</span></div><span>音量　　画质　　全屏</span></div></div>
+      <aside class="chat">
+        <div class="chat-head"><strong>房间聊天</strong><span class="room-count"><i></i>2 人</span></div>
+        <div class="messages">
+          <article class="message"><span class="avatar">澈</span><div class="message-content"><div class="message-meta"><b>阿澈 · 我</b><time>20:12</time></div><p>这个镜头很有感觉。</p></div></article>
+          <article class="message guest"><span class="avatar">林</span><div class="message-content"><div class="message-meta"><b>林间月</b><time>20:12</time></div><p>再等一会儿一起讨论？</p></div></article>
+        </div>
+        <div class="compose"><div class="input">说点什么...</div><div class="compose-row"><span class="hint">Enter 发送 · Shift+Enter 换行</span><button>发送</button></div></div>
+      </aside>
+    </section>
+    <footer class="footer"><span class="swatch"></span><span><b>面板</b>　中性灰 · 约 72% 不透明</span><span class="swatch button"></span><span><b>按钮</b>　柔和灰蓝</span><span>保留白色文字和清晰边界，避免压住画面</span></footer>
+  </main>
+</body>
+</html>

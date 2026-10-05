@@ -152,7 +152,7 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
     private string _roomNicknameInput = string.Empty;
     public string RoomNicknameInput { get => _roomNicknameInput; set => SetProperty(ref _roomNicknameInput, value); }
 
-    private string _roomNicknameStatus = "房间昵称仅用于聊天，不公开 B 站账号信息。";
+    private string _roomNicknameStatus = "我的昵称仅用于聊天，不公开 B 站账号信息。";
     public string RoomNicknameStatus
     {
         get => _roomNicknameStatus;
@@ -382,7 +382,7 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
 
         _savedRoomNickname = nickname;
         RoomNicknameInput = nickname;
-        RoomNicknameStatus = $"已保存房间昵称：{nickname}";
+        RoomNicknameStatus = $"已保存我的昵称：{nickname}";
     }
 
     private async Task SendRoomChatSafelyAsync(string text)
