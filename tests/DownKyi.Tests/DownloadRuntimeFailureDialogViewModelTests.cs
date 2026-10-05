@@ -203,6 +203,12 @@ public sealed class DownloadRuntimeFailureDialogViewModelTests
     {
         public string? Text { get; private set; }
 
+        public Task SetPngImageAsync(byte[] imagePng, CancellationToken cancellationToken = default)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            return Task.CompletedTask;
+        }
+
         public Task SetTextAsync(
             string text,
             CancellationToken cancellationToken = default)

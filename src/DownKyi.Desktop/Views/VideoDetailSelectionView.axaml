@@ -199,6 +199,10 @@
                     Width="100"
                     Binding="{ReflectionBinding Duration}"
                     Header="{DynamicResource Duration}" />
+                <DataGridTextColumn
+                    Width="100"
+                    Binding="{ReflectionBinding EstimatedSizeText}"
+                    Header="{DynamicResource EstimatedSize}" />
                 <DataGridTemplateColumn
                     Width="120"
                     Header="{DynamicResource AudioQuality}">

@@ -39,10 +39,15 @@
         </Border>
 
         <Grid x:Name="WatchLayout" Grid.Column="1" Margin="22" RowDefinitions="Auto,Auto,*" RowSpacing="14">
-            <Border x:Name="PlayerSurface" Grid.Row="0" Background="Black"
-                    IsVisible="{Binding ShowPlayer}"
+            <Border x:Name="OnlinePlayerSurface" Grid.Row="0" Background="Black"
+                    IsVisible="{Binding ShowOnline}"
                     CornerRadius="{DynamicResource DownKyiRadiusMedium}">
-                <NativeWebView x:Name="MovieWebView" Height="440" />
+                <NativeWebView x:Name="OnlineMovieWebView" Height="440" />
+            </Border>
+            <Border x:Name="RoomPlayerSurface" Grid.Row="0" Background="Black"
+                    IsVisible="{Binding ShowRoom}"
+                    CornerRadius="{DynamicResource DownKyiRadiusMedium}">
+                <NativeWebView x:Name="RoomMovieWebView" Height="440" />
             </Border>
             <Grid x:Name="PlaybackToolbar" Grid.Row="1" ColumnDefinitions="*,Auto" ColumnSpacing="12"
                   IsVisible="{Binding ShowPlayer}">
@@ -103,10 +108,6 @@
                                 <Button Content="离开房间" Command="{Binding LeaveRoomCommand}" />
                                 <Button Content="结束房间" Command="{Binding EndRoomCommand}" />
                             </StackPanel>
-                            <CheckBox Content="加入时使用房主账号（由房主扫码，登录到本机）"
-                                      IsChecked="{Binding UseHostAccount, Mode=TwoWay}" />
-                            <Button Content="重新请求房主扫码" Command="{Binding RetryAssistedLoginCommand}"
-                                    HorizontalAlignment="Left" />
                             <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
                                 <TextBox Grid.Column="0" PlaceholderText="粘贴房间邀请地址"
                                          Text="{Binding InviteText, Mode=TwoWay}" />
@@ -114,10 +115,6 @@
                             </Grid>
                             <TextBlock Text="{Binding RoomState}" TextWrapping="Wrap" />
                             <TextBlock Text="{Binding SyncStatus}" TextWrapping="Wrap" />
-                            <TextBlock Text="{Binding RoomLoginStatus}" TextWrapping="Wrap"
-                                       Foreground="{DynamicResource BrushPrimary}" />
-                            <Image Source="{Binding HostAssistedQrCode}" Width="180" Height="180"
-                                   HorizontalAlignment="Left" IsVisible="{Binding HasHostAssistedQrCode}" />
                         </StackPanel>
                     </Border>
                 </StackPanel>
@@ -138,6 +135,8 @@
                         </StackPanel>
                         <Image Source="{Binding LoginQrCode}" Width="190" Height="190"
                                HorizontalAlignment="Left" IsVisible="{Binding HasLoginQrCode}" />
+                        <Button Content="复制二维码图片" Command="{Binding CopyLoginQrCommand}"
+                                HorizontalAlignment="Left" IsVisible="{Binding HasLoginQrCode}" />
                         <TextBlock Text="{Binding Status}" TextWrapping="Wrap" />
                     </StackPanel>
                 </Border>

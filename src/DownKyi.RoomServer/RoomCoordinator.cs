@@ -268,12 +268,6 @@ internal sealed class RoomCoordinator : BackgroundService
                 return;
             }
 
-            if (message.Type == "login_qr" || message.Type == "login_done")
-            {
-                ForwardLoginMessage(room, message, isHost);
-                return;
-            }
-
             switch (message.Type)
             {
                 case "select":
@@ -348,18 +342,6 @@ internal sealed class RoomCoordinator : BackgroundService
             room.Version++;
             room.Broadcast();
         }
-    }
-
-    private static void ForwardLoginMessage(Room room, WireMessage message, bool isHost)
-    {
-        if (isHost)
-        {
-            throw new RoomProtocolException("guest_only");
-        }
-
-        room.Host.Connection?.Enqueue(message.Type == "login_qr"
-            ? WireProtocol.Encode(new { type = "login_qr", loginUrl = message.LoginUrl })
-            : WireProtocol.Encode(new { type = "login_done" }));
     }
 
     public static void Detach(ClientConnection connection)

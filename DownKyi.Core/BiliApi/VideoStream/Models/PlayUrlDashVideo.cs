@@ -17,7 +17,7 @@ public class PlayUrlDashVideo : BaseModel
         set => _backupUrl = value ?? Array.Empty<string>();
     }
 
-    // bandwidth
+    [JsonProperty("bandwidth")] public long Bandwidth { get; set; }
     [JsonProperty("mimeType")] public string MimeType { get; set; } = string.Empty;
 
     // mime_type

@@ -1,5 +1,6 @@
 using Avalonia.Headless.XUnit;
 using DownKyi.Services.Account;
+using SkiaSharp;
 
 namespace DownKyi.Desktop.Tests;
 
@@ -28,6 +29,22 @@ public sealed class LoginQrCodeRendererTests
 
             Assert.Throws<ArgumentException>(() =>
                 renderer.Render(new Uri("/relative", UriKind.Relative)));
+        }).ConfigureAwait(true);
+    }
+
+    [AvaloniaFact]
+    public async Task ShareImageKeepsQrAtFullSizeAndAddsWatermarkFooter()
+    {
+        await AvaloniaTestDispatcher.RunAsync(() =>
+        {
+            var image = LoginQrShareImageRenderer.Render(
+                new Uri("https://passport.bilibili.com/login?test=share"));
+            using var shared = SKBitmap.Decode(image);
+
+            Assert.NotNull(shared);
+            Assert.True(shared.Width > 1000);
+            Assert.Equal(shared.Width + 100, shared.Height);
+            Assert.True(image.Length > 1_000);
         }).ConfigureAwait(true);
     }
 }

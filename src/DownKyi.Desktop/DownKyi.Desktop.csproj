@@ -22,6 +22,7 @@
     <PackageReference Include="CommunityToolkit.Mvvm" />
     <PackageReference Include="Markdig" />
     <PackageReference Include="QRCoder" />
+    <PackageReference Include="SkiaSharp" />
     <PackageReference Include="System.Formats.Nrbf" />
     <PackageReference Include="Xaml.Behaviors" />
   </ItemGroup>

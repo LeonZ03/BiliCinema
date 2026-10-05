@@ -80,18 +80,10 @@ try {
         throw "Second client did not receive an independent guest identity."
     }
 
-    $qrUrl = 'https://passport.bilibili.com/h5-app/passport/login/scan?key=smoke'
-    Send-Json $guest ('{"type":"login_qr","loginUrl":"' + $qrUrl + '"}')
-    $forwardedQr = Read-Until $hostSocket 'login_qr'
-    if ($forwardedQr.loginUrl -ne $qrUrl) { throw 'Guest QR was not relayed to the host.' }
-    Send-Json $guest '{"type":"login_done"}'
-    [void](Read-Until $hostSocket 'login_done')
-    Send-Json $guest '{"type":"login_qr","loginUrl":"https://example.invalid/qr"}'
-    $badQr = Read-Until $guest 'error'
-    if ($badQr.code -ne 'invalid_login_qr') { throw 'External QR URL was accepted.' }
-    Send-Json $hostSocket ('{"type":"login_qr","loginUrl":"' + $qrUrl + '"}')
-    $hostQr = Read-Until $hostSocket 'error'
-    if ($hostQr.code -ne 'guest_only') { throw 'Host QR relay was accepted.' }
+    Send-Json $guest '{"type":"login_qr","loginUrl":"https://passport.bilibili.com/obsolete"}'
+    $unsupported = Read-Until $guest 'error'
+    if ($unsupported.code -ne 'unknown_type') { throw 'Obsolete login relay command was accepted.' }
+
 
     Send-Json $guest '{"type":"pause"}'
     $permission = Read-Until $guest "error"
@@ -146,7 +138,7 @@ try {
     Send-Json $guest '{"type":"ready","ready":true}'
     $startedTogether = Read-Until $hostSocket "snapshot" { param($m) $m.snapshot.playing -eq $true }
     Send-Json $hostSocket '{"type":"close"}'
-    Write-Host "Room server smoke passed: create/join, QR relay validation, host authority, media URL rejection, ready/play, seek, buffering recovery, reconnect, close, and deferred start."
+    Write-Host "Room server smoke passed: create/join, obsolete login relay rejection, host authority, media URL rejection, ready/play, seek, buffering recovery, reconnect, close, and deferred start."
 } finally {
     if ($null -ne $guest) { $guest.Dispose() }
     if ($null -ne $hostSocket) { $hostSocket.Dispose() }

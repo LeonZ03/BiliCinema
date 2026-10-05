@@ -29,8 +29,11 @@ internal sealed partial class WatchWindow : Window
     private readonly WatchWindowViewModel _viewModel;
     private readonly Grid _watchLayout;
     private readonly Border _sidebar;
-    private readonly Border _playerSurface;
-    private readonly NativeWebView _browser;
+    private readonly Border _onlinePlayerSurface;
+    private readonly Border _roomPlayerSurface;
+    private readonly NativeWebView _onlineBrowser;
+    private readonly NativeWebView _roomBrowser;
+    private NativeWebView CurrentBrowser => _viewModel.ShowRoom ? _roomBrowser : _onlineBrowser;
     private readonly Button _fullscreenButton;
     private readonly DispatcherTimer _fullscreenTimer;
     private WindowState _previousWindowState;
@@ -51,39 +54,21 @@ internal sealed partial class WatchWindow : Window
                        ?? throw new InvalidOperationException("观影布局未加载。");
         _sidebar = this.FindControl<Border>("Sidebar")
                    ?? throw new InvalidOperationException("导航栏未加载。");
-        _playerSurface = this.FindControl<Border>("PlayerSurface")
-                         ?? throw new InvalidOperationException("播放器容器未加载。");
-        _browser = this.FindControl<NativeWebView>("MovieWebView")
-                      ?? throw new InvalidOperationException("网页播放器未加载。");
+        _onlinePlayerSurface = this.FindControl<Border>("OnlinePlayerSurface")
+                               ?? throw new InvalidOperationException("在线播放容器未加载。");
+        _roomPlayerSurface = this.FindControl<Border>("RoomPlayerSurface")
+                             ?? throw new InvalidOperationException("房间播放器容器未加载。");
+        _onlineBrowser = this.FindControl<NativeWebView>("OnlineMovieWebView")
+                         ?? throw new InvalidOperationException("在线播放器未加载。");
+        _roomBrowser = this.FindControl<NativeWebView>("RoomMovieWebView")
+                       ?? throw new InvalidOperationException("房间播放器未加载。");
         _fullscreenButton = this.FindControl<Button>("FullscreenButton")
                             ?? throw new InvalidOperationException("全屏按钮未加载。");
         _normalBackground = Background;
-        _normalCornerRadius = _playerSurface.CornerRadius;
-        _browser.EnvironmentRequested += (_, args) =>
-        {
-            args.EnableDevTools = false;
-            if (args is WindowsWebView2EnvironmentRequestedEventArgs windows)
-            {
-                windows.IsInPrivateModeEnabled = true;
-                windows.UserDataFolder = Path.Combine(ApplicationStorage.GetRoot(), "WebView2");
-                windows.ProfileName = "BiliCinemaWatch";
-                windows.AdditionalBrowserArguments = "--autoplay-policy=no-user-gesture-required";
-            }
-        };
-        _browser.NavigationStarted += (_, args) =>
-        {
-            var url = args.Request;
-            if (url == null || url.Scheme != "about" && !(url.Scheme == Uri.UriSchemeHttps
-                    && url.Host.Equals("www.bilibili.com", StringComparison.OrdinalIgnoreCase)
-                    && url.AbsolutePath.StartsWith("/bangumi/play/ep", StringComparison.Ordinal)
-                    && long.TryParse(url.AbsolutePath.AsSpan("/bangumi/play/ep".Length), out var episodeId)
-                    && episodeId > 0))
-            {
-                args.Cancel = true;
-            }
-        };
-        _browser.NewWindowRequested += (_, args) => args.Handled = true;
-        _viewModel.AttachBrowser(_browser);
+        _normalCornerRadius = _onlinePlayerSurface.CornerRadius;
+        ConfigureBrowser(_onlineBrowser, "BiliCinemaOnline");
+        ConfigureBrowser(_roomBrowser, "BiliCinemaRoom");
+        _viewModel.AttachBrowsers(_onlineBrowser, _roomBrowser);
         _fullscreenTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(500) };
         _fullscreenTimer.Tick += OnFullscreenTimerTick;
         Opened += OnOpened;
@@ -95,6 +80,34 @@ internal sealed partial class WatchWindow : Window
         };
     }
 
+    private static void ConfigureBrowser(NativeWebView browser, string profileName)
+    {
+        browser.EnvironmentRequested += (_, args) =>
+        {
+            args.EnableDevTools = false;
+            if (args is WindowsWebView2EnvironmentRequestedEventArgs windows)
+            {
+                windows.IsInPrivateModeEnabled = true;
+                windows.UserDataFolder = Path.Combine(ApplicationStorage.GetRoot(), "WebView2");
+                windows.ProfileName = profileName;
+                windows.AdditionalBrowserArguments = "--autoplay-policy=no-user-gesture-required";
+            }
+        };
+        browser.NavigationStarted += (_, args) =>
+        {
+            var url = args.Request;
+            if (url == null || url.Scheme != "about" && !(url.Scheme == Uri.UriSchemeHttps
+                    && url.Host.Equals("www.bilibili.com", StringComparison.OrdinalIgnoreCase)
+                    && url.AbsolutePath.StartsWith("/bangumi/play/ep", StringComparison.Ordinal)
+                    && long.TryParse(url.AbsolutePath.AsSpan("/bangumi/play/ep".Length), out var episodeId)
+                    && episodeId > 0))
+            {
+                args.Cancel = true;
+            }
+        };
+        browser.NewWindowRequested += (_, args) => args.Handled = true;
+    }
+
     private async void OnFullscreenClick(object? sender, RoutedEventArgs args)
     {
         var exitBrowserFullscreen = _isFullscreen && _browserFullscreen;
@@ -104,7 +117,7 @@ internal sealed partial class WatchWindow : Window
         {
             try
             {
-                await _browser.InvokeScript("document.exitFullscreen?.()").ConfigureAwait(true);
+                await CurrentBrowser.InvokeScript("document.exitFullscreen?.()").ConfigureAwait(true);
             }
             catch (Exception error) when (error is InvalidOperationException
                 or ObjectDisposedException or System.Runtime.InteropServices.COMException)
@@ -136,7 +149,7 @@ internal sealed partial class WatchWindow : Window
         _checkingFullscreen = true;
         try
         {
-            var result = await _browser.InvokeScript(FullscreenStateScript).ConfigureAwait(true);
+            var result = await CurrentBrowser.InvokeScript(FullscreenStateScript).ConfigureAwait(true);
             if (_windowClosing)
             {
                 return;
@@ -151,7 +164,7 @@ internal sealed partial class WatchWindow : Window
                 ToggleFullscreen();
                 if (wantsFullscreen)
                 {
-                    await _browser.InvokeScript("document.exitFullscreen?.()").ConfigureAwait(true);
+                    await CurrentBrowser.InvokeScript("document.exitFullscreen?.()").ConfigureAwait(true);
                 }
                 return;
             }
@@ -197,8 +210,10 @@ internal sealed partial class WatchWindow : Window
             _watchLayout.Margin = new Avalonia.Thickness(22);
             _watchLayout.RowDefinitions = new RowDefinitions("Auto,Auto,*");
             _watchLayout.RowSpacing = 14;
-            _playerSurface.CornerRadius = _normalCornerRadius;
-            _browser.Height = 450;
+            _onlinePlayerSurface.CornerRadius = _normalCornerRadius;
+            _roomPlayerSurface.CornerRadius = _normalCornerRadius;
+            _onlineBrowser.Height = 440;
+            _roomBrowser.Height = 440;
             _fullscreenButton.Content = "全屏播放";
             _isFullscreen = false;
         }
@@ -210,8 +225,10 @@ internal sealed partial class WatchWindow : Window
             _watchLayout.Margin = new Avalonia.Thickness(0);
             _watchLayout.RowDefinitions = new RowDefinitions("*,0,0");
             _watchLayout.RowSpacing = 0;
-            _playerSurface.CornerRadius = new Avalonia.CornerRadius(0);
-            _browser.Height = double.NaN;
+            _onlinePlayerSurface.CornerRadius = new Avalonia.CornerRadius(0);
+            _roomPlayerSurface.CornerRadius = new Avalonia.CornerRadius(0);
+            _onlineBrowser.Height = double.NaN;
+            _roomBrowser.Height = double.NaN;
             _isFullscreen = true;
             WindowState = WindowState.FullScreen;
         }

@@ -14,7 +14,7 @@ internal static class BundledTools
 
     public static void EnsureDownloadTools()
     {
-        var aria = Extract("aria2c.exe", Path.Combine("aria2", "aria2c.exe"));
+        var aria = EnsureAria2Tool();
         var ffmpeg = Extract("ffmpeg.exe", Path.Combine("ffmpeg", "ffmpeg.exe"));
         var ffprobe = Extract("ffprobe.exe", Path.Combine("ffmpeg", "ffprobe.exe"));
         Extract("ffmpeg-LICENSE.txt", Path.Combine("ffmpeg", "LICENSE.txt"));
@@ -23,8 +23,17 @@ internal static class BundledTools
             // Source builds still use the original external asset scripts and paths.
             return;
         }
+    }
 
-        Environment.SetEnvironmentVariable("BILICINEMA_TOOL_ROOT", ToolRoot);
+    public static string? EnsureAria2Tool()
+    {
+        var aria = Extract("aria2c.exe", Path.Combine("aria2", "aria2c.exe"));
+        if (aria != null)
+        {
+            Environment.SetEnvironmentVariable("BILICINEMA_TOOL_ROOT", ToolRoot);
+        }
+
+        return aria;
     }
 
     private static string? Extract(string resourceFileName, string relativePath)

@@ -556,6 +556,12 @@ public sealed class VideoDetailCommandStateTests
 
     private sealed class ClipboardServiceStub : IClipboardService
     {
+        public Task SetPngImageAsync(byte[] imagePng, CancellationToken cancellationToken = default)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            return Task.CompletedTask;
+        }
+
         public Task SetTextAsync(string text, CancellationToken cancellationToken = default)
         {
             cancellationToken.ThrowIfCancellationRequested();

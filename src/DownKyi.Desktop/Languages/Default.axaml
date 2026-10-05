@@ -121,6 +121,7 @@
     <system:String x:Key="Order">序号</system:String>
     <system:String x:Key="Name">名称</system:String>
     <system:String x:Key="Duration">时长</system:String>
+    <system:String x:Key="EstimatedSize">预计大小</system:String>
     <system:String x:Key="AudioQuality">音质</system:String>
     <system:String x:Key="VideoQuality">画质</system:String>
     <system:String x:Key="VideoCodec">视频编码</system:String>

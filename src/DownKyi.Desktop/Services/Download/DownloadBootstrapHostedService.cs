@@ -7,6 +7,7 @@ using DownKyi.Application.Diagnostics;
 using DownKyi.Application.Downloads;
 using DownKyi.Domain.Downloads;
 using DownKyi.Platform;
+using DownKyi.Services.Watch;
 using DownKyi.ViewModels.DownloadManager;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
@@ -56,6 +57,9 @@ internal sealed class DownloadBootstrapHostedService : IHostedService, IDisposab
         IReadOnlyList<DownloadTask> startupTasks = [];
         try
         {
+            // Download startup runs before the watch window is opened. Prepare only
+            // aria2 here; media tools are extracted when the watch page needs them.
+            BundledTools.EnsureAria2Tool();
             var state = await LoadStartupStateAsync(cancellationToken).ConfigureAwait(false);
             var blocked = new HashSet<DownloadTaskId>();
             if (_fileService != null)

@@ -5,15 +5,31 @@ using System.Threading;
 using System.Threading.Tasks;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using DownKyi.Core.BiliApi.BiliUtils;
 using DownKyi.Core.BiliApi.Models;
 using DownKyi.Core.BiliApi.VideoStream.Models;
+using DownKyi.Core.Utils;
 using Newtonsoft.Json;
 
 namespace DownKyi.Presentation;
 
 internal class VideoPage : ObservableObject
 {
-    public PlayUrl? PlayUrl { get; set; }
+    private PlayUrl? _playUrl;
+
+    public PlayUrl? PlayUrl
+    {
+        get => _playUrl;
+        set
+        {
+            if (SetProperty(ref _playUrl, value))
+            {
+                OnPropertyChanged(nameof(EstimatedSizeText));
+            }
+        }
+    }
+
+    public string EstimatedSizeText => GetEstimatedSizeText();
 
     public long Avid { get; set; }
     public string Bvid { get; set; } = string.Empty;
@@ -77,7 +93,10 @@ internal class VideoPage : ObservableObject
         {
             if (value != null)
             {
-                SetProperty(ref audioQualityFormat, value);
+                if (SetProperty(ref audioQualityFormat, value))
+                {
+                    OnPropertyChanged(nameof(EstimatedSizeText));
+                }
             }
         }
     }
@@ -95,7 +114,74 @@ internal class VideoPage : ObservableObject
     public VideoQuality VideoQuality
     {
         get => videoQuality;
-        set => SetProperty(ref videoQuality, value);
+        set
+        {
+            if (ReferenceEquals(videoQuality, value))
+            {
+                return;
+            }
+
+            videoQuality.PropertyChanged -= OnVideoQualityChanged;
+            if (SetProperty(ref videoQuality, value))
+            {
+                videoQuality.PropertyChanged += OnVideoQualityChanged;
+                OnPropertyChanged(nameof(EstimatedSizeText));
+            }
+        }
+    }
+
+    private void OnVideoQualityChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs args)
+    {
+        if (args.PropertyName is nameof(VideoQuality.Quality) or nameof(VideoQuality.SelectedVideoCodec))
+        {
+            OnPropertyChanged(nameof(EstimatedSizeText));
+        }
+    }
+
+    private string GetEstimatedSizeText()
+    {
+        if (PlayUrl?.Durl is { Count: > 0 } durl && durl.All(item => item.Size > 0))
+        {
+            return Format.FormatFileSize(durl.Sum(item => item.Size));
+        }
+
+        var dash = PlayUrl?.Dash;
+        if (dash == null || dash.Duration <= 0 || VideoQuality.Quality <= 0)
+        {
+            return "—";
+        }
+
+        var codecId = PlaybackQualityCatalog.GetCodecIds()
+            .FirstOrDefault(codec => codec.Name == VideoQuality.SelectedVideoCodec)?.Id;
+        var video = dash.Video?.FirstOrDefault(track => track.Id == VideoQuality.Quality
+            && (codecId == null || track.CodecId == codecId.Value));
+        if (video == null || video.Bandwidth <= 0)
+        {
+            return "—";
+        }
+
+        var audio = GetSelectedAudioTrack(dash);
+        var bitsPerSecond = video.Bandwidth + Math.Max(0, audio?.Bandwidth ?? 0);
+        var bytes = bitsPerSecond * (double)dash.Duration / 8d;
+        if (!double.IsFinite(bytes) || bytes <= 0 || bytes > long.MaxValue)
+        {
+            return "—";
+        }
+
+        return "约 " + Format.FormatFileSize((long)Math.Ceiling(bytes));
+    }
+
+    private PlayUrlDashVideo? GetSelectedAudioTrack(PlayUrlDash dash)
+    {
+        var qualityId = PlaybackQualityCatalog.GetAudioQualities()
+            .FirstOrDefault(quality => quality.Name == AudioQualityFormat)?.Id;
+        return qualityId switch
+        {
+            30250 => dash.Dolby?.Audio is { Count: > 0 } dolbyAudio ? dolbyAudio[0] : null,
+            30251 => dash.Flac?.Audio,
+            null => null,
+            _ => dash.Audio?.FirstOrDefault(track => track.Id == qualityId.Value)
+        };
     }
 
     [JsonIgnore]

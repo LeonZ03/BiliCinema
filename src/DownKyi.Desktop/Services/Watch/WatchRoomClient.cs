@@ -20,8 +20,6 @@ internal sealed class WatchRoomClient : IAsyncDisposable
     public event Action<WatchRoomSnapshot>? SnapshotReceived;
     public event Action? Disconnected;
     public event Action? Closed;
-    public event Action<string>? LoginQrReceived;
-    public event Action? GuestLoginCompleted;
 
     public string? RoomCode { get; private set; }
     public string? ClientId { get; private set; }
@@ -149,10 +147,6 @@ internal sealed class WatchRoomClient : IAsyncDisposable
                 using var message = await ReceiveOneAsync(socket, cancellationToken).ConfigureAwait(false);
                 var root = message.RootElement;
                 var type = root.GetProperty("type").GetString();
-                if (TryHandleLoginMessage(root, type))
-                {
-                    continue;
-                }
                 if (type == "snapshot")
                 {
                     var snapshot = root.GetProperty("snapshot")
@@ -206,32 +200,6 @@ internal sealed class WatchRoomClient : IAsyncDisposable
                 Disconnected?.Invoke();
             }
         }
-    }
-
-    private bool TryHandleLoginMessage(JsonElement root, string? type)
-    {
-        if (type == "login_qr")
-        {
-            if (IsHost && root.TryGetProperty("loginUrl", out var url)
-                && url.ValueKind == JsonValueKind.String && url.GetString() is { } loginUrl)
-            {
-                LoginQrReceived?.Invoke(loginUrl);
-            }
-
-            return true;
-        }
-
-        if (type == "login_done")
-        {
-            if (IsHost)
-            {
-                GuestLoginCompleted?.Invoke();
-            }
-
-            return true;
-        }
-
-        return false;
     }
 
     private static async Task<JsonDocument> ReceiveOneAsync(

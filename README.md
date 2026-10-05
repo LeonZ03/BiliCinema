@@ -6,7 +6,7 @@ BiliCinema 基于 [DownKyi Core](https://github.com/crazysmile-PhD/downkyicore) 
 
 双击 `artifacts/BiliCinema-win-x64/BiliCinema.exe`。它是 Windows x64 自包含单文件程序；目标电脑无需 .NET SDK，也不用另开房间服务窗口。播放 B 站网页视频需要系统具备 Microsoft Edge WebView2 Runtime。此目录是本地构建产物，不提交到 Git，也不发布压缩包。
 
-首次进入下载页或创建房间时，程序会把内置的下载工具或 Cloudflare Tunnel 客户端释放到 `%LOCALAPPDATA%\BiliCinema\Tools`，并显示准备进度。视频播放走本机 WebView2 与 B 站；房间服务只传控制与临时扫码请求。
+程序首次启动时会准备内置下载器；进入下载页或创建房间时会按需准备其他媒体工具或 Cloudflare Tunnel 客户端。登录页可把二维码连同 BiliCinema 标识复制为图片，方便私下发送给帮忙扫码的人。视频播放走本机 WebView2 与 B 站；房间服务只传选片和播放控制。下载页解析影片后会按所选清晰度、编码和音质显示每项预计大小。
 
 当前使用和房间同步说明见 [观影使用说明](docs/watch-together.md)。
 
