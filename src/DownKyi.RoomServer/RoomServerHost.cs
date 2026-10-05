@@ -3,6 +3,7 @@ using System.Net.WebSockets;
 using System.Text.Json;
 
 [assembly: System.Runtime.CompilerServices.InternalsVisibleTo("DownKyi.Desktop")]
+[assembly: System.Runtime.CompilerServices.InternalsVisibleTo("DownKyi.Desktop.Tests")]
 
 namespace DownKyi.RoomServer;
 

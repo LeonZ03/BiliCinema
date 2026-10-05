@@ -125,13 +125,7 @@
 
                 <StackPanel
                     Name="NameUp"
-                    Grid.Column="1"
-                    Cursor="Hand">
-                    <Interaction.Behaviors>
-                        <EventTriggerBehavior EventName="PointerReleased">
-                            <InvokeCommandAction Command="{Binding UpperCommand}" />
-                        </EventTriggerBehavior>
-                    </Interaction.Behaviors>
+                    Grid.Column="1">
                     <Image
                         Width="48"
                         Height="48"

@@ -28,7 +28,9 @@ internal sealed partial class WatchWindow : Window
             if (!window.__biliCinemaEscapeHook) {
                 window.__biliCinemaEscapeHook = true;
                 window.addEventListener('keydown', event => {
-                    if (event.key === 'Escape') window.__biliCinemaEscapeRequested = true;
+                    if (event.key === 'Escape'
+                        && !window.__biliCinemaChatUi?.host?.classList.contains('bc-open'))
+                        window.__biliCinemaEscapeRequested = true;
                 }, true);
             }
             const exit = window.__biliCinemaEscapeRequested === true;
@@ -70,6 +72,7 @@ internal sealed partial class WatchWindow : Window
     private bool _chatOverlayErrorLogged;
     private int _lastChatRevision = -1;
     private int _lastChatToastSequence = -1;
+    private int _lastHostActionToastSequence = -1;
     private int _lastChatMemberCount = -1;
     private bool _lastChatFullscreen;
     private bool _lastChatInRoom;
@@ -174,11 +177,12 @@ internal sealed partial class WatchWindow : Window
         browser.NavigationStarted += (_, args) =>
         {
             var url = args.Request;
-            if (url == null || url.Scheme != "about" && !(url.Scheme == Uri.UriSchemeHttps
+            if (url == null || url.AbsoluteUri != "about:blank" && !(url.Scheme == Uri.UriSchemeHttps
                     && url.Host.Equals("www.bilibili.com", StringComparison.OrdinalIgnoreCase)
-                    && url.AbsolutePath.StartsWith("/bangumi/play/ep", StringComparison.Ordinal)
-                    && long.TryParse(url.AbsolutePath.AsSpan("/bangumi/play/ep".Length), out var episodeId)
-                    && episodeId > 0))
+                    && (url.AbsolutePath.StartsWith("/bangumi/play/ep", StringComparison.Ordinal)
+                        && long.TryParse(url.AbsolutePath.AsSpan("/bangumi/play/ep".Length), out var episodeId)
+                        && episodeId > 0
+                        || IsVideoPlaybackPath(url.AbsolutePath))))
             {
                 args.Cancel = true;
             }
@@ -186,11 +190,29 @@ internal sealed partial class WatchWindow : Window
         browser.NewWindowRequested += (_, args) => args.Handled = true;
     }
 
+    private static bool IsVideoPlaybackPath(string path)
+    {
+        const string prefix = "/video/";
+        if (!path.StartsWith(prefix, StringComparison.Ordinal)) return false;
+        var id = path.AsSpan(prefix.Length).TrimEnd('/');
+        if (id.Length == 12 && id.StartsWith("BV", StringComparison.Ordinal))
+        {
+            foreach (var character in id[2..])
+            {
+                if (!char.IsAsciiLetterOrDigit(character)) return false;
+            }
+            return true;
+        }
+        return id.Length > 2 && id[0] == 'a' && id[1] == 'v'
+            && long.TryParse(id[2..], out var avid) && avid > 0;
+    }
+
     protected override async void OnKeyDown(KeyEventArgs args)
     {
         var shortcutAvailable = _viewModel.ShowRoom && _viewModel.PlayerReady
             && args.KeyModifiers == KeyModifiers.None
-            && FocusManager?.GetFocusedElement() is not TextBox;
+            && FocusManager?.GetFocusedElement() is not TextBox
+            && !_viewModel.ChatPanelOpen;
         if (shortcutAvailable && args.Key == Key.D)
         {
             args.Handled = true;
@@ -206,8 +228,8 @@ internal sealed partial class WatchWindow : Window
             return;
         }
 
-        if ((_isFullscreen && args.Key == Key.Escape)
-            || args.Key == Key.F11
+        if (!_viewModel.ChatPanelOpen && ((_isFullscreen && args.Key == Key.Escape)
+            || args.Key == Key.F11)
             || (shortcutAvailable && args.Key == Key.F))
         {
             var exitBrowserFullscreen = _isFullscreen && _browserFullscreen;
@@ -306,10 +328,12 @@ internal sealed partial class WatchWindow : Window
         var inRoom = _viewModel.IsInRoom;
         var chatRevision = _viewModel.ChatRevision;
         var toastSequence = _viewModel.ChatToastSequence;
+        var actionSequence = _viewModel.HostActionToastSequence;
         var memberCount = _viewModel.RoomMemberCount;
         if (_windowClosing || !_viewModel.ShowRoom || !_viewModel.PlayerReady
             || !chatMissing && chatRevision == _lastChatRevision
                 && toastSequence == _lastChatToastSequence
+                && actionSequence == _lastHostActionToastSequence
                 && memberCount == _lastChatMemberCount
                 && _isFullscreen == _lastChatFullscreen
                 && inRoom == _lastChatInRoom)
@@ -328,9 +352,13 @@ internal sealed partial class WatchWindow : Window
                 memberCount,
                 chatRevision,
                 toastSequence,
-                _viewModel.ChatToastRemainingMilliseconds)).ConfigureAwait(true);
+                _viewModel.ChatToastRemainingMilliseconds,
+                _viewModel.HostActionToast,
+                actionSequence,
+                _viewModel.HostActionToastRemainingMilliseconds)).ConfigureAwait(true);
             _lastChatRevision = chatRevision;
             _lastChatToastSequence = toastSequence;
+            _lastHostActionToastSequence = actionSequence;
             _lastChatMemberCount = memberCount;
             _lastChatFullscreen = _isFullscreen;
             _lastChatInRoom = inRoom;

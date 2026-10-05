@@ -192,8 +192,7 @@ internal sealed class RoomCoordinator : BackgroundService
 
             MemberSlot slot;
             string role;
-            bool preserveWaitingStart = message.ClientId is null && existing.Guest is null &&
-                (existing.StartRequested || existing.Playing);
+            bool preserveWaitingStart = false;
             if (message.ClientId is not null)
             {
                 if (message.ClientId == existing.Host.ClientId)
@@ -213,7 +212,7 @@ internal sealed class RoomCoordinator : BackgroundService
             }
             else
             {
-                if (existing.Guest is not null)
+                if (existing.Guest?.Connection is not null)
                 {
                     throw new RoomProtocolException("room_full");
                 }
@@ -222,6 +221,10 @@ internal sealed class RoomCoordinator : BackgroundService
                 role = "guest";
             }
 
+            if (role == "guest")
+            {
+                preserveWaitingStart = existing.StartRequested || existing.Playing;
+            }
             slot.Connection?.Socket.Abort();
             slot.Connection = connection;
             slot.DisconnectedAt = null;
@@ -330,6 +333,16 @@ internal sealed class RoomCoordinator : BackgroundService
                     throw new RoomProtocolException("invalid_command");
             }
 
+            if (isHost && message.Type is ("select" or "play" or "pause" or "seek" or "rate"))
+            {
+                room.Guest?.Connection?.Enqueue(WireProtocol.Encode(new
+                {
+                    type = "hostAction",
+                    action = message.Type,
+                    positionSeconds = message.PositionSeconds,
+                    rate = message.Rate
+                }));
+            }
             room.Version++;
             room.Broadcast();
         }

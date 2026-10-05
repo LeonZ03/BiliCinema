@@ -11,8 +11,8 @@ using DownKyi.Presentation;
 
 namespace DownKyi.Services.Watch;
 
-// Use Bilibili's normal bangumi page rather than its restricted external embed player.
-// Its HTML video still provides the existing room protocol's position and playback controls.
+// Use Bilibili's normal playback page. Its HTML video supplies the room's
+// position and playback controls for both bangumi and ordinary videos.
 internal sealed class BilibiliWebPlaybackSession : IDisposable
 {
     private const string Video = "document.querySelector('#bilibili-player video, #bilibiliPlayer video, .bpx-player-container video, video')";
@@ -145,9 +145,10 @@ internal sealed class BilibiliWebPlaybackSession : IDisposable
     public static async Task<BilibiliWebPlaybackSession> StartAsync(
         NativeWebView browser, VideoPage page, bool startPaused, CancellationToken cancellationToken)
     {
-        if (page.EpisodeId <= 0)
+        if (page.EpisodeId <= 0 && (page.Cid <= 0 ||
+            (string.IsNullOrEmpty(page.Bvid) && page.Avid <= 0)))
         {
-            throw new InvalidOperationException("网页播放器只支持 B 站影片剧集链接。");
+            throw new InvalidOperationException("此链接没有可播放的 B 站视频页面。");
         }
 
         // Keep the private WebView2 session cookies across player reloads. Bilibili
@@ -188,7 +189,9 @@ internal sealed class BilibiliWebPlaybackSession : IDisposable
             });
         }
 
-        var playerUrl = new Uri($"https://www.bilibili.com/bangumi/play/ep{page.EpisodeId.ToString(CultureInfo.InvariantCulture)}");
+        var playerUrl = page.EpisodeId > 0
+            ? new Uri($"https://www.bilibili.com/bangumi/play/ep{page.EpisodeId.ToString(CultureInfo.InvariantCulture)}")
+            : new Uri($"https://www.bilibili.com/video/{(string.IsNullOrEmpty(page.Bvid) ? $"av{page.Avid.ToString(CultureInfo.InvariantCulture)}" : page.Bvid)}?p={Math.Max(1, page.Page).ToString(CultureInfo.InvariantCulture)}");
         var session = new BilibiliWebPlaybackSession(browser, playerUrl);
         try
         {
@@ -240,7 +243,7 @@ internal sealed class BilibiliWebPlaybackSession : IDisposable
                 await Task.Delay(100, cancellationToken).ConfigureAwait(true);
             }
 
-            throw new InvalidOperationException("B 站番剧网页未出现可用播放器，请确认该影片允许网页播放。");
+            throw new InvalidOperationException("B 站网页未出现可用播放器，请确认该视频允许网页播放。");
         }
         catch
         {

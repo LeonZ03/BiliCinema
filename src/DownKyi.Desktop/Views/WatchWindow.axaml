@@ -32,7 +32,7 @@
                     <Button Classes="nav" Classes.selected="{Binding ShowRoom}" Content="观影房间" Command="{Binding ShowRoomCommand}" />
                     <Button Classes="nav" Classes.selected="{Binding ShowDownload}" Content="下载影片" Command="{Binding ShowDownloadCommand}" />
                 </StackPanel>
-                <TextBlock Text="B 站影片播放与同步" VerticalAlignment="Bottom" Margin="7,0,0,0"
+                <TextBlock Text="B 站视频播放与同步" VerticalAlignment="Bottom" Margin="7,0,0,0"
                            Foreground="{DynamicResource BrushTextSecondary}" FontSize="12" />
             </DockPanel>
         </Border>
@@ -62,7 +62,7 @@
                             <Grid ColumnDefinitions="*,300" ColumnSpacing="16">
                                 <StackPanel Grid.Column="0" Spacing="12">
                                     <TextBlock Text="观影房间" FontSize="24" FontWeight="SemiBold" />
-                                    <TextBlock Text="解析后可直接在上方视频内播放。创建房间后可邀请对方同步观看；每台电脑都直接从 B 站播放。"
+                                    <TextBlock Text="解析视频后可直接在上方播放。创建房间后可邀请对方同步观看；每台电脑都直接从 B 站播放。"
                                                TextWrapping="Wrap" Foreground="{DynamicResource BrushTextSecondary}" />
                                     <StackPanel Orientation="Horizontal" Spacing="10">
                                         <Border IsVisible="{Binding IsInRoom}" Padding="9,4"

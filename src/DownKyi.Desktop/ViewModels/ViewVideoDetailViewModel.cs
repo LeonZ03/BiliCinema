@@ -17,7 +17,6 @@ using DownKyi.Presentation;
 using DownKyi.Services;
 using DownKyi.Services.Download;
 using DownKyi.Services.Video;
-using DownKyi.Services.Watch;
 using DownKyi.Utils;
 using DownKyi.ViewModels.Dialogs;
 using DownKyi.ViewModels.UiState;
@@ -35,7 +34,6 @@ internal sealed class ViewVideoDetailViewModel : ViewModelBase
     private readonly ILogger<ViewVideoDetailViewModel> _logger;
     private readonly ISettingsStore _settingsStore;
     private readonly IVideoDetailWorkflowCoordinator _workflow;
-    private MpvPlaybackSession? _onlinePlayer;
 
     public ViewVideoDetailViewModel(
         IDesktopInteractionContext desktopInteractions,
@@ -60,14 +58,11 @@ internal sealed class ViewVideoDetailViewModel : ViewModelBase
         InputCommand = new DownKyiAsyncDelegateCommand(ExecuteInputCommandAsync, _logger, () => !UiState.IsBusy, executionGate: operationCommandGate);
         InputSearchCommand = new RelayCommand(() => _workflow.ApplySearch(UiState.InputSearchText));
         CopyCoverUrlCommand = new DownKyiAsyncDelegateCommand(ExecuteCopyCoverUrlCommandAsync, _logger);
-        UpperCommand = new RelayCommand(ExecuteUpperCommand);
         SelectAllCommand = new RelayCommand(() => SetAllSelected(UiState.IsSelectAll));
         ClearSelectionCommand = new RelayCommand(() => SetAllSelected(isSelected: false));
         ParseCommand = new DownKyiAsyncDelegateCommand<object>(ExecuteParseCommandAsync, _logger, _ => !UiState.IsBusy, executionGate: operationCommandGate);
         ParseAllVideoCommand = new DownKyiAsyncDelegateCommand(ExecuteParseAllVideoCommandAsync, _logger, () => !UiState.IsBusy, executionGate: operationCommandGate);
         AddToDownloadCommand = new DownKyiAsyncDelegateCommand(() => AddToDownloadAsync(false), _logger, () => !UiState.IsBusy, executionGate: operationCommandGate);
-        PlayOnlineCommand = new DownKyiAsyncDelegateCommand(PlayOnlineAsync, _logger, () => !UiState.IsBusy, executionGate: operationCommandGate);
-        StopOnlineCommand = new RelayCommand(StopOnline);
         UiState.IsBusyChanged += OnIsBusyChanged;
         _downloadLists.PropertyChanged += OnDownloadListsPropertyChanged;
     }
@@ -92,14 +87,11 @@ internal sealed class ViewVideoDetailViewModel : ViewModelBase
     public DownKyiAsyncDelegateCommand InputCommand { get; }
     public ICommand InputSearchCommand { get; }
     public ICommand CopyCoverUrlCommand { get; }
-    public RelayCommand UpperCommand { get; }
     public RelayCommand SelectAllCommand { get; }
     public RelayCommand ClearSelectionCommand { get; }
     public DownKyiAsyncDelegateCommand<object> ParseCommand { get; }
     public DownKyiAsyncDelegateCommand ParseAllVideoCommand { get; }
     public DownKyiAsyncDelegateCommand AddToDownloadCommand { get; }
-    public DownKyiAsyncDelegateCommand PlayOnlineCommand { get; }
-    public RelayCommand StopOnlineCommand { get; }
 
     private void OnIsBusyChanged()
     {
@@ -107,72 +99,10 @@ internal sealed class ViewVideoDetailViewModel : ViewModelBase
         ParseCommand.NotifyCanExecuteChanged();
         ParseAllVideoCommand.NotifyCanExecuteChanged();
         AddToDownloadCommand.NotifyCanExecuteChanged();
-        PlayOnlineCommand.NotifyCanExecuteChanged();
-    }
-
-    private async Task PlayOnlineAsync()
-    {
-        var page = UiState.SelectedVideoPage
-                   ?? VideoSections.SelectMany(section => section.VideoPages).FirstOrDefault();
-        if (page == null)
-        {
-            Notifications.Show("请先输入并解析影片。");
-            return;
-        }
-
-        try
-        {
-            if (page.PlayUrl == null)
-            {
-                var operation = _workflow.StartOperation();
-                var result = await _workflow.LoadPageStreamAsync(page, operation).ConfigureAwait(true);
-                if (result?.PlayUrl == null || !_workflow.IsCurrent(operation))
-                {
-                    Notifications.Show("媒体解析失败，请确认登录状态后重试。");
-                    return;
-                }
-
-                VideoPagePlaybackMapper.ApplyPlayUrl(result.PlayUrl, page, _settingsStore.Current);
-            }
-
-            var tracks = PlaybackTrackSelector.SelectForOnlinePlayback(page);
-            StopOnline();
-            _onlinePlayer = await MpvPlaybackSession.StartAsync(
-                tracks,
-                _settingsStore.Current.Network.UserAgent,
-                CancellationToken.None).ConfigureAwait(true);
-            var decoded = await _onlinePlayer.GetDecodedDimensionsAsync(CancellationToken.None).ConfigureAwait(true);
-            var dimensions = decoded is { } size
-                ? $"{size.Width} × {size.Height}"
-                : $"轨道标注 {tracks.Width} × {tracks.Height}（待解码确认）";
-            var audioQuality = PlaybackQualityCatalog.GetAudioQualities()
-                .FirstOrDefault(audio => audio.Id == tracks.AudioQuality)?.Name
-                ?? $"音轨 {tracks.AudioQuality}";
-            var requestedHighAudio = page.AudioQualityFormat
-                == PlaybackQualityCatalog.GetAudioQualities()
-                    .First(audio => audio.Id == 30280).Name;
-            var audioNote = requestedHighAudio && tracks.AudioQuality == 30232
-                ? "（在线播放优先稳定跳转）"
-                : string.Empty;
-            UiState.OnlinePlaybackInfo = $"在线播放：{dimensions} · {tracks.VideoCodec} · {audioQuality} {tracks.AudioCodec}{audioNote}";
-        }
-        catch (Exception error) when (error is InvalidOperationException or System.IO.IOException
-            or System.ComponentModel.Win32Exception or System.TimeoutException)
-        {
-            Notifications.Show(error.Message);
-        }
-    }
-
-    private void StopOnline()
-    {
-        _onlinePlayer?.Dispose();
-        _onlinePlayer = null;
-        UiState.OnlinePlaybackInfo = string.Empty;
     }
 
     protected internal override void ExecuteBackSpace()
     {
-        StopOnline();
         _workflow.Cancel();
         if (TryNavigateBack())
         {
@@ -227,20 +157,6 @@ internal sealed class ViewVideoDetailViewModel : ViewModelBase
 
         await _clipboardService.SetTextAsync(coverUrl).ConfigureAwait(true);
         _logger.LogInformationMessage("Video cover URL copied to the clipboard.");
-    }
-
-    private void ExecuteUpperCommand()
-    {
-        if (UiState.VideoInfoView != null)
-        {
-            var route = _settingsStore.Current.User.Mid == UiState.VideoInfoView.UpperMid
-                ? AppRoute.MySpace
-                : AppRoute.UserSpace;
-            Navigation.Navigate(new AppNavigationRequest(
-                route,
-                AppRoute.VideoDetail,
-                UiState.VideoInfoView.UpperMid));
-        }
     }
 
     private void SetAllSelected(bool isSelected)
@@ -353,7 +269,6 @@ internal sealed class ViewVideoDetailViewModel : ViewModelBase
 
     private void ResetView()
     {
-        StopOnline();
         _workflow.Reset();
         UiState.GridResetVersion++;
         SetDisplayState(VideoDetailDisplayState.Busy);
@@ -506,7 +421,6 @@ internal sealed class ViewVideoDetailViewModel : ViewModelBase
         {
             UiState.IsBusyChanged -= OnIsBusyChanged;
             _downloadLists.PropertyChanged -= OnDownloadListsPropertyChanged;
-            StopOnline();
             _workflow.Dispose();
         }
 

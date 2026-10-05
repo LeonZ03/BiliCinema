@@ -36,7 +36,10 @@ public sealed record ApplicationSettings(
     DanmakuApplicationSettings Danmaku,
     AboutApplicationSettings About,
     UserApplicationSettings User,
-    WindowApplicationSettings Window);
+    WindowApplicationSettings Window)
+{
+    public string RoomNickname { get; init; } = string.Empty;
+}
 
 public sealed record BasicApplicationSettings(
     ThemeMode ThemeMode,
@@ -309,10 +312,12 @@ internal static class ApplicationSettingsValidator
         var schemaVersion = settings.SchemaVersion == CurrentSchemaVersion
             ? settings.SchemaVersion
             : Corrected("SchemaVersion", CurrentSchemaVersion, corrections);
+        var roomNickname = ValidateRoomNickname(settings.RoomNickname, corrections);
         return new SettingsValidationResult(
             settings with
             {
                 SchemaVersion = schemaVersion,
+                RoomNickname = roomNickname,
                 Basic = basic,
                 Network = network,
                 Video = video,
@@ -322,6 +327,20 @@ internal static class ApplicationSettingsValidator
                 Window = window
             },
             corrections.ToImmutable());
+    }
+
+    private static string ValidateRoomNickname(string? value, ImmutableArray<string>.Builder corrections)
+    {
+        var nickname = value?.Trim() ?? string.Empty;
+        if (nickname.Length > 24 || nickname.Any(char.IsControl))
+        {
+            nickname = string.Empty;
+        }
+        if (!string.Equals(nickname, value, StringComparison.Ordinal))
+        {
+            corrections.Add("RoomNickname");
+        }
+        return nickname;
     }
 
     private static AllowStatus AllowValue(

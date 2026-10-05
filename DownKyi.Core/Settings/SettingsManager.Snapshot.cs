@@ -126,7 +126,10 @@ public partial class SettingsManager
                 user.IsVip,
                 user.ImgKey,
                 user.SubKey),
-            new WindowApplicationSettings(window.Width, window.Height, window.X, window.Y));
+            new WindowApplicationSettings(window.Width, window.Height, window.X, window.Y))
+        {
+            RoomNickname = _appSettings.RoomNickname
+        };
 
     }
 
@@ -140,6 +143,7 @@ public partial class SettingsManager
             try
             {
                 SetProperty(_appSettings.SchemaVersion, validated.SchemaVersion, value => _appSettings.SchemaVersion = value);
+                SetProperty(_appSettings.RoomNickname, validated.RoomNickname, value => _appSettings.RoomNickname = value);
                 SetThemeMode(validated.Basic.ThemeMode);
                 SetAfterDownloadOperation(validated.Basic.AfterDownload);
                 SetIsListenClipboard(validated.Basic.IsListenClipboard);

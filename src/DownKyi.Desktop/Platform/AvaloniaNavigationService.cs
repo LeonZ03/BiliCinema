@@ -106,7 +106,7 @@ internal sealed class AvaloniaNavigationService : IAppNavigationService, IDispos
         bool keepHistory)
     {
         ThrowIfDisposed();
-        if (!_allowPrivateAccountRoutes && route is AppRoute.MySpace or AppRoute.MyFavorites
+        if (!_allowPrivateAccountRoutes && route is AppRoute.UserSpace or AppRoute.MySpace or AppRoute.MyFavorites
                 or AppRoute.MyBangumiFollow or AppRoute.MyToViewVideo or AppRoute.MyHistory)
         {
             return;

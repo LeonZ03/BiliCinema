@@ -15,6 +15,7 @@ using CommunityToolkit.Mvvm.Input;
 using DownKyi.Application.Desktop;
 using DownKyi.Core.BiliApi.BiliUtils;
 using DownKyi.Core.BiliApi.Login;
+using DownKyi.Core.Settings;
 using DownKyi.Presentation;
 using DownKyi.RoomServer;
 using DownKyi.Services.Account;
@@ -30,6 +31,7 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
     private readonly ILoginQrCodeRenderer _qrRenderer;
     private readonly IUserSessionCoordinator _session;
     private readonly IClipboardService _clipboard;
+    private readonly ISettingsStore _settingsStore;
     private readonly VideoParseCoordinator _parser;
     private readonly MainWindowViewModel _downloadContent;
     private readonly WatchRoomClient _room = new();
@@ -47,7 +49,7 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
     private long _lastSnapshotReceivedAtUnixMs;
     private long _lastVersion = -1;
     private double _lastPosition;
-    private long? _resumeEpisodeId;
+    private string? _resumeMediaKey;
     private double _resumeAtSeconds;
     private bool _seekDragging;
     private bool _lastBuffering;
@@ -67,6 +69,11 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
     private long _latestChatToastReceivedAtUnixMs;
     private int _chatRevision;
     private int _chatToastSequence;
+    private string? _hostActionToast;
+    private long _hostActionToastReceivedAtUnixMs;
+    private int _hostActionToastSequence;
+    private long _lastGuestControlWarningAtUnixMs;
+    private bool _chatPanelOpen;
 
     public MainWindowViewModel DownloadContent => _downloadContent;
     private string _selectedSection = "Room";
@@ -166,8 +173,14 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
     public int ChatToastRemainingMilliseconds => _latestChatToast == null ? 0 :
         (int)Math.Clamp(5000 - (DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()
             - _latestChatToastReceivedAtUnixMs), 0, 5000);
+    public string? HostActionToast => _hostActionToast;
+    public int HostActionToastSequence => _hostActionToastSequence;
+    public int HostActionToastRemainingMilliseconds => _hostActionToast == null ? 0 :
+        (int)Math.Clamp(5000 - (DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()
+            - _hostActionToastReceivedAtUnixMs), 0, 5000);
     public int RoomMemberCount => _roomMemberCount;
     public string? RoomClientId => _room.ClientId;
+    public bool ChatPanelOpen => _chatPanelOpen;
 
     private string _syncStatus = string.Empty;
     public string SyncStatus { get => _syncStatus; private set => SetProperty(ref _syncStatus, value); }
@@ -192,6 +205,7 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
         ILoginQrCodeRenderer qrRenderer,
         IUserSessionCoordinator session,
         IClipboardService clipboard,
+        ISettingsStore settingsStore,
         VideoParseCoordinator parser,
         MainWindowViewModel downloadContent)
     {
@@ -199,10 +213,18 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
         _qrRenderer = qrRenderer;
         _session = session;
         _clipboard = clipboard;
+        _settingsStore = settingsStore;
+        _savedRoomNickname = settingsStore.Current.RoomNickname;
+        RoomNicknameInput = _savedRoomNickname;
+        if (!string.IsNullOrEmpty(_savedRoomNickname))
+        {
+            RoomNicknameStatus = $"已使用上次昵称：{_savedRoomNickname}";
+        }
         _parser = parser;
         _downloadContent = downloadContent;
         _room.SnapshotReceived += OnSnapshotReceived;
         _room.ChatReceived += OnRoomChatReceived;
+        _room.HostActionReceived += OnRoomHostActionReceived;
         _room.Disconnected += OnRoomDisconnected;
         _room.Closed += OnRoomClosed;
         ShowLoginCommand = new RelayCommand(() => SelectSection("Login"));
@@ -326,7 +348,7 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
                 return;
             }
 
-            if (source.GetString() != "biliCinemaPlayer" || !_room.IsHost || _roomPlayer == null)
+            if (source.GetString() != "biliCinemaPlayer" || _roomPlayer == null)
             {
                 return;
             }
@@ -334,7 +356,21 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
             var command = CreateHostControl(root, type.GetString());
             if (command != null)
             {
-                _ = RunControlSafelyAsync(() => SendHostControlAsync(command));
+                if (_room.IsHost)
+                {
+                    _ = RunControlSafelyAsync(() => SendHostControlAsync(command));
+                }
+                else
+                {
+                    var now = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+                    if (now - _lastGuestControlWarningAtUnixMs >= 3000)
+                    {
+                        _lastGuestControlWarningAtUnixMs = now;
+                        _hostActionToast = "当前由房主控制播放，可在聊天中提出调整请求";
+                        _hostActionToastReceivedAtUnixMs = now;
+                        _hostActionToastSequence++;
+                    }
+                }
             }
         }
         catch (JsonException)
@@ -345,6 +381,13 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
 
     private void HandleChatWebMessage(JsonElement root, string? type)
     {
+        if (type == "panelState" && root.TryGetProperty("open", out var open)
+            && open.ValueKind is JsonValueKind.True or JsonValueKind.False)
+        {
+            _chatPanelOpen = open.GetBoolean();
+            return;
+        }
+
         if (type == "send" && root.TryGetProperty("text", out var chatText)
             && chatText.ValueKind == JsonValueKind.String
             && chatText.GetString() is { } text)
@@ -381,6 +424,7 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
         }
 
         _savedRoomNickname = nickname;
+        _settingsStore.Update(settings => settings with { RoomNickname = nickname });
         RoomNicknameInput = nickname;
         RoomNicknameStatus = $"已保存我的昵称：{nickname}";
     }
@@ -398,7 +442,8 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
             await _room.SendAsync(new
             {
                 type = "chat",
-                nickname = _savedRoomNickname ?? (_room.IsHost ? "房主" : "访客"),
+                nickname = string.IsNullOrWhiteSpace(_savedRoomNickname)
+                    ? (_room.IsHost ? "房主" : "访客") : _savedRoomNickname,
                 text = text.Trim()
             }, _lifetime.Token).ConfigureAwait(true);
         }
@@ -436,13 +481,43 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
         });
     }
 
+    private void OnRoomHostActionReceived(WatchRoomHostAction action)
+    {
+        var roomCode = _room.RoomCode;
+        Dispatcher.UIThread.Post(() =>
+        {
+            if (_disposed || !_room.Connected || _room.IsHost || roomCode != _room.RoomCode)
+            {
+                return;
+            }
+            _hostActionToast = action.Action switch
+            {
+                "select" => "房主切换了视频",
+                "play" => "房主开始播放",
+                "pause" => "房主暂停了播放",
+                "seek" when action.PositionSeconds is >= 0 =>
+                    $"房主跳转到 {TimeSpan.FromSeconds(action.PositionSeconds.Value):hh\\:mm\\:ss}",
+                "rate" when action.Rate is > 0 => $"房主调整为 {action.Rate:0.##} 倍速",
+                _ => null
+            };
+            if (_hostActionToast != null)
+            {
+                _hostActionToastReceivedAtUnixMs = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+                _hostActionToastSequence++;
+            }
+        });
+    }
+
     private void ClearRoomChat()
     {
+        _chatPanelOpen = false;
         _chatMessages.Clear();
         _latestChatToast = null;
+        _hostActionToast = null;
         _latestChatToastReceivedAtUnixMs = 0;
         _chatRevision++;
         _chatToastSequence++;
+        _hostActionToastSequence++;
     }
 
     private async Task StartLoginAsync()
@@ -588,7 +663,7 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
         var input = RoomVideoInput.Trim();
         await ParseInputAsync(input, _lifetime.Token)
             .ConfigureAwait(true);
-        if (!IsLoggedIn || _roomPage?.EpisodeId is not > 0 || _roomParsedInput != input)
+        if (!IsLoggedIn || _roomPage == null || _roomParsedInput != input)
         {
             return;
         }
@@ -598,14 +673,14 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
             await SendHostControlAsync(new
             {
                 type = "select",
-                media = new { episodeId = _roomPage.EpisodeId }
+                media = MediaForPage(_roomPage)
             }).ConfigureAwait(true);
         }
 
         await StartPlaybackAsync(startPaused: true, _lifetime.Token).ConfigureAwait(true);
     }
 
-    private async Task ParseInputAsync(string input, CancellationToken cancellationToken)
+    private async Task ParseInputAsync(string input, CancellationToken cancellationToken, long selectedCid = 0)
     {
         if (!IsLoggedIn)
         {
@@ -621,31 +696,26 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
 
         try
         {
-            StopPlayback();
-            _roomPage = null;
-            _roomParsedInput = null;
-            RoomFilmTitle = string.Empty;
             Status = "正在解析影片…";
             var detail = await _parser.LoadDetailAsync(input.Trim(), refresh: true, cancellationToken)
                 .ConfigureAwait(true);
             var pages = detail.VideoSections.SelectMany(section => section.VideoPages).ToArray();
-            var episodeId = ParseEntrance.GetBangumiEpisodeId(input);
-            var page = pages.FirstOrDefault(candidate => candidate.EpisodeId == episodeId)
-                       ?? pages.FirstOrDefault();
+            var page = SelectPage(pages, input, selectedCid);
             if (page == null)
             {
-                Status = "没有找到可播放剧集，请检查影片链接。";
+                Status = "没有找到该视频页面，请检查链接和分 P 编号。";
                 return;
             }
-            if (page.EpisodeId <= 0)
+            if (!IsPlayablePage(page))
             {
-                Status = "仅观影模式目前支持 B 站番剧和电影剧集链接。";
+                Status = "没有找到可播放的 B 站视频页面。";
                 return;
             }
 
-            if (_resumeEpisodeId != page.EpisodeId)
+            StopPlayback();
+            if (_resumeMediaKey != MediaKey(page))
             {
-                _resumeEpisodeId = null;
+                _resumeMediaKey = null;
                 _resumeAtSeconds = 0;
             }
             _roomPage = page;
@@ -669,6 +739,75 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
         }
     }
 
+    private static VideoPage? SelectPage(VideoPage[] pages, string input, long selectedCid)
+    {
+        var episodeId = ParseEntrance.GetBangumiEpisodeId(input);
+        var bvid = ParseEntrance.GetBvId(input);
+        var avid = ParseEntrance.GetAvId(input);
+        var requestedPage = Uri.TryCreate(input, UriKind.Absolute, out var inputUri)
+            ? ParsePageNumber(inputUri.Query) : 0;
+        if (selectedCid > 0) return pages.FirstOrDefault(candidate => candidate.Cid == selectedCid);
+        if (episodeId > 0) return pages.FirstOrDefault(candidate => candidate.EpisodeId == episodeId);
+        if (!string.IsNullOrEmpty(bvid))
+        {
+            return pages.FirstOrDefault(candidate => candidate.Bvid == bvid
+                && (requestedPage == 0 || candidate.Page == requestedPage));
+        }
+        if (avid > 0)
+        {
+            return pages.FirstOrDefault(candidate => candidate.Avid == avid
+                && (requestedPage == 0 || candidate.Page == requestedPage));
+        }
+        return pages.Length > 0 ? pages[0] : null;
+    }
+
+    private static bool IsPlayablePage(VideoPage page)
+        => page.EpisodeId > 0 || page.Cid > 0
+            && (!string.IsNullOrEmpty(page.Bvid) || page.Avid > 0);
+
+    private static int ParsePageNumber(string query)
+    {
+        foreach (var part in query.TrimStart('?').Split('&', StringSplitOptions.RemoveEmptyEntries))
+        {
+            if (part.StartsWith("p=", StringComparison.OrdinalIgnoreCase)
+                && int.TryParse(part.AsSpan(2), NumberStyles.None, CultureInfo.InvariantCulture, out var page)
+                && page > 0)
+            {
+                return page;
+            }
+        }
+        return 0;
+    }
+
+    private static string MediaKey(VideoPage page) => page.EpisodeId > 0
+        ? $"ep:{page.EpisodeId}"
+        : $"video:{page.Bvid}:{page.Avid}:{page.Cid}";
+
+    private static bool SameMedia(VideoPage? page, WatchRoomMedia? media)
+        => page != null && media != null
+            && (media.EpisodeId > 0
+                ? page.EpisodeId == media.EpisodeId
+                : page.Cid > 0 && page.Cid == media.Cid
+                    && (string.IsNullOrEmpty(media.Bvid) || page.Bvid == media.Bvid)
+                    && (media.Aid <= 0 || page.Avid == media.Aid));
+
+    private static Dictionary<string, object> MediaForPage(VideoPage page)
+    {
+        var media = new Dictionary<string, object>();
+        if (page.EpisodeId > 0) media["episodeId"] = page.EpisodeId;
+        if (page.Avid > 0) media["aid"] = page.Avid;
+        if (!string.IsNullOrEmpty(page.Bvid)) media["bvid"] = page.Bvid;
+        if (page.Cid > 0) media["cid"] = page.Cid;
+        return media;
+    }
+
+    private static string MediaUrl(WatchRoomMedia media)
+        => media.EpisodeId > 0
+            ? $"https://www.bilibili.com/bangumi/play/ep{media.EpisodeId}"
+            : !string.IsNullOrEmpty(media.Bvid)
+                ? $"https://www.bilibili.com/video/{media.Bvid}"
+                : $"https://www.bilibili.com/video/av{media.Aid}";
+
     private async Task StartPlaybackAsync(bool startPaused, CancellationToken cancellationToken)
     {
         if (_playerLoading)
@@ -678,7 +817,7 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
 
         var page = _roomPage;
         var browser = _roomBrowser;
-        if (page?.EpisodeId is not > 0 || browser == null)
+        if (page == null || browser == null)
         {
             Status = "请先解析影片，并等待网页播放器准备好。";
             return;
@@ -692,10 +831,10 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
             var player = await BilibiliWebPlaybackSession.StartAsync(browser, page,
                 startPaused, cancellationToken).ConfigureAwait(true);
             _roomPlayer = player;
-            if (_resumeEpisodeId == page.EpisodeId && _resumeAtSeconds > 0)
+            if (_resumeMediaKey == MediaKey(page) && _resumeAtSeconds > 0)
             {
                 await player.SeekAsync(_resumeAtSeconds, cancellationToken).ConfigureAwait(true);
-                _resumeEpisodeId = null;
+                _resumeMediaKey = null;
                 _resumeAtSeconds = 0;
             }
             PlayerReady = true;
@@ -770,7 +909,7 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
     {
         if (!_room.IsHost)
         {
-            Status = "房间内由房主控制播放。";
+            Status = "仅房主可调整播放；可在聊天中提出请求。";
             return;
         }
 
@@ -816,7 +955,7 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
         {
             await ParseInputAsync(RoomVideoInput, _lifetime.Token).ConfigureAwait(true);
         }
-        if (_roomPage?.EpisodeId is not > 0)
+        if (_roomPage == null || !string.Equals(_roomParsedInput, RoomVideoInput.Trim(), StringComparison.Ordinal))
         {
             Status = "请先在观影房间页面解析影片链接。";
             return;
@@ -858,11 +997,11 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
             await _room.SendAsync(new
             {
                 type = "select",
-                media = new { episodeId = _roomPage.EpisodeId }
+                media = MediaForPage(_roomPage)
             }, _lifetime.Token).ConfigureAwait(true);
             if (resumePosition > 0)
             {
-                _resumeEpisodeId = _roomPage.EpisodeId;
+                _resumeMediaKey = MediaKey(_roomPage);
                 _resumeAtSeconds = resumePosition;
                 await _room.SendAsync(new { type = "seek", positionSeconds = resumePosition },
                     _lifetime.Token).ConfigureAwait(true);
@@ -912,7 +1051,8 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
         }
         catch (Exception error) when (IsRoutineError(error))
         {
-            RoomState = "加入失败，请检查邀请、人数和服务连接。";
+            RoomState = error is InvalidOperationException
+                ? error.Message : "加入失败，请检查邀请和服务连接。";
         }
     }
 
@@ -1048,18 +1188,8 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
             _lastSnapshot = snapshot;
             _lastSnapshotReceivedAtUnixMs = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
             UpdateRoomMemberCount(snapshot);
-            RoomState = !(_room.Connected)
-                ? "重连中"
-                : snapshot.Host?.Online != true
-                    ? "房主离线，等待重连"
-                    : snapshot.Guest?.Online != true
-                        ? snapshot.Playing ? "房间内仅你一人，正在播放" : "房间内仅你一人"
-                        : snapshot.WaitingForReady
-                            ? "等待双方缓冲就绪"
-                            : snapshot.Guest?.Buffering == true || snapshot.Host.Buffering
-                                ? "一方缓冲中，等待恢复"
-                                : "双方在线，已同步";
-            if (snapshot.Media is not { EpisodeId: > 0 } media)
+            RoomState = DescribeRoom(snapshot, _room.Connected);
+            if (snapshot.Media is not { } media)
             {
                 return;
             }
@@ -1072,21 +1202,9 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
                 await _room.SendAsync(new { type = "play" }, _lifetime.Token).ConfigureAwait(true);
             }
 
-            if (_roomPage?.EpisodeId != media.EpisodeId)
+            if (!await EnsureSnapshotPlayerAsync(media, snapshot).ConfigureAwait(true))
             {
-                await ParseInputAsync($"https://www.bilibili.com/bangumi/play/ep{media.EpisodeId}",
-                    _lifetime.Token).ConfigureAwait(true);
-                if (_roomPage?.EpisodeId != media.EpisodeId)
-                {
-                    RoomState = "本机未能打开此影片，请检查账号权限。";
-                    return;
-                }
-
-            }
-
-            if (_player == null)
-            {
-                await StartPlaybackAsync(true, _lifetime.Token).ConfigureAwait(true);
+                return;
             }
 
             await CorrectPlaybackAsync(snapshot, _lifetime.Token).ConfigureAwait(true);
@@ -1097,10 +1215,47 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
         }
     }
 
+    private static string DescribeRoom(WatchRoomSnapshot snapshot, bool connected)
+    {
+        if (!connected) return "重连中";
+        if (snapshot.Host?.Online != true) return "房主离线，等待重连";
+        if (snapshot.Guest?.Online != true)
+        {
+            return snapshot.Playing ? "房间内仅你一人，正在播放" : "房间内仅你一人";
+        }
+        if (snapshot.WaitingForReady) return "等待双方缓冲就绪";
+        if (snapshot.Guest.Buffering || snapshot.Host.Buffering) return "一方缓冲中，等待恢复";
+        return "双方在线，已同步";
+    }
+
+    private async Task<bool> EnsureSnapshotPlayerAsync(WatchRoomMedia media, WatchRoomSnapshot snapshot)
+    {
+        if (!SameMedia(_roomPage, media))
+        {
+            await ParseInputAsync(MediaUrl(media), _lifetime.Token, media.Cid).ConfigureAwait(true);
+            if (!SameMedia(_roomPage, media))
+            {
+                RoomState = "本机未能打开此视频，请检查账号权限。";
+                return false;
+            }
+        }
+
+        if (_player == null)
+        {
+            await StartPlaybackAsync(true, _lifetime.Token).ConfigureAwait(true);
+        }
+        else if (_room.IsHost ? snapshot.Host?.Ready != true : snapshot.Guest?.Ready != true)
+        {
+            await _room.SendAsync(new { type = "ready", ready = true }, _lifetime.Token)
+                .ConfigureAwait(true);
+        }
+        return _player != null;
+    }
+
     private async Task CorrectPlaybackAsync(WatchRoomSnapshot snapshot, CancellationToken cancellationToken)
     {
         var player = _roomPlayer;
-        if (player == null || snapshot.Media?.EpisodeId != _roomPage?.EpisodeId)
+        if (player == null || !SameMedia(_roomPage, snapshot.Media))
         {
             return;
         }
@@ -1364,7 +1519,7 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
         }
         catch (Exception error) when (IsRoutineError(error))
         {
-            _resumeEpisodeId = page.EpisodeId;
+            _resumeMediaKey = MediaKey(page);
             _resumeAtSeconds = _lastPosition;
             Status = "网页播放器恢复失败；若登录已过期，请重新扫码后继续。";
         }
@@ -1372,6 +1527,7 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
 
     private void StopPlayback()
     {
+        _chatPanelOpen = false;
         PlayerReady = false;
         PlayerOpacity = 0;
         _roomPlayer?.Dispose();
@@ -1412,6 +1568,7 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
             _loginCancellation?.Dispose();
             _room.SnapshotReceived -= OnSnapshotReceived;
             _room.ChatReceived -= OnRoomChatReceived;
+            _room.HostActionReceived -= OnRoomHostActionReceived;
             _room.Disconnected -= OnRoomDisconnected;
             _room.Closed -= OnRoomClosed;
             try

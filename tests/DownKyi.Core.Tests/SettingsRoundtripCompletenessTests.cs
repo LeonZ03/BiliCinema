@@ -209,6 +209,7 @@ public sealed class SettingsRoundtripCompletenessTests
         {
             return path switch
             {
+                nameof(ApplicationSettings.RoomNickname) => "roundtrip-nick",
                 "Network.UserAgent" => "DownKyi-Roundtrip-Guard/1.0",
                 "Network.CustomNetworkProxy" => "http://127.0.0.1:18080",
                 "Network.HttpProxy" => "127.0.0.1",

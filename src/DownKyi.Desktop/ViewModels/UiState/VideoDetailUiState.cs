@@ -40,9 +40,6 @@ internal sealed partial class VideoDetailUiState : ObservableObject
     private VideoPage? _selectedVideoPage;
 
     [ObservableProperty]
-    private string _onlinePlaybackInfo = string.Empty;
-
-    [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsBusy))]
     [NotifyPropertyChangedFor(nameof(IsContentVisible))]
     [NotifyPropertyChangedFor(nameof(IsEmptyVisible))]

@@ -20,7 +20,10 @@ internal static class RoomChatOverlayScript
         int memberCount,
         int revision,
         int toastSequence,
-        int toastRemainingMilliseconds)
+        int toastRemainingMilliseconds,
+        string? hostActionToast,
+        int hostActionToastSequence,
+        int hostActionToastRemainingMilliseconds)
     {
         var state = new
         {
@@ -30,6 +33,9 @@ internal static class RoomChatOverlayScript
             revision,
             toastSequence,
             toastRemainingMilliseconds,
+            hostActionToastSequence,
+            hostActionToastRemainingMilliseconds,
+            hostActionToast = hostActionToastRemainingMilliseconds > 0 ? hostActionToast : null,
             messages = messages.Select(message => new
             {
                 message.ClientId,
@@ -115,10 +121,19 @@ internal static class RoomChatOverlayScript
                     box-shadow:0 8px 24px rgba(0,0,0,.25); opacity:0; visibility:hidden;
                     transition:opacity .16s ease; pointer-events:none; }
                 #bc-room-chat .bc-toast.bc-visible { opacity:1; visibility:visible; }
+                #bc-room-chat.bc-open .bc-toast { right:min(340px, 41vw); }
                 #bc-room-chat .bc-toast-name { color:#e3ebee; font-weight:650; font-size:12px; margin-bottom:3px; }
                 #bc-room-chat .bc-toast-body { font-size:13px; white-space:pre-wrap; overflow-wrap:anywhere; }
+                #bc-room-chat .bc-action-toast { position:absolute; left:20px; top:38%;
+                    max-width:min(280px,38vw); padding:10px 14px; border-radius:9px;
+                    color:#f5f7f8; background:rgba(35,46,52,.78);
+                    border-left:3px solid #8bb5c7; backdrop-filter:blur(7px);
+                    box-shadow:0 8px 24px rgba(0,0,0,.2); opacity:0; visibility:hidden;
+                    transition:opacity .16s ease; pointer-events:none; font-size:13px; }
+                #bc-room-chat .bc-action-toast.bc-visible { opacity:1; visibility:visible; }
                 @media (prefers-reduced-motion:reduce) {
-                    #bc-room-chat .bc-panel,#bc-room-chat .bc-toast { transition:none; }
+                    #bc-room-chat .bc-panel,#bc-room-chat .bc-toast,
+                    #bc-room-chat .bc-action-toast { transition:none; }
                 }
             `;
             const edge = document.createElement('div'); edge.className = 'bc-edge';
@@ -151,10 +166,13 @@ internal static class RoomChatOverlayScript
             toast.setAttribute('role', 'status');
             const toastName = make('div', 'bc-toast-name');
             const toastBody = make('div', 'bc-toast-body'); toast.append(toastName, toastBody);
-            host.append(css, edge, panel, toast);
+            const actionToast = make('div', 'bc-action-toast');
+            actionToast.setAttribute('role', 'status');
+            host.append(css, edge, panel, toast, actionToast);
             ui = { host, edge, panel, list, input, count, toast, toastName, toastBody,
-                revision:-1, toastSequence:-1, fullscreen:false, inRoom:false,
-                toastTimer:null, listenerAbort:new AbortController() };
+                actionToast, revision:-1, toastSequence:-1, actionSequence:-1,
+                fullscreen:false, inRoom:false, toastTimer:null, actionTimer:null,
+                listenerAbort:new AbortController() };
             window.__biliCinemaChatUi = ui;
             const send = () => {
                 const text = ui.input.value.trim();
@@ -174,26 +192,33 @@ internal static class RoomChatOverlayScript
             for (const type of ['click','dblclick','pointerdown','pointerup','keydown','keyup','wheel']) {
                 host.addEventListener(type, event => event.stopPropagation());
             }
-            const close = () => {
-                if (ui.host.classList.contains('bc-open')) ui.input.blur();
-                ui.host.classList.remove('bc-open');
-                ui.edge.setAttribute('aria-expanded', 'false');
+            const setOpen = (open, focusInput) => {
+                const wasOpen = ui.host.classList.contains('bc-open');
+                ui.host.classList.toggle('bc-open', open);
+                ui.edge.setAttribute('aria-expanded', open ? 'true' : 'false');
+                if (!open) ui.input.blur();
+                else if (!wasOpen && focusInput) ui.input.focus();
+                if (wasOpen !== open && typeof invokeCSharpAction === 'function') {
+                    invokeCSharpAction(JSON.stringify({source:'biliCinemaChat',
+                        type:'panelState',open}));
+                }
             };
+            const close = () => setOpen(false, false);
             edge.addEventListener('keydown', event => {
                 if (event.key === 'Enter' || event.key === ' ') {
                     event.preventDefault();
-                    ui.host.classList.add('bc-open');
-                    ui.edge.setAttribute('aria-expanded', 'true');
-                    ui.input.focus();
+                    setOpen(true, true);
                 }
+            });
+            ui.input.addEventListener('keydown', event => {
+                if (event.key === 'Escape') { event.preventDefault(); close(); }
             });
             window.addEventListener('pointermove', event => {
                 if (!ui.fullscreen || !ui.inRoom) return;
                 const panelLeft = window.innerWidth - ui.panel.getBoundingClientRect().width;
                 const overPanel = ui.host.classList.contains('bc-open') && event.clientX >= panelLeft;
                 if (event.clientX >= window.innerWidth - 18 || overPanel) {
-                    ui.host.classList.add('bc-open');
-                    ui.edge.setAttribute('aria-expanded', 'true');
+                    setOpen(true, true);
                 } else {
                     close();
                 }
@@ -213,6 +238,10 @@ internal static class RoomChatOverlayScript
             ui.host.classList.remove('bc-open');
             ui.edge.setAttribute('aria-expanded', 'false');
             ui.input.blur();
+            if (typeof invokeCSharpAction === 'function') {
+                invokeCSharpAction(JSON.stringify({source:'biliCinemaChat',
+                    type:'panelState',open:false}));
+            }
         }
         ui.count.textContent = `${state.memberCount} 人`;
         if (ui.revision !== state.revision) {
@@ -244,7 +273,7 @@ internal static class RoomChatOverlayScript
             ui.toastSequence = state.toastSequence;
             clearTimeout(ui.toastTimer);
             ui.toast.classList.remove('bc-visible');
-            if (!state.fullscreen && state.inRoom && state.toast) {
+            if (state.inRoom && state.toast) {
                 ui.toastName.textContent = state.toast.nickname;
                 ui.toastBody.textContent = state.toast.text;
                 ui.toast.classList.add('bc-visible');
@@ -252,7 +281,17 @@ internal static class RoomChatOverlayScript
                     state.toastRemainingMilliseconds);
             }
         }
-        if (state.fullscreen) ui.toast.classList.remove('bc-visible');
+        if (ui.actionSequence !== state.hostActionToastSequence) {
+            ui.actionSequence = state.hostActionToastSequence;
+            clearTimeout(ui.actionTimer);
+            ui.actionToast.classList.remove('bc-visible');
+            if (state.inRoom && state.hostActionToast) {
+                ui.actionToast.textContent = state.hostActionToast;
+                ui.actionToast.classList.add('bc-visible');
+                ui.actionTimer = setTimeout(() => ui.actionToast.classList.remove('bc-visible'),
+                    state.hostActionToastRemainingMilliseconds);
+            }
+        }
         return true;
         })()
         """;

@@ -20,6 +20,7 @@ internal sealed class WatchRoomClient : IAsyncDisposable
 
     public event Action<WatchRoomSnapshot>? SnapshotReceived;
     public event Action<WatchRoomChatMessage>? ChatReceived;
+    public event Action<WatchRoomHostAction>? HostActionReceived;
     public event Action? Disconnected;
     public event Action? Closed;
 
@@ -79,7 +80,15 @@ internal sealed class WatchRoomClient : IAsyncDisposable
             var type = welcome.RootElement.GetProperty("type").GetString();
             if (type != "welcome")
             {
-                throw new InvalidOperationException("房间拒绝加入；请检查邀请码和人数。");
+                var code = welcome.RootElement.TryGetProperty("code", out var errorCode)
+                    ? errorCode.GetString() : null;
+                throw new InvalidOperationException(code switch
+                {
+                    "room_full" => "房间已有一位访客，请等待其离开后重试。",
+                    "room_unavailable" => "房间已结束或邀请码无效，请向房主获取新邀请。",
+                    "server_full" => "房间服务暂时已满，请稍后重试。",
+                    _ => "房间拒绝加入，请检查邀请码和连接。"
+                });
             }
 
             var root = welcome.RootElement;
@@ -167,6 +176,10 @@ internal sealed class WatchRoomClient : IAsyncDisposable
                         ChatReceived?.Invoke(chat);
                     }
                 }
+                else if (type == "hostAction")
+                {
+                    HandleHostAction(root);
+                }
                 else if (type == "pong"
                          && root.TryGetProperty("clientTimeUnixMs", out var sent)
                          && root.TryGetProperty("serverTimeUnixMs", out var server))
@@ -212,6 +225,15 @@ internal sealed class WatchRoomClient : IAsyncDisposable
             {
                 Disconnected?.Invoke();
             }
+        }
+    }
+
+    private void HandleHostAction(JsonElement root)
+    {
+        var action = root.Deserialize<WatchRoomHostAction>(JsonOptions);
+        if (action?.Action is "select" or "play" or "pause" or "seek" or "rate")
+        {
+            HostActionReceived?.Invoke(action);
         }
     }
 
@@ -299,6 +321,13 @@ internal sealed record WatchRoomChatMessage
     public string Nickname { get; init; } = string.Empty;
     public string Text { get; init; } = string.Empty;
     public long SentAtUnixMs { get; init; }
+}
+
+internal sealed record WatchRoomHostAction
+{
+    public string Action { get; init; } = string.Empty;
+    public double? PositionSeconds { get; init; }
+    public double? Rate { get; init; }
 }
 
 internal sealed record WatchRoomMember

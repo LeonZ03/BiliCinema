@@ -20,7 +20,7 @@ public sealed class WatchPrivacyNavigationTests
 
             foreach (var route in new[]
                      {
-                         AppRoute.MySpace, AppRoute.MyFavorites, AppRoute.MyBangumiFollow,
+                         AppRoute.UserSpace, AppRoute.MySpace, AppRoute.MyFavorites, AppRoute.MyBangumiFollow,
                          AppRoute.MyToViewVideo, AppRoute.MyHistory
                      })
             {
@@ -28,8 +28,6 @@ public sealed class WatchPrivacyNavigationTests
                 Assert.Same(index, navigation.GetActiveView(AppNavigationRegion.Main));
             }
 
-            navigation.Navigate(new AppNavigationRequest(AppRoute.UserSpace, AppRoute.Index));
-            Assert.NotSame(index, navigation.GetActiveView(AppNavigationRegion.Main));
         }).ConfigureAwait(true);
     }
 }
