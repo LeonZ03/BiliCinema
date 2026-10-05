@@ -29,7 +29,9 @@ internal sealed record WireMessage(
     bool? Ready = null,
     bool? Buffering = null,
     string? Nonce = null,
-    long? ClientTimeUnixMs = null);
+    long? ClientTimeUnixMs = null,
+    string? ChatNickname = null,
+    string? ChatText = null);
 
 internal static class WireProtocol
 {
@@ -143,6 +145,16 @@ internal static class WireProtocol
                 return new(type,
                     Nonce: root.TryGetProperty("nonce", out _) ? RequiredString(root, "nonce", 1, 64) : null,
                     ClientTimeUnixMs: RequiredPositiveInteger(root, "clientTimeUnixMs"));
+            case "chat":
+                RequireFields(root, "type", "nickname", "text");
+                string nickname = RequiredString(root, "nickname", 1, 24).Trim();
+                string text = RequiredChatText(root, "text", 1, 500);
+                if (string.IsNullOrWhiteSpace(nickname) || string.IsNullOrWhiteSpace(text))
+                {
+                    throw new RoomProtocolException("invalid_chat");
+                }
+
+                return new(type, ChatNickname: nickname, ChatText: text);
             case "play":
             case "pause":
             case "leave":
@@ -246,6 +258,29 @@ internal static class WireProtocol
 
         string? value = element.GetString();
         if (value is null || value.Length < minLength || value.Length > maxLength || value.Any(char.IsControl))
+        {
+            throw new RoomProtocolException("invalid_string");
+        }
+
+        return value;
+    }
+
+    private static string RequiredChatText(JsonElement root, string name, int minLength, int maxLength)
+    {
+        if (!root.TryGetProperty(name, out JsonElement element) || element.ValueKind != JsonValueKind.String)
+        {
+            throw new RoomProtocolException("invalid_string");
+        }
+
+        string? value = element.GetString();
+        if (value is null)
+        {
+            throw new RoomProtocolException("invalid_string");
+        }
+
+        value = value.Replace("\r\n", "\n", StringComparison.Ordinal);
+        if (value.Length < minLength || value.Length > maxLength ||
+            value.Any(character => char.IsControl(character) && character != '\n'))
         {
             throw new RoomProtocolException("invalid_string");
         }

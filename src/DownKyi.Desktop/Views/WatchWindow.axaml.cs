@@ -11,6 +11,7 @@ using Avalonia.Threading;
 using DownKyi.Application.Diagnostics;
 using DownKyi.Application.Lifetime;
 using DownKyi.Core.Storage;
+using DownKyi.Services.Watch;
 using DownKyi.ViewModels;
 using Microsoft.Extensions.Logging;
 
@@ -18,6 +19,10 @@ namespace DownKyi.Views;
 
 internal sealed partial class WatchWindow : Window
 {
+    private static readonly Action<ILogger, Exception?> ChatOverlayWarning =
+        LoggerMessage.Define(LogLevel.Warning, new EventId(1, "RoomChatOverlay"),
+            "Room chat overlay could not be refreshed in the player.");
+
     private const string FullscreenStateScript = """
         (() => {
             if (!window.__biliCinemaEscapeHook) {
@@ -28,7 +33,11 @@ internal sealed partial class WatchWindow : Window
             }
             const exit = window.__biliCinemaEscapeRequested === true;
             window.__biliCinemaEscapeRequested = false;
-            return (document.fullscreenElement ? 1 : 0) + (exit ? 2 : 0);
+            const root = window.__biliCinemaPlayerRoot;
+            const chat = window.__biliCinemaChatUi;
+            const chatMissing = !chat?.host?.isConnected || !root?.contains(chat.host);
+            return (document.fullscreenElement ? 1 : 0) + (exit ? 2 : 0)
+                + (chatMissing ? 4 : 0);
         })()
         """;
     private const string ToggleDanmakuScript = """
@@ -58,6 +67,12 @@ internal sealed partial class WatchWindow : Window
     private bool _browserFullscreen;
     private bool _fullscreenFromBrowser;
     private bool _checkingFullscreen;
+    private bool _chatOverlayErrorLogged;
+    private int _lastChatRevision = -1;
+    private int _lastChatToastSequence = -1;
+    private int _lastChatMemberCount = -1;
+    private bool _lastChatFullscreen;
+    private bool _lastChatInRoom;
     private bool _windowClosing;
     private bool _closeConfirmed;
     private bool _closeInProgress;
@@ -224,6 +239,7 @@ internal sealed partial class WatchWindow : Window
         }
 
         _checkingFullscreen = true;
+        var chatMissing = false;
         try
         {
             var result = await CurrentBrowser.InvokeScript(FullscreenStateScript).ConfigureAwait(true);
@@ -233,6 +249,7 @@ internal sealed partial class WatchWindow : Window
             }
 
             var state = int.TryParse(result?.Trim('"'), out var parsed) ? parsed : 0;
+            chatMissing = (state & 4) != 0;
             var wantsFullscreen = (state & 1) != 0;
             if ((state & 2) != 0 && _isFullscreen)
             {
@@ -273,7 +290,59 @@ internal sealed partial class WatchWindow : Window
         }
         finally
         {
-            _checkingFullscreen = false;
+            try
+            {
+                await RefreshChatOverlayAsync(chatMissing).ConfigureAwait(true);
+            }
+            finally
+            {
+                _checkingFullscreen = false;
+            }
+        }
+    }
+
+    private async Task RefreshChatOverlayAsync(bool chatMissing)
+    {
+        var inRoom = _viewModel.IsInRoom;
+        var chatRevision = _viewModel.ChatRevision;
+        var toastSequence = _viewModel.ChatToastSequence;
+        var memberCount = _viewModel.RoomMemberCount;
+        if (_windowClosing || !_viewModel.ShowRoom || !_viewModel.PlayerReady
+            || !chatMissing && chatRevision == _lastChatRevision
+                && toastSequence == _lastChatToastSequence
+                && memberCount == _lastChatMemberCount
+                && _isFullscreen == _lastChatFullscreen
+                && inRoom == _lastChatInRoom)
+        {
+            return;
+        }
+
+        try
+        {
+            await CurrentBrowser.InvokeScript(RoomChatOverlayScript.Build(
+                _viewModel.ChatMessages,
+                _viewModel.LatestChatToast,
+                _viewModel.RoomClientId,
+                _isFullscreen,
+                inRoom,
+                memberCount,
+                chatRevision,
+                toastSequence,
+                _viewModel.ChatToastRemainingMilliseconds)).ConfigureAwait(true);
+            _lastChatRevision = chatRevision;
+            _lastChatToastSequence = toastSequence;
+            _lastChatMemberCount = memberCount;
+            _lastChatFullscreen = _isFullscreen;
+            _lastChatInRoom = inRoom;
+        }
+        catch (Exception error) when (error is InvalidOperationException
+            or ObjectDisposedException or System.Runtime.InteropServices.COMException)
+        {
+            if (!_windowClosing && !_chatOverlayErrorLogged)
+            {
+                _chatOverlayErrorLogged = true;
+                ChatOverlayWarning(_logger, null);
+            }
         }
     }
 

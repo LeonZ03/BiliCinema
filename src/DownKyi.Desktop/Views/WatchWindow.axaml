@@ -71,6 +71,19 @@
                                 <TextBlock Text="{Binding RoomParticipantText}" FontSize="14" FontWeight="SemiBold"
                                            VerticalAlignment="Center" Foreground="{DynamicResource BrushPrimary}" />
                             </StackPanel>
+                            <Border Padding="14" Background="{DynamicResource BrushSurfaceSunken}"
+                                    CornerRadius="{DynamicResource DownKyiRadiusMedium}">
+                                <StackPanel Spacing="8">
+                                    <TextBlock Text="房间昵称" FontSize="14" FontWeight="SemiBold" />
+                                    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                                        <TextBox Grid.Column="0" MaxLength="24" PlaceholderText="输入聊天时显示的昵称"
+                                                 Text="{Binding RoomNicknameInput, Mode=TwoWay}" />
+                                        <Button Grid.Column="1" Content="保存昵称" Command="{Binding SaveRoomNicknameCommand}" />
+                                    </Grid>
+                                    <TextBlock Text="{Binding RoomNicknameStatus}" FontSize="12" TextWrapping="Wrap"
+                                               Foreground="{DynamicResource BrushTextSecondary}" />
+                                </StackPanel>
+                            </Border>
                             <Grid ColumnDefinitions="*,Auto" ColumnSpacing="9">
                                 <TextBox Grid.Column="0" PlaceholderText="粘贴 B 站电影或番剧链接"
                                          Text="{Binding RoomVideoInput, Mode=TwoWay}" />

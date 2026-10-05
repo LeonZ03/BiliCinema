@@ -70,6 +70,20 @@ Both members may send:
 {"type":"leave"}
 ```
 
+Both members may also send a room chat message. Nicknames are 1–24 characters and reject control characters. Message text is 1–500 characters, allows LF newlines (CRLF is normalized to LF), and rejects other control characters and empty/whitespace-only values. The complete UTF-8 WebSocket message remains limited to 4096 bytes. Clients must send only the nickname and plain text; `clientId`, role, and time are assigned by the server from the authenticated room connection:
+
+```json
+{"type":"chat","nickname":"MovieFan","text":"Ready when you are!"}
+```
+
+The server broadcasts the same transient event to currently connected members, including the sender:
+
+```json
+{"type":"chat","clientId":"<server-verified member ID>","role":"guest","nickname":"MovieFan","text":"Ready when you are!","sentAtUnixMs":1760000000000}
+```
+
+Chat messages are not added to room snapshots, replayed in `welcome`, or written to disk. The server accepts chat only from the connection's current room member and broadcasts only to that room's online members. Chat carries no login credentials, account identifiers, media identifiers, stream URLs, or media content. Clients should display `text` as plain text, not interpret it as markup.
+
 `ready:false` and `buffering:false` clear those flags. Ping may include a short `nonce`; pong echoes `clientTimeUnixMs` and the optional `nonce`, and includes `serverTimeUnixMs`. A guest `leave` frees their slot; host `leave` closes the room. The service emits `{"type":"left"}` to a departing guest or `{"type":"closed"}` when the room ends. Invalid commands produce `{"type":"error","code":"..."}`; a guest sending host commands receives `host_only`. The client should treat closure or transport loss as a visible room state, preserve its own playback position, and reconnect only with its own `clientId` while the relevant grace period remains.
 
 The server does not synchronize the local player's volume, fullscreen mode, quality, or signed stream URL. Each side selects quality and resolves media locally. After receiving a remote snapshot, clients must apply it without re-emitting the resulting player event as a new host command.

@@ -254,28 +254,8 @@ internal sealed class RoomCoordinator : BackgroundService
                 throw new RoomProtocolException("not_joined");
             }
 
-            if (message.Type == "ping")
+            if (HandleSpecialMessage(room, connection, member!, isHost, message))
             {
-                connection.Enqueue(WireProtocol.Encode(new
-                {
-                    type = "pong",
-                    nonce = message.Nonce,
-                    clientTimeUnixMs = message.ClientTimeUnixMs,
-                    serverTimeUnixMs = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()
-                }));
-                return;
-            }
-
-            if (message.Type == "leave")
-            {
-                Leave(room, member!, isHost);
-                return;
-            }
-
-            if (message.Type == "close")
-            {
-                RequireHost(isHost);
-                Close(room);
                 return;
             }
 
@@ -444,6 +424,45 @@ internal sealed class RoomCoordinator : BackgroundService
         room.ContinueWithoutGuest();
         room.Version++;
         room.Broadcast();
+    }
+
+    private bool HandleSpecialMessage(Room room, ClientConnection connection, MemberSlot member, bool isHost,
+        WireMessage message)
+    {
+        switch (message.Type)
+        {
+            case "ping":
+                connection.Enqueue(WireProtocol.Encode(new
+                {
+                    type = "pong",
+                    nonce = message.Nonce,
+                    clientTimeUnixMs = message.ClientTimeUnixMs,
+                    serverTimeUnixMs = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()
+                }));
+                return true;
+            case "leave":
+                Leave(room, member, isHost);
+                return true;
+            case "close":
+                RequireHost(isHost);
+                Close(room);
+                return true;
+            case "chat":
+                string chat = WireProtocol.Encode(new
+                {
+                    type = "chat",
+                    clientId = member.ClientId,
+                    role = isHost ? "host" : "guest",
+                    nickname = message.ChatNickname,
+                    text = message.ChatText,
+                    sentAtUnixMs = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()
+                });
+                room.Host.Connection?.Enqueue(chat);
+                room.Guest?.Connection?.Enqueue(chat);
+                return true;
+            default:
+                return false;
+        }
     }
 
     private void Close(Room room)

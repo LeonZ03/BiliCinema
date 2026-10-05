@@ -19,6 +19,7 @@ internal sealed class WatchRoomClient : IAsyncDisposable
     private long _lastPingUnixMs;
 
     public event Action<WatchRoomSnapshot>? SnapshotReceived;
+    public event Action<WatchRoomChatMessage>? ChatReceived;
     public event Action? Disconnected;
     public event Action? Closed;
 
@@ -158,6 +159,14 @@ internal sealed class WatchRoomClient : IAsyncDisposable
                         SnapshotReceived?.Invoke(snapshot);
                     }
                 }
+                else if (type == "chat")
+                {
+                    var chat = ParseChat(root);
+                    if (chat != null)
+                    {
+                        ChatReceived?.Invoke(chat);
+                    }
+                }
                 else if (type == "pong"
                          && root.TryGetProperty("clientTimeUnixMs", out var sent)
                          && root.TryGetProperty("serverTimeUnixMs", out var server))
@@ -204,6 +213,20 @@ internal sealed class WatchRoomClient : IAsyncDisposable
                 Disconnected?.Invoke();
             }
         }
+    }
+
+    private static WatchRoomChatMessage? ParseChat(JsonElement root)
+    {
+        var chat = root.Deserialize<WatchRoomChatMessage>(JsonOptions);
+        if (chat == null || string.IsNullOrEmpty(chat.ClientId)
+            || string.IsNullOrEmpty(chat.Nickname) || chat.Nickname.Length > 24
+            || string.IsNullOrEmpty(chat.Text) || chat.Text.Length > 500
+            || chat.SentAtUnixMs <= 0)
+        {
+            return null;
+        }
+
+        return chat;
     }
 
     private static async Task<JsonDocument> ReceiveOneAsync(
@@ -267,6 +290,15 @@ internal sealed record WatchRoomMedia
     public long Aid { get; init; }
     public string? Bvid { get; init; }
     public long Cid { get; init; }
+}
+
+internal sealed record WatchRoomChatMessage
+{
+    public string ClientId { get; init; } = string.Empty;
+    public string Role { get; init; } = string.Empty;
+    public string Nickname { get; init; } = string.Empty;
+    public string Text { get; init; } = string.Empty;
+    public long SentAtUnixMs { get; init; }
 }
 
 internal sealed record WatchRoomMember

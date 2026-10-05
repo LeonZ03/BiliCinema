@@ -82,6 +82,51 @@ try {
     }
     if ($joined.snapshot.memberCount -ne 2) { throw "A joined guest was not included in the room member count." }
 
+    Send-Json $hostSocket '{"type":"chat","nickname":"房主","text":"晚上好"}'
+    $hostChat = Read-Until $hostSocket "chat" { param($m) $m.text -eq "晚上好" }
+    $guestChat = Read-Until $guest "chat" { param($m) $m.text -eq "晚上好" }
+    foreach ($chat in @($hostChat, $guestChat)) {
+        if ($chat.clientId -ne $created.clientId -or $chat.role -ne "host" -or
+            $chat.nickname -ne "房主" -or $chat.sentAtUnixMs -le 0) {
+            throw "Host chat did not carry server-verified identity and timestamp."
+        }
+    }
+
+    Send-Json $guest '{"type":"chat","nickname":"访客","text":"你好"}'
+    $hostGuestChat = Read-Until $hostSocket "chat" { param($m) $m.text -eq "你好" }
+    $guestGuestChat = Read-Until $guest "chat" { param($m) $m.text -eq "你好" }
+    foreach ($chat in @($hostGuestChat, $guestGuestChat)) {
+        if ($chat.clientId -ne $joined.clientId -or $chat.role -ne "guest" -or
+            $chat.nickname -ne "访客" -or $chat.sentAtUnixMs -le 0) {
+            throw "Guest chat did not carry server-verified identity and timestamp."
+        }
+    }
+
+    Send-Json $hostSocket '{"type":"chat","nickname":"房主","text":"第一行\n第二行"}'
+    $lineFeedChat = Read-Until $hostSocket "chat" { param($m) $m.text -eq "第一行`n第二行" }
+    $guestLineFeedChat = Read-Until $guest "chat" { param($m) $m.text -eq "第一行`n第二行" }
+    if ($lineFeedChat.text -ne $guestLineFeedChat.text) { throw "Line feed chat was not broadcast consistently." }
+
+    Send-Json $hostSocket '{"type":"chat","nickname":"房主","text":"第一行\r\n第二行"}'
+    $normalizedLineEndings = Read-Until $hostSocket "chat" { param($m) $m.text -eq "第一行`n第二行" }
+    if ($normalizedLineEndings.text -ne "第一行`n第二行") { throw "CRLF chat was not normalized to LF." }
+
+    Send-Json $guest ('{"type":"chat","nickname":"访客","text":"伪造","clientId":"' + $created.clientId + '","role":"host"}')
+    $spoofRejected = Read-Until $guest "error"
+    if ($spoofRejected.code -ne "unexpected_field") { throw "Chat sender identity could be supplied by a client." }
+    Send-Json $guest ('{"type":"chat","nickname":"访客","text":"' + ("x" * 501) + '"}')
+    $oversizedChat = Read-Until $guest "error"
+    if ($oversizedChat.code -ne "invalid_string") { throw "Overlong chat text was accepted." }
+    Send-Json $guest '{"type":"chat","nickname":"访客","text":"   "}'
+    $blankChat = Read-Until $guest "error"
+    if ($blankChat.code -ne "invalid_chat") { throw "Blank chat text was accepted." }
+    Send-Json $guest '{"type":"chat","nickname":"访客","text":"tab\t拒绝"}'
+    $controlChat = Read-Until $guest "error"
+    if ($controlChat.code -ne "invalid_string") { throw "Non-newline control character in chat was accepted." }
+    Send-Json $guest '{"type":"chat","nickname":"访\t客","text":"昵称控制字符拒绝"}'
+    $controlNickname = Read-Until $guest "error"
+    if ($controlNickname.code -ne "invalid_string") { throw "Control character in chat nickname was accepted." }
+
     Send-Json $guest '{"type":"login_qr","loginUrl":"https://passport.bilibili.com/obsolete"}'
     $unsupported = Read-Until $guest 'error'
     if ($unsupported.code -ne 'unknown_type') { throw 'Obsolete login relay command was accepted.' }
@@ -120,6 +165,9 @@ try {
     if ($rejoined.snapshot.playing -eq $true -or $rejoined.snapshot.guest.ready -eq $true) {
         throw "Reconnect did not pause and clear readiness."
     }
+    if ($rejoined.PSObject.Properties.Name -contains "history") {
+        throw "Welcome unexpectedly contained persisted chat history."
+    }
 
     Send-Json $hostSocket '{"type":"close"}'
     $closed = Read-Until $guest "closed"
@@ -153,7 +201,7 @@ try {
     }
     if ($continuedAlone.snapshot.waitingForReady) { throw "Host playback paused after the guest left." }
     Send-Json $hostSocket '{"type":"close"}'
-    Write-Host "Room server smoke passed: create/join, member count, solo playback, guest-join resynchronization, obsolete login relay rejection, host authority, media URL rejection, ready/play, seek, buffering recovery, reconnect, and close."
+    Write-Host "Room server smoke passed: create/join, member count, bidirectional room chat, server-verified chat identity and timestamps, LF chat, CRLF normalization, chat input validation, sender spoof rejection, solo playback, guest-join resynchronization, obsolete login relay rejection, host authority, media URL rejection, ready/play, seek, buffering recovery, reconnect without chat history, and close."
 } finally {
     if ($null -ne $guest) { $guest.Dispose() }
     if ($null -ne $hostSocket) { $hostSocket.Dispose() }

@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
 using System.Net.Http;
@@ -32,6 +33,7 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
     private readonly VideoParseCoordinator _parser;
     private readonly MainWindowViewModel _downloadContent;
     private readonly WatchRoomClient _room = new();
+    private readonly List<WatchRoomChatMessage> _chatMessages = [];
     private readonly QuickRoomTunnel _quickTunnel = new();
     private readonly CancellationTokenSource _lifetime = new();
     private readonly SemaphoreSlim _snapshotGate = new(1, 1);
@@ -60,6 +62,11 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
     private string? _roomParsedInput;
     private string? _hostInviteUrl;
     private WebApplication? _localServer;
+    private string? _savedRoomNickname;
+    private WatchRoomChatMessage? _latestChatToast;
+    private long _latestChatToastReceivedAtUnixMs;
+    private int _chatRevision;
+    private int _chatToastSequence;
 
     public MainWindowViewModel DownloadContent => _downloadContent;
     private string _selectedSection = "Room";
@@ -142,6 +149,26 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
     public bool IsInRoom => _room.Connected;
     public string RoomRoleText => _room.IsHost ? "房主" : "访客";
 
+    private string _roomNicknameInput = string.Empty;
+    public string RoomNicknameInput { get => _roomNicknameInput; set => SetProperty(ref _roomNicknameInput, value); }
+
+    private string _roomNicknameStatus = "房间昵称仅用于聊天，不公开 B 站账号信息。";
+    public string RoomNicknameStatus
+    {
+        get => _roomNicknameStatus;
+        private set => SetProperty(ref _roomNicknameStatus, value);
+    }
+
+    public IReadOnlyList<WatchRoomChatMessage> ChatMessages => _chatMessages;
+    public WatchRoomChatMessage? LatestChatToast => _latestChatToast;
+    public int ChatRevision => _chatRevision;
+    public int ChatToastSequence => _chatToastSequence;
+    public int ChatToastRemainingMilliseconds => _latestChatToast == null ? 0 :
+        (int)Math.Clamp(5000 - (DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()
+            - _latestChatToastReceivedAtUnixMs), 0, 5000);
+    public int RoomMemberCount => _roomMemberCount;
+    public string? RoomClientId => _room.ClientId;
+
     private string _syncStatus = string.Empty;
     public string SyncStatus { get => _syncStatus; private set => SetProperty(ref _syncStatus, value); }
 
@@ -158,6 +185,7 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
     public IAsyncRelayCommand CopyInviteCommand { get; }
     public IAsyncRelayCommand LeaveRoomCommand { get; }
     public IAsyncRelayCommand EndRoomCommand { get; }
+    public IRelayCommand SaveRoomNicknameCommand { get; }
 
     public WatchWindowViewModel(
         ILoginCoordinator login,
@@ -174,6 +202,7 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
         _parser = parser;
         _downloadContent = downloadContent;
         _room.SnapshotReceived += OnSnapshotReceived;
+        _room.ChatReceived += OnRoomChatReceived;
         _room.Disconnected += OnRoomDisconnected;
         _room.Closed += OnRoomClosed;
         ShowLoginCommand = new RelayCommand(() => SelectSection("Login"));
@@ -190,6 +219,7 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
         CopyInviteCommand = new AsyncRelayCommand(CopyInviteAsync);
         LeaveRoomCommand = new AsyncRelayCommand(LeaveRoomAsync);
         EndRoomCommand = new AsyncRelayCommand(EndRoomAsync);
+        SaveRoomNicknameCommand = new RelayCommand(SaveRoomNickname);
         _monitorTask = MonitorPlaybackAsync(_lifetime.Token);
     }
 
@@ -272,7 +302,7 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
 
     private void OnWebMessageReceived(object? sender, WebMessageReceivedEventArgs args)
     {
-        if (!_room.Connected || !_room.IsHost || _roomPlayer == null || _disposed)
+        if (!_room.Connected || _disposed)
         {
             return;
         }
@@ -284,29 +314,24 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
             if (root.ValueKind != JsonValueKind.Object
                 || !root.TryGetProperty("source", out var source)
                 || source.ValueKind != JsonValueKind.String
-                || source.GetString() != "biliCinemaPlayer"
                 || !root.TryGetProperty("type", out var type)
                 || type.ValueKind != JsonValueKind.String)
             {
                 return;
             }
 
-            object? command = type.GetString() switch
+            if (source.GetString() == "biliCinemaChat")
             {
-                "play" => new { type = "play" },
-                "pause" => new { type = "pause" },
-                "seeked" when root.TryGetProperty("position", out var position)
-                              && position.ValueKind == JsonValueKind.Number
-                              && position.TryGetDouble(out var seconds)
-                              && double.IsFinite(seconds) && seconds is >= 0 and <= 86400
-                    => new { type = "seek", positionSeconds = seconds },
-                "ratechange" when root.TryGetProperty("rate", out var rate)
-                                  && rate.ValueKind == JsonValueKind.Number
-                                  && rate.TryGetDouble(out var speed)
-                                  && double.IsFinite(speed) && speed is >= 0.25 and <= 3
-                    => new { type = "rate", rate = speed },
-                _ => null
-            };
+                HandleChatWebMessage(root, type.GetString());
+                return;
+            }
+
+            if (source.GetString() != "biliCinemaPlayer" || !_room.IsHost || _roomPlayer == null)
+            {
+                return;
+            }
+
+            var command = CreateHostControl(root, type.GetString());
             if (command != null)
             {
                 _ = RunControlSafelyAsync(() => SendHostControlAsync(command));
@@ -316,6 +341,108 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
         {
             // Ignore unrelated messages from the Bilibili page.
         }
+    }
+
+    private void HandleChatWebMessage(JsonElement root, string? type)
+    {
+        if (type == "send" && root.TryGetProperty("text", out var chatText)
+            && chatText.ValueKind == JsonValueKind.String
+            && chatText.GetString() is { } text)
+        {
+            _ = SendRoomChatSafelyAsync(text);
+        }
+    }
+
+    private static object? CreateHostControl(JsonElement root, string? type)
+        => type switch
+        {
+            "play" => new { type = "play" },
+            "pause" => new { type = "pause" },
+            "seeked" when root.TryGetProperty("position", out var position)
+                          && position.ValueKind == JsonValueKind.Number
+                          && position.TryGetDouble(out var seconds)
+                          && double.IsFinite(seconds) && seconds is >= 0 and <= 86400
+                => new { type = "seek", positionSeconds = seconds },
+            "ratechange" when root.TryGetProperty("rate", out var rate)
+                              && rate.ValueKind == JsonValueKind.Number
+                              && rate.TryGetDouble(out var speed)
+                              && double.IsFinite(speed) && speed is >= 0.25 and <= 3
+                => new { type = "rate", rate = speed },
+            _ => null
+        };
+
+    private void SaveRoomNickname()
+    {
+        var nickname = RoomNicknameInput.Trim();
+        if (nickname.Length is < 1 or > 24 || nickname.Any(char.IsControl))
+        {
+            RoomNicknameStatus = "昵称请输入 1–24 个可见字符。";
+            return;
+        }
+
+        _savedRoomNickname = nickname;
+        RoomNicknameInput = nickname;
+        RoomNicknameStatus = $"已保存房间昵称：{nickname}";
+    }
+
+    private async Task SendRoomChatSafelyAsync(string text)
+    {
+        if (!_room.Connected || string.IsNullOrWhiteSpace(text)
+            || text.Length > 500 || text.Any(character => char.IsControl(character) && character != '\n'))
+        {
+            return;
+        }
+
+        try
+        {
+            await _room.SendAsync(new
+            {
+                type = "chat",
+                nickname = _savedRoomNickname ?? (_room.IsHost ? "房主" : "访客"),
+                text = text.Trim()
+            }, _lifetime.Token).ConfigureAwait(true);
+        }
+        catch (OperationCanceledException) when (_lifetime.IsCancellationRequested)
+        {
+        }
+        catch (Exception error) when (IsRoutineError(error))
+        {
+            RoomState = "消息发送失败，请检查房间连接。";
+        }
+    }
+
+    private void OnRoomChatReceived(WatchRoomChatMessage message)
+    {
+        var roomCode = _room.RoomCode;
+        Dispatcher.UIThread.Post(() =>
+        {
+            if (_disposed || !_room.Connected || roomCode != _room.RoomCode)
+            {
+                return;
+            }
+
+            _chatMessages.Add(message);
+            if (_chatMessages.Count > 80)
+            {
+                _chatMessages.RemoveAt(0);
+            }
+            _chatRevision++;
+            if (message.ClientId != _room.ClientId)
+            {
+                _latestChatToast = message;
+                _latestChatToastReceivedAtUnixMs = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+                _chatToastSequence++;
+            }
+        });
+    }
+
+    private void ClearRoomChat()
+    {
+        _chatMessages.Clear();
+        _latestChatToast = null;
+        _latestChatToastReceivedAtUnixMs = 0;
+        _chatRevision++;
+        _chatToastSequence++;
     }
 
     private async Task StartLoginAsync()
@@ -718,6 +845,7 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
 
             var snapshot = await _room.ConnectAsync(_connectAddress, create: true, null,
                 _lifetime.Token).ConfigureAwait(true);
+            ClearRoomChat();
             _lastVersion = -1;
             UpdateRoomMemberCount(snapshot);
             _startWhenReady = resumePlaying;
@@ -774,6 +902,7 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
             RoomState = "正在加入房间…";
             var snapshot = await _room.ConnectAsync(address, create: false, code,
                 _lifetime.Token).ConfigureAwait(true);
+            ClearRoomChat();
             _lastVersion = -1;
             UpdateRoomMemberCount(snapshot);
             OnPropertyChanged(nameof(CanControl));
@@ -853,6 +982,7 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
         }
 
         await _room.LeaveAsync().ConfigureAwait(true);
+        ClearRoomChat();
         _lastSnapshot = null;
         _lastVersion = -1;
         _startWhenReady = false;
@@ -1031,6 +1161,7 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
         Dispatcher.UIThread.Post(() =>
         {
             _lastSnapshot = null;
+            ClearRoomChat();
             _startWhenReady = false;
             _hostInviteUrl = null;
             _roomMemberCount = 0;
@@ -1280,6 +1411,7 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
         {
             _loginCancellation?.Dispose();
             _room.SnapshotReceived -= OnSnapshotReceived;
+            _room.ChatReceived -= OnRoomChatReceived;
             _room.Disconnected -= OnRoomDisconnected;
             _room.Closed -= OnRoomClosed;
             try
