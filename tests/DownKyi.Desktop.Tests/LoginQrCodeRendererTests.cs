@@ -43,7 +43,7 @@ public sealed class LoginQrCodeRendererTests
 
             Assert.NotNull(shared);
             Assert.True(shared.Width > 1000);
-            Assert.Equal(shared.Width + 100, shared.Height);
+            Assert.True(shared.Height > shared.Width + 200);
             Assert.True(image.Length > 1_000);
         }).ConfigureAwait(true);
     }

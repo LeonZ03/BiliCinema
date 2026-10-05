@@ -60,20 +60,39 @@
 
         <Button
             Grid.Column="2"
-            Width="24"
-            Height="24"
-            Margin="10,5"
+            Width="36"
+            Height="36"
+            Margin="7,0"
             VerticalAlignment="Center"
             Command="{Binding DownloadManagerCommand}"
             Theme="{StaticResource ImageBtnStyle}">
-            <ContentControl>
+            <Grid Width="34" Height="34" ClipToBounds="False">
                 <Path
                     Width="{Binding UiState.DownloadManage.Width}"
                     Height="{Binding UiState.DownloadManage.Height}"
                     Data="{Binding UiState.DownloadManage.Data}"
                     Fill="{DynamicResource BrushPrimary}"
-                    Stretch="Uniform" />
-            </ContentControl>
+                    Stretch="Uniform"
+                    HorizontalAlignment="Center"
+                    VerticalAlignment="Center" />
+                <Border HorizontalAlignment="Right"
+                        VerticalAlignment="Bottom"
+                        MinWidth="14"
+                        Height="14"
+                        Padding="2,0"
+                        Background="{DynamicResource BrushPrimary}"
+                        BorderBrush="{DynamicResource BrushSurfaceRaised}"
+                        BorderThickness="1"
+                        CornerRadius="7"
+                        IsVisible="{Binding HasActiveDownloads}">
+                    <TextBlock HorizontalAlignment="Center"
+                               VerticalAlignment="Center"
+                               FontSize="8"
+                               FontWeight="Bold"
+                               Foreground="White"
+                               Text="{Binding ActiveDownloadingCount}" />
+                </Border>
+            </Grid>
         </Button>
     </Grid>
 </UserControl>

@@ -1,8 +1,10 @@
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.ComponentModel;
 using System.Linq;
 using DownKyi.Core.Settings;
+using DownKyi.Models;
 using DownKyi.Presentation;
 using DownKyi.ViewModels.DownloadManager;
 
@@ -13,6 +15,9 @@ internal sealed class DownloadListState
     private readonly RangeObservableCollection<DownloadingItem> _downloading = new();
     private readonly RangeObservableCollection<DownloadedItem> _downloaded = new();
     private readonly HashSet<string> _removedDownloadedIds = new(StringComparer.Ordinal);
+    private int _activeDownloadingCount;
+
+    public event PropertyChangedEventHandler? PropertyChanged;
 
     public DownloadListState()
     {
@@ -22,6 +27,8 @@ internal sealed class DownloadListState
 
     public ReadOnlyObservableCollection<DownloadingItem> Downloading { get; }
 
+    public int ActiveDownloadingCount => _activeDownloadingCount;
+
     public ReadOnlyObservableCollection<DownloadedItem> Downloaded { get; }
 
     public bool IsDownloadedHistoryLoaded { get; private set; }
@@ -30,18 +37,55 @@ internal sealed class DownloadListState
     {
         ArgumentNullException.ThrowIfNull(item);
         _downloading.Add(item);
+        item.PropertyChanged += OnDownloadingItemPropertyChanged;
+        RefreshActiveDownloadingCount();
     }
 
     public void AddDownloadingRange(IEnumerable<DownloadingItem> items)
     {
         ArgumentNullException.ThrowIfNull(items);
-        _downloading.AddRange(items);
+        var addedItems = items.ToList();
+        _downloading.AddRange(addedItems);
+        foreach (var item in addedItems)
+        {
+            item.PropertyChanged += OnDownloadingItemPropertyChanged;
+        }
+
+        RefreshActiveDownloadingCount();
     }
 
     public bool RemoveDownloading(DownloadingItem item)
     {
         ArgumentNullException.ThrowIfNull(item);
-        return _downloading.Remove(item);
+        var removed = _downloading.Remove(item);
+        if (removed)
+        {
+            item.PropertyChanged -= OnDownloadingItemPropertyChanged;
+            RefreshActiveDownloadingCount();
+        }
+
+        return removed;
+    }
+
+    private void OnDownloadingItemPropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(DownloadingItem.Downloading))
+        {
+            RefreshActiveDownloadingCount();
+        }
+    }
+
+    private void RefreshActiveDownloadingCount()
+    {
+        var count = _downloading.Count(item =>
+            item.Downloading?.DownloadStatus == DownloadStatus.Downloading);
+        if (_activeDownloadingCount == count)
+        {
+            return;
+        }
+
+        _activeDownloadingCount = count;
+        PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(ActiveDownloadingCount)));
     }
 
     public void AddDownloaded(DownloadedItem item)

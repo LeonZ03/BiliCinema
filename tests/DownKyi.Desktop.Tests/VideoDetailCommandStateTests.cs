@@ -6,6 +6,7 @@ using DownKyi.Application.Desktop;
 using DownKyi.Commands;
 using DownKyi.Core.Settings;
 using DownKyi.Services;
+using DownKyi.Services.Download;
 using DownKyi.Services.Video;
 using DownKyi.ViewModels;
 using DownKyi.ViewModels.UiState;
@@ -31,6 +32,7 @@ public sealed class VideoDetailCommandStateTests
             settings,
             workflow,
             new VideoDetailDownloadCoordinatorStub(),
+            new DownloadListState(),
             NullLogger<ViewVideoDetailViewModel>.Instance);
         var commands = new[]
         {
@@ -80,6 +82,7 @@ public sealed class VideoDetailCommandStateTests
             settings,
             workflow,
             new VideoDetailDownloadCoordinatorStub(),
+            new DownloadListState(),
             NullLogger<ViewVideoDetailViewModel>.Instance);
         var view = new VideoDetailActionsView { DataContext = viewModel };
         var window = new Window { Content = view };
@@ -130,6 +133,7 @@ public sealed class VideoDetailCommandStateTests
             settings,
             workflow,
             downloadCoordinator,
+            new DownloadListState(),
             NullLogger<ViewVideoDetailViewModel>.Instance);
         var page = new DownKyi.Presentation.VideoPage
         {
@@ -204,6 +208,7 @@ public sealed class VideoDetailCommandStateTests
                 settings,
                 workflow,
                 new VideoDetailDownloadCoordinatorStub(),
+                new DownloadListState(),
                 NullLogger<ViewVideoDetailViewModel>.Instance);
             var completion = WaitUntilExecutableAfterDisabled(viewModel.ParseAllVideoCommand);
 
@@ -242,6 +247,7 @@ public sealed class VideoDetailCommandStateTests
             settings,
             workflow,
             downloadCoordinator,
+            new DownloadListState(),
             NullLogger<ViewVideoDetailViewModel>.Instance);
         viewModel.UiState.VideoInfoView = new DownKyi.Presentation.VideoInfoView();
         viewModel.VideoSections.Add(new DownKyi.Presentation.VideoSection
@@ -287,6 +293,7 @@ public sealed class VideoDetailCommandStateTests
             settings,
             workflow,
             downloadCoordinator,
+            new DownloadListState(),
             NullLogger<ViewVideoDetailViewModel>.Instance);
         viewModel.UiState.VideoInfoView = new DownKyi.Presentation.VideoInfoView();
         viewModel.VideoSections.Add(new DownKyi.Presentation.VideoSection
@@ -328,6 +335,7 @@ public sealed class VideoDetailCommandStateTests
             settings,
             workflow,
             new VideoDetailDownloadCoordinatorStub(),
+            new DownloadListState(),
             NullLogger<ViewVideoDetailViewModel>.Instance);
         var completion = WaitUntilExecutableAfterDisabled(viewModel.ParseAllVideoCommand);
 
@@ -381,6 +389,7 @@ public sealed class VideoDetailCommandStateTests
             settings,
             workflow,
             downloadCoordinator,
+            new DownloadListState(),
             NullLogger<ViewVideoDetailViewModel>.Instance);
         var completion = WaitUntilExecutableAfterDisabled(viewModel.InputCommand);
 
@@ -463,6 +472,7 @@ public sealed class VideoDetailCommandStateTests
             settings,
             workflow,
             new VideoDetailDownloadCoordinatorStub(),
+            new DownloadListState(),
             NullLogger<ViewVideoDetailViewModel>.Instance);
         var completion = WaitUntilExecutableAfterDisabled(viewModel.InputCommand);
         viewModel.UiState.InputText = "https://www.bilibili.com/video/BV1G1421D7mL";

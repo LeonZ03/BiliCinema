@@ -80,6 +80,9 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
     private string _status = "未登录。请扫码登录。";
     public string Status { get => _status; private set => SetProperty(ref _status, value); }
 
+    private string _loginStatus = "未登录。请扫码登录。";
+    public string LoginStatus { get => _loginStatus; private set => SetProperty(ref _loginStatus, value); }
+
     private bool _isLoggedIn;
     public bool IsLoggedIn { get => _isLoggedIn; private set => SetProperty(ref _isLoggedIn, value); }
 
@@ -209,7 +212,7 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
                 ? $"已登录：{snapshot.UserInfo!.Name} · UID {snapshot.UserInfo.Mid}"
                   + (snapshot.UserInfo.VipStatus == 1 ? " · 大会员" : string.Empty)
                 : "未登录 B 站账号";
-            Status = IsLoggedIn ? "已登录。粘贴影片链接并解析。" : "未登录。请扫码登录。";
+            LoginStatus = IsLoggedIn ? "已登录，可以开始观影或下载。" : "未登录。请扫码登录。";
         }
         catch (OperationCanceledException) when (_lifetime.IsCancellationRequested)
         {
@@ -218,7 +221,7 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
         catch (Exception error) when (IsRoutineError(error))
         {
             AccountStatus = "登录状态检查失败";
-            Status = "登录状态检查失败，请检查网络后重试扫码。";
+            LoginStatus = "登录状态检查失败，请检查网络后重试扫码。";
         }
         finally
         {
@@ -335,12 +338,12 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
             LoginQrCode?.Dispose();
             LoginQrCode = null;
             _loginQrUri = null;
-            Status = "正在生成登录二维码…";
+            LoginStatus = "正在生成登录二维码…";
             var loginUrl = await _login.RequestLoginUrlAsync(cancellationToken).ConfigureAwait(true);
             if (loginUrl?.Code != 0 || loginUrl.Data?.QrCodeAddress == null
                 || loginUrl.Data.QrcodeKey == null)
             {
-                Status = "二维码生成失败，请重试。";
+                LoginStatus = "二维码生成失败，请重试。";
                 return;
             }
 
@@ -348,7 +351,7 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
             LoginQrCode?.Dispose();
             LoginQrCode = _qrRenderer.Render(uri);
             _loginQrUri = uri;
-            Status = "请用哔哩哔哩 App 扫码并确认；也可复制二维码图片私下发送。";
+            LoginStatus = "请用哔哩哔哩 App 扫码并确认；也可复制二维码图片私下发送。";
             while (!cancellationToken.IsCancellationRequested)
             {
                 await Task.Delay(1000, cancellationToken).ConfigureAwait(true);
@@ -362,7 +365,7 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
 
                 if (data.Code == 86038)
                 {
-                    Status = "二维码已过期，请重新获取。";
+                    LoginStatus = "二维码已过期，请重新获取。";
                     LoginQrCode?.Dispose();
                     LoginQrCode = null;
                     _loginQrUri = null;
@@ -375,7 +378,7 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
                     if (!await _login.SaveLoginCookiesAsync(result!, redirect, cancellationToken)
                             .ConfigureAwait(true))
                     {
-                        Status = "登录验证失败，请重新扫码。";
+                        LoginStatus = "登录验证失败，请重新扫码。";
                         return;
                     }
 
@@ -398,7 +401,7 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
         }
         catch (Exception error) when (IsRoutineError(error))
         {
-            Status = "扫码登录失败，请检查网络并重试。";
+            LoginStatus = "扫码登录失败，请检查网络并重试。";
         }
     }
 
@@ -406,7 +409,7 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
     {
         if (LoginQrCode == null || _loginQrUri == null)
         {
-            Status = "请先获取有效的登录二维码。";
+            LoginStatus = "请先获取有效的登录二维码。";
             return;
         }
 
@@ -414,11 +417,11 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
         {
             var image = LoginQrShareImageRenderer.Render(_loginQrUri);
             await _clipboard.SetPngImageAsync(image, _lifetime.Token).ConfigureAwait(true);
-            Status = "带 BiliCinema 水印的二维码图片已复制到剪贴板。";
+            LoginStatus = "登录分享卡片已复制到剪贴板。";
         }
         catch (Exception error) when (IsRoutineError(error))
         {
-            Status = "复制二维码失败，请重试。";
+            LoginStatus = "复制二维码失败，请重试。";
         }
     }
 
@@ -445,12 +448,12 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
         AccountStatus = "未登录 B 站账号";
         if (!LoginHelper.DeleteLoginInfoCookies())
         {
-            Status = "本机登录信息清理失败，请检查数据目录权限。";
+            LoginStatus = "本机登录信息清理失败，请检查数据目录权限。";
             return;
         }
 
         await InitializeAsync().ConfigureAwait(true);
-        Status = browserCookiesCleared
+        LoginStatus = browserCookiesCleared
             ? "已退出本机 B 站账号。"
             : "已删除本机登录信息；请关闭观影窗口以结束网页会话。";
     }

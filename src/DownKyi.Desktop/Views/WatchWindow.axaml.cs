@@ -67,7 +67,7 @@ internal sealed partial class WatchWindow : Window
         _normalBackground = Background;
         _normalCornerRadius = _onlinePlayerSurface.CornerRadius;
         ConfigureBrowser(_onlineBrowser, "BiliCinemaOnline");
-        ConfigureBrowser(_roomBrowser, "BiliCinemaRoom");
+        ConfigureBrowser(_roomBrowser, "BiliCinemaOnline");
         _viewModel.AttachBrowsers(_onlineBrowser, _roomBrowser);
         _fullscreenTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(500) };
         _fullscreenTimer.Tick += OnFullscreenTimerTick;

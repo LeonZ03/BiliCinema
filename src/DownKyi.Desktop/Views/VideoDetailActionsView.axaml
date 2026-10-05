@@ -11,7 +11,7 @@
             BorderBrush="{DynamicResource BrushBorderSubtle}"
             BorderThickness="1"
             CornerRadius="{DynamicResource DownKyiRadiusMedium}">
-        <Grid ColumnDefinitions="Auto,Auto,32,*,Auto,Auto,Auto,Auto">
+        <Grid ColumnDefinitions="Auto,Auto,32,*,Auto,Auto">
             <CheckBox
                 Grid.Column="0"
                 VerticalAlignment="Center"
@@ -70,12 +70,6 @@
                 FontSize="12"
                 Theme="{StaticResource BtnStyle}"
                 Foreground="{DynamicResource BrushTextPrimary}" />
-            <Button Grid.Column="6" MinWidth="96" Margin="8,0,0,0"
-                    Command="{Binding PlayOnlineCommand}" Content="在线播放"
-                    Theme="{StaticResource BtnStyle}" />
-            <Button Grid.Column="7" MinWidth="64" Margin="8,0,0,0"
-                    Command="{Binding StopOnlineCommand}" Content="停止"
-                    Theme="{StaticResource BtnBorderStyle}" />
         </Grid>
     </Border>
 </UserControl>

@@ -137,7 +137,7 @@
                                HorizontalAlignment="Left" IsVisible="{Binding HasLoginQrCode}" />
                         <Button Content="复制二维码图片" Command="{Binding CopyLoginQrCommand}"
                                 HorizontalAlignment="Left" IsVisible="{Binding HasLoginQrCode}" />
-                        <TextBlock Text="{Binding Status}" TextWrapping="Wrap" />
+                        <TextBlock Text="{Binding LoginStatus}" TextWrapping="Wrap" />
                     </StackPanel>
                 </Border>
             </ScrollViewer>

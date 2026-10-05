@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.ComponentModel;
 using System.Linq;
 using System.Text.RegularExpressions;
 using System.Threading;
@@ -14,6 +15,7 @@ using DownKyi.Core.Settings;
 using DownKyi.Images;
 using DownKyi.Presentation;
 using DownKyi.Services;
+using DownKyi.Services.Download;
 using DownKyi.Services.Video;
 using DownKyi.Services.Watch;
 using DownKyi.Utils;
@@ -29,6 +31,7 @@ internal sealed class ViewVideoDetailViewModel : ViewModelBase
 
     private readonly IClipboardService _clipboardService;
     private readonly IVideoDetailDownloadCoordinator _downloadCoordinator;
+    private readonly DownloadListState _downloadLists;
     private readonly ILogger<ViewVideoDetailViewModel> _logger;
     private readonly ISettingsStore _settingsStore;
     private readonly IVideoDetailWorkflowCoordinator _workflow;
@@ -40,6 +43,7 @@ internal sealed class ViewVideoDetailViewModel : ViewModelBase
         ISettingsStore settingsStore,
         IVideoDetailWorkflowCoordinator workflow,
         IVideoDetailDownloadCoordinator downloadCoordinator,
+        DownloadListState downloadLists,
         ILogger<ViewVideoDetailViewModel> logger)
         : base(desktopInteractions)
     {
@@ -47,6 +51,7 @@ internal sealed class ViewVideoDetailViewModel : ViewModelBase
         _settingsStore = settingsStore ?? throw new ArgumentNullException(nameof(settingsStore));
         _workflow = workflow ?? throw new ArgumentNullException(nameof(workflow));
         _downloadCoordinator = downloadCoordinator ?? throw new ArgumentNullException(nameof(downloadCoordinator));
+        _downloadLists = downloadLists ?? throw new ArgumentNullException(nameof(downloadLists));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         var operationCommandGate = new DownKyiAsyncCommandGate();
         UiState.DownloadManage = CreateDownloadManageIcon();
@@ -64,10 +69,23 @@ internal sealed class ViewVideoDetailViewModel : ViewModelBase
         PlayOnlineCommand = new DownKyiAsyncDelegateCommand(PlayOnlineAsync, _logger, () => !UiState.IsBusy, executionGate: operationCommandGate);
         StopOnlineCommand = new RelayCommand(StopOnline);
         UiState.IsBusyChanged += OnIsBusyChanged;
+        _downloadLists.PropertyChanged += OnDownloadListsPropertyChanged;
     }
 
     public VideoDetailUiState UiState { get; } = new();
     public RangeObservableCollection<VideoSection> VideoSections { get; } = new();
+    public int ActiveDownloadingCount => _downloadLists.ActiveDownloadingCount;
+    public bool HasActiveDownloads => ActiveDownloadingCount > 0;
+
+    private void OnDownloadListsPropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (string.IsNullOrEmpty(e.PropertyName)
+            || e.PropertyName == nameof(DownloadListState.ActiveDownloadingCount))
+        {
+            OnPropertyChanged(nameof(ActiveDownloadingCount));
+            OnPropertyChanged(nameof(HasActiveDownloads));
+        }
+    }
 
     public RelayCommand BackSpaceCommand { get; }
     public RelayCommand DownloadManagerCommand { get; }
@@ -487,6 +505,7 @@ internal sealed class ViewVideoDetailViewModel : ViewModelBase
         if (disposing && !IsDisposed)
         {
             UiState.IsBusyChanged -= OnIsBusyChanged;
+            _downloadLists.PropertyChanged -= OnDownloadListsPropertyChanged;
             StopOnline();
             _workflow.Dispose();
         }
