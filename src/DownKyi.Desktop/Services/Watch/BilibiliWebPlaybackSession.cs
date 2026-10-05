@@ -15,12 +15,11 @@ namespace DownKyi.Services.Watch;
 // position and playback controls for both bangumi and ordinary videos.
 internal sealed class BilibiliWebPlaybackSession : IDisposable
 {
-    private const string Video = "document.querySelector('#bilibili-player video, #bilibiliPlayer video, .bpx-player-container video, video')";
-    private const string FocusPlayerScript = """
+    private const string Video = "(() => { const videos = [...document.querySelectorAll('#bilibili-player video, #bilibiliPlayer video, .bpx-player-container video, video')]; return videos.filter(video => { const rect = video.getBoundingClientRect(); const style = getComputedStyle(video); return rect.width >= 160 && rect.height >= 90 && style.display !== 'none' && style.visibility !== 'hidden' && Number(style.opacity) > 0; }).sort((left, right) => { const a = left.getBoundingClientRect(); const b = right.getBoundingClientRect(); return b.width * b.height - a.width * a.height; })[0] || null; })()";
+    private const string FocusPlayerScript = $$"""
         (() => {
-            const video = document.querySelector('#bilibili-player video, #bilibiliPlayer video, .bpx-player-container video, video');
+            const video = {{Video}};
             if (!video) {
-                if (document.body) document.body.style.visibility = 'hidden';
                 document.documentElement.style.background = '#000';
                 return false;
             }
@@ -71,6 +70,10 @@ internal sealed class BilibiliWebPlaybackSession : IDisposable
             document.body.style.overflow = 'hidden';
             document.body.style.margin = '0';
             document.body.style.visibility = 'visible';
+            video.disablePictureInPicture = true;
+            if (document.pictureInPictureElement === video) {
+                document.exitPictureInPicture?.().catch(() => {});
+            }
             for (let kept = player; kept && kept !== document.body; kept = kept.parentElement) {
                 const parent = kept.parentElement;
                 if (!parent) break;
@@ -118,6 +121,12 @@ internal sealed class BilibiliWebPlaybackSession : IDisposable
                     childList: true, subtree: true, attributes: true, attributeFilter: ['class', 'style']
                 });
                 enforceFocus();
+            }
+            for (let kept = video; kept && kept !== player; kept = kept.parentElement) {
+                for (const [name, value] of Object.entries({
+                    width: '100%', height: '100%', 'max-width': 'none', 'max-height': 'none',
+                    margin: '0', 'object-fit': 'contain'
+                })) kept.style.setProperty(name, value, 'important');
             }
             for (const [name, value] of Object.entries({
                 position: 'fixed', inset: '0', width: '100vw', height: '100vh',
@@ -189,9 +198,7 @@ internal sealed class BilibiliWebPlaybackSession : IDisposable
             });
         }
 
-        var playerUrl = page.EpisodeId > 0
-            ? new Uri($"https://www.bilibili.com/bangumi/play/ep{page.EpisodeId.ToString(CultureInfo.InvariantCulture)}")
-            : new Uri($"https://www.bilibili.com/video/{(string.IsNullOrEmpty(page.Bvid) ? $"av{page.Avid.ToString(CultureInfo.InvariantCulture)}" : page.Bvid)}?p={Math.Max(1, page.Page).ToString(CultureInfo.InvariantCulture)}");
+        var playerUrl = BuildPlayerUri(page);
         var session = new BilibiliWebPlaybackSession(browser, playerUrl);
         try
         {
@@ -218,14 +225,17 @@ internal sealed class BilibiliWebPlaybackSession : IDisposable
                             await session.InvokeAsync($"if ({Video}) {Video}.muted = false",
                                 cancellationToken).ConfigureAwait(true);
                         }
-                        // Let the page finish adding its shell before revealing
-                        // the WebView in the desktop window.
-                        await Task.Delay(250, cancellationToken).ConfigureAwait(true);
-                        await session.InvokeAsync(FocusPlayerScript, cancellationToken).ConfigureAwait(true);
+                        var focusConfirmed = await session.InvokeAsync(FocusPlayerScript, cancellationToken)
+                            .ConfigureAwait(true);
+                        if (!string.Equals(focusConfirmed.Trim('"'), "true", StringComparison.OrdinalIgnoreCase))
+                        {
+                            continue;
+                        }
                         if (startPaused)
                         {
                             await session.SetPausedAsync(true, cancellationToken).ConfigureAwait(true);
                         }
+                        browser.IsVisible = true;
                         return session;
                     }
                     if (attempt % 20 == 0)
@@ -251,6 +261,11 @@ internal sealed class BilibiliWebPlaybackSession : IDisposable
             throw;
         }
     }
+
+    internal static Uri BuildPlayerUri(VideoPage page)
+        => page.EpisodeId > 0
+            ? new Uri($"https://www.bilibili.com/bangumi/play/ep{page.EpisodeId.ToString(CultureInfo.InvariantCulture)}")
+            : new Uri($"https://www.bilibili.com/video/{(string.IsNullOrEmpty(page.Bvid) ? $"av{page.Avid.ToString(CultureInfo.InvariantCulture)}" : page.Bvid)}?p={Math.Max(1, page.Page).ToString(CultureInfo.InvariantCulture)}");
 
     public async Task<double> GetPositionAsync(CancellationToken cancellationToken)
     {
@@ -386,6 +401,7 @@ internal sealed class BilibiliWebPlaybackSession : IDisposable
     {
         try
         {
+            _browser.IsVisible = false;
             _browser.Navigate(new Uri("about:blank"));
         }
         catch (Exception error) when (error is InvalidOperationException

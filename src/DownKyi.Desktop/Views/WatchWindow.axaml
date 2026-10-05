@@ -32,7 +32,7 @@
                     <Button Classes="nav" Classes.selected="{Binding ShowRoom}" Content="观影房间" Command="{Binding ShowRoomCommand}" />
                     <Button Classes="nav" Classes.selected="{Binding ShowDownload}" Content="下载影片" Command="{Binding ShowDownloadCommand}" />
                 </StackPanel>
-                <TextBlock Text="B 站视频播放与同步" VerticalAlignment="Bottom" Margin="7,0,0,0"
+                <TextBlock Text="与好友一起看 B 站" VerticalAlignment="Bottom" Margin="7,0,0,0"
                            Foreground="{DynamicResource BrushTextSecondary}" FontSize="12" />
             </DockPanel>
         </Border>
@@ -62,7 +62,7 @@
                             <Grid ColumnDefinitions="*,300" ColumnSpacing="16">
                                 <StackPanel Grid.Column="0" Spacing="12">
                                     <TextBlock Text="观影房间" FontSize="24" FontWeight="SemiBold" />
-                                    <TextBlock Text="解析视频后可直接在上方播放。创建房间后可邀请对方同步观看；每台电脑都直接从 B 站播放。"
+                                    <TextBlock Text="解析视频后将在上方播放；房间内观影进度由房主统一控制；全屏下鼠标移至右侧呼出聊天框"
                                                TextWrapping="Wrap" Foreground="{DynamicResource BrushTextSecondary}" />
                                     <StackPanel Orientation="Horizontal" Spacing="10">
                                         <Border IsVisible="{Binding IsInRoom}" Padding="9,4"
@@ -86,9 +86,9 @@
                                 </StackPanel>
                             </Grid>
                             <Grid ColumnDefinitions="*,Auto" ColumnSpacing="9">
-                                <TextBox Grid.Column="0" PlaceholderText="粘贴 B 站电影或番剧链接"
+                                <TextBox Grid.Column="0" PlaceholderText="粘贴 B 站视频链接"
                                          Text="{Binding RoomVideoInput, Mode=TwoWay}" />
-                                <Button Grid.Column="1" Content="解析影片" Command="{Binding ParseCommand}"
+                                <Button Grid.Column="1" Content="解析视频" Command="{Binding ParseCommand}"
                                         IsEnabled="{Binding CanControl}" />
                             </Grid>
                             <TextBlock Text="{Binding RoomFilmTitle}" TextWrapping="Wrap" FontWeight="SemiBold" />

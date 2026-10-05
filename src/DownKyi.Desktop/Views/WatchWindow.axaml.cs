@@ -177,12 +177,16 @@ internal sealed partial class WatchWindow : Window
         browser.NavigationStarted += (_, args) =>
         {
             var url = args.Request;
-            if (url == null || url.AbsoluteUri != "about:blank" && !(url.Scheme == Uri.UriSchemeHttps
-                    && url.Host.Equals("www.bilibili.com", StringComparison.OrdinalIgnoreCase)
-                    && (url.AbsolutePath.StartsWith("/bangumi/play/ep", StringComparison.Ordinal)
-                        && long.TryParse(url.AbsolutePath.AsSpan("/bangumi/play/ep".Length), out var episodeId)
-                        && episodeId > 0
-                        || IsVideoPlaybackPath(url.AbsolutePath))))
+            var allowedPlaybackNavigation = IsAllowedPlaybackNavigation(url);
+            if (allowedPlaybackNavigation)
+            {
+                // Native WebView2 surfaces do not reliably honor Avalonia Opacity.
+                // Hide the native surface before Bilibili paints its page shell;
+                // StartAsync reveals it only after the focused video is ready.
+                browser.IsVisible = false;
+            }
+
+            if (!allowedPlaybackNavigation)
             {
                 args.Cancel = true;
             }
@@ -190,7 +194,27 @@ internal sealed partial class WatchWindow : Window
         browser.NewWindowRequested += (_, args) => args.Handled = true;
     }
 
-    private static bool IsVideoPlaybackPath(string path)
+    internal static bool IsAllowedPlaybackNavigation(Uri? url)
+    {
+        if (url == null)
+        {
+            return false;
+        }
+
+        if (url.AbsoluteUri.Equals("about:blank", StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        return url.Scheme == Uri.UriSchemeHttps
+            && url.Host.Equals("www.bilibili.com", StringComparison.OrdinalIgnoreCase)
+            && ((url.AbsolutePath.StartsWith("/bangumi/play/ep", StringComparison.Ordinal)
+                    && long.TryParse(url.AbsolutePath.AsSpan("/bangumi/play/ep".Length), out var episodeId)
+                    && episodeId > 0)
+                || IsVideoPlaybackPath(url.AbsolutePath));
+    }
+
+    internal static bool IsVideoPlaybackPath(string path)
     {
         const string prefix = "/video/";
         if (!path.StartsWith(prefix, StringComparison.Ordinal)) return false;

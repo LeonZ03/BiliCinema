@@ -140,7 +140,7 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
     private string _rateText = "1.0";
     public string RateText { get => _rateText; set => SetProperty(ref _rateText, value); }
 
-    private string _serviceAddress = "ws://127.0.0.1:5077/ws";
+    private string _serviceAddress = string.Empty;
     public string ServiceAddress { get => _serviceAddress; set => SetProperty(ref _serviceAddress, value); }
 
     private string _inviteText = string.Empty;
@@ -968,8 +968,7 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
                 : await _player.GetPositionAsync(_lifetime.Token).ConfigureAwait(true);
             var resumePlaying = _player == null
                 || !await _player.GetPausedAsync(_lifetime.Token).ConfigureAwait(true);
-            if (ServiceAddress == "ws://127.0.0.1:5077/ws"
-                || ServiceAddress == _quickTunnel.ServiceAddress)
+            if (UsesAutomaticRoomAddress(ServiceAddress, _quickTunnel.ServiceAddress))
             {
                 IsPreparing = true;
                 await EnsureLocalRoomServerAsync(_lifetime.Token).ConfigureAwait(true);
@@ -1015,6 +1014,7 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
         }
         catch (Exception error) when (IsRoutineError(error))
         {
+            if (!_room.Connected) ServiceAddress = string.Empty;
             RoomState = error is InvalidOperationException
                 ? error.Message
                 : "创建房间失败，请检查服务地址和网络。";
@@ -1051,6 +1051,7 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
         }
         catch (Exception error) when (IsRoutineError(error))
         {
+            if (!_room.Connected) ServiceAddress = string.Empty;
             RoomState = error is InvalidOperationException
                 ? error.Message : "加入失败，请检查邀请和服务连接。";
         }
@@ -1123,6 +1124,7 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
 
         await _room.LeaveAsync().ConfigureAwait(true);
         ClearRoomChat();
+        ServiceAddress = string.Empty;
         _lastSnapshot = null;
         _lastVersion = -1;
         _startWhenReady = false;
@@ -1273,31 +1275,56 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
         var actual = await player.GetPositionAsync(cancellationToken).ConfigureAwait(true);
         var drift = expected - actual;
         SyncStatus = $"影片时间差 {Math.Abs(drift):0.00} 秒 · 往返延迟 {_room.RoundTripMilliseconds:0} 毫秒";
-        if (Math.Abs(drift) > 1.5)
+        var shouldPause = !snapshot.Playing || snapshot.WaitingForReady
+            || snapshot.Host?.Online != true;
+        var currentRate = await player.GetSpeedAsync(cancellationToken).ConfigureAwait(true);
+        var correction = CreatePlaybackCorrection(_room.IsHost, snapshot, drift, currentRate);
+        if (correction.Seek)
         {
             await player.SeekAsync(expected, cancellationToken).ConfigureAwait(true);
         }
 
+        if (correction.SetRate)
+        {
+            await player.SetSpeedAsync(correction.TargetRate, cancellationToken).ConfigureAwait(true);
+        }
+
+        if (await player.GetPausedAsync(cancellationToken).ConfigureAwait(true) != correction.ShouldPause)
+        {
+            await player.SetPausedAsync(correction.ShouldPause, cancellationToken).ConfigureAwait(true);
+        }
+    }
+
+    internal static PlaybackCorrection CreatePlaybackCorrection(
+        bool isHost,
+        WatchRoomSnapshot snapshot,
+        double drift,
+        double currentRate)
+    {
         var shouldPause = !snapshot.Playing || snapshot.WaitingForReady
             || snapshot.Host?.Online != true;
         var targetRate = snapshot.Rate;
-        if (!shouldPause && Math.Abs(drift) is > 0.45 and <= 1.5)
+        if (!isHost && !shouldPause && Math.Abs(drift) is > 0.45 and <= 1.5)
         {
-            // A small rate adjustment avoids repeatedly jumping a few frames.
+            // A small rate adjustment avoids repeatedly jumping a few frames for guests.
             targetRate = Math.Clamp(snapshot.Rate + drift * 0.08,
                 snapshot.Rate * 0.96, snapshot.Rate * 1.04);
         }
 
-        if (Math.Abs(await player.GetSpeedAsync(cancellationToken).ConfigureAwait(true) - targetRate) > 0.015)
-        {
-            await player.SetSpeedAsync(targetRate, cancellationToken).ConfigureAwait(true);
-        }
-
-        if (await player.GetPausedAsync(cancellationToken).ConfigureAwait(true) != shouldPause)
-        {
-            await player.SetPausedAsync(shouldPause, cancellationToken).ConfigureAwait(true);
-        }
+        return new PlaybackCorrection(
+            Seek: !isHost && Math.Abs(drift) > 1.5,
+            SetRate: !isHost && Math.Abs(currentRate - targetRate) > 0.015,
+            TargetRate: targetRate,
+            ShouldPause: shouldPause);
     }
+
+    internal readonly record struct PlaybackCorrection(bool Seek, bool SetRate, double TargetRate,
+        bool ShouldPause);
+
+    internal static bool UsesAutomaticRoomAddress(string? address, string? tunnelAddress)
+        => string.IsNullOrWhiteSpace(address)
+           || address == "ws://127.0.0.1:5077/ws"
+           || address == tunnelAddress;
 
     private void OnRoomDisconnected()
     {
@@ -1317,6 +1344,7 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
         {
             _lastSnapshot = null;
             ClearRoomChat();
+            ServiceAddress = string.Empty;
             _startWhenReady = false;
             _hostInviteUrl = null;
             _roomMemberCount = 0;
@@ -1458,7 +1486,7 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
 
                     if (_lastSnapshot != null && _room.Connected)
                     {
-                        await CorrectPlaybackAsync(_lastSnapshot, cancellationToken).ConfigureAwait(true);
+                        await CorrectLatestPlaybackAsync(cancellationToken).ConfigureAwait(true);
                     }
 
                     if (++ticks % 5 == 0 && _room.Connected)
@@ -1479,6 +1507,22 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
         catch (Exception error) when (IsRoutineError(error))
         {
             Status = "播放器状态监控已停止，请重新打开观影模式。";
+        }
+    }
+
+    private async Task CorrectLatestPlaybackAsync(CancellationToken cancellationToken)
+    {
+        await _snapshotGate.WaitAsync(cancellationToken).ConfigureAwait(true);
+        try
+        {
+            if (_lastSnapshot is { } snapshot && _room.Connected)
+            {
+                await CorrectPlaybackAsync(snapshot, cancellationToken).ConfigureAwait(true);
+            }
+        }
+        finally
+        {
+            _snapshotGate.Release();
         }
     }
 
@@ -1508,7 +1552,7 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
             await player.SeekAsync(_lastPosition, cancellationToken).ConfigureAwait(true);
             if (_lastSnapshot != null && _room.Connected)
             {
-                await CorrectPlaybackAsync(_lastSnapshot, cancellationToken).ConfigureAwait(true);
+                await CorrectLatestPlaybackAsync(cancellationToken).ConfigureAwait(true);
             }
             else
             {
