@@ -83,6 +83,28 @@ internal sealed class BilibiliWebPlaybackSession : IDisposable
                 parent.style.setProperty('overflow', 'visible', 'important');
                 parent.style.setProperty('transform', 'none', 'important');
             }
+            if (!window.__biliCinemaFocusObserver) {
+                window.__biliCinemaFocusObserver = new MutationObserver(() => {
+                    if (window.__biliCinemaFocusQueued) return;
+                    window.__biliCinemaFocusQueued = true;
+                    requestAnimationFrame(() => {
+                        window.__biliCinemaFocusQueued = false;
+                        const root = window.__biliCinemaPlayerRoot;
+                        if (!root?.isConnected) return;
+                        for (let kept = root; kept && kept !== document.body; kept = kept.parentElement) {
+                            const parent = kept.parentElement;
+                            if (!parent) break;
+                            for (const sibling of parent.children) {
+                                if (sibling !== kept) {
+                                    sibling.style.setProperty('display', 'none', 'important');
+                                    sibling.style.setProperty('pointer-events', 'none', 'important');
+                                }
+                            }
+                        }
+                    });
+                });
+                window.__biliCinemaFocusObserver.observe(document.body, { childList: true, subtree: true });
+            }
             for (const [name, value] of Object.entries({
                 position: 'fixed', inset: '0', width: '100vw', height: '100vh',
                 'max-width': 'none', 'max-height': 'none', margin: '0',
@@ -114,8 +136,8 @@ internal sealed class BilibiliWebPlaybackSession : IDisposable
             throw new InvalidOperationException("网页播放器只支持 B 站影片剧集链接。");
         }
 
-        // Refresh the single player's private WebView2 profile from this
-        // application's current QR login before requesting the Bilibili page.
+        // Keep the private WebView2 session cookies across player reloads. Bilibili
+        // may add cookies while the page is open that are not in the QR-login store.
         browser.Navigate(new Uri("about:blank"));
         NativeWebViewCookieManager? cookieManager = null;
         for (var attempt = 0; attempt < 100 && cookieManager == null; attempt++)
@@ -132,8 +154,6 @@ internal sealed class BilibiliWebPlaybackSession : IDisposable
         {
             throw new InvalidOperationException("网页播放器未能启动。请确认 WebView2 Runtime 已安装。");
         }
-
-        await ClearBilibiliCookiesAsync(browser).ConfigureAwait(true);
 
         var cookies = LoginHelper.GetLoginInfoCookies()
             .Where(cookie => !string.IsNullOrWhiteSpace(cookie.Name)
@@ -177,6 +197,14 @@ internal sealed class BilibiliWebPlaybackSession : IDisposable
                         {
                             await session.InvokeAsync($"if ({Video}) {Video}.muted = false",
                                 cancellationToken).ConfigureAwait(true);
+                        }
+                        // Let the page finish adding its shell before revealing
+                        // the WebView in the desktop window.
+                        await Task.Delay(250, cancellationToken).ConfigureAwait(true);
+                        await session.InvokeAsync(FocusPlayerScript, cancellationToken).ConfigureAwait(true);
+                        if (startPaused)
+                        {
+                            await session.SetPausedAsync(true, cancellationToken).ConfigureAwait(true);
                         }
                         return session;
                     }

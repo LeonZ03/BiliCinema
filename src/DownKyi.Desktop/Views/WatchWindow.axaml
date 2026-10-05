@@ -41,7 +41,9 @@
             <Border x:Name="RoomPlayerSurface" Grid.Row="0" Background="Black"
                     IsVisible="{Binding ShowRoom}"
                     CornerRadius="{DynamicResource DownKyiRadiusMedium}">
-                <NativeWebView x:Name="RoomMovieWebView" Height="440" />
+                <NativeWebView x:Name="RoomMovieWebView" Height="440"
+                               Opacity="{Binding PlayerOpacity}"
+                               IsHitTestVisible="{Binding PlayerReady}" />
             </Border>
             <Grid x:Name="PlaybackToolbar" Grid.Row="1" ColumnDefinitions="*,Auto" ColumnSpacing="12"
                   IsVisible="{Binding ShowPlayer}">
@@ -60,7 +62,7 @@
                             CornerRadius="{DynamicResource DownKyiRadiusMedium}">
                         <StackPanel Spacing="12">
                             <TextBlock Text="观影房间" FontSize="24" FontWeight="SemiBold" />
-                            <TextBlock Text="未创建房间也能直接播放。创建房间后可邀请对方同步观看；每台电脑都直接从 B 站播放。"
+                            <TextBlock Text="解析后可直接在上方视频内播放。创建房间后可邀请对方同步观看；每台电脑都直接从 B 站播放。"
                                        TextWrapping="Wrap" Foreground="{DynamicResource BrushTextSecondary}" />
                             <TextBlock Text="{Binding RoomParticipantText}" FontSize="14" FontWeight="SemiBold"
                                        Foreground="{DynamicResource BrushPrimary}" />
@@ -71,17 +73,6 @@
                                         IsEnabled="{Binding CanControl}" />
                             </Grid>
                             <TextBlock Text="{Binding RoomFilmTitle}" TextWrapping="Wrap" FontWeight="SemiBold" />
-                            <StackPanel Orientation="Horizontal" Spacing="9">
-                                <Button Content="开始 / 继续播放" Command="{Binding PlayCommand}"
-                                        IsEnabled="{Binding CanControl}" />
-                                <Button Content="暂停" Command="{Binding PauseCommand}"
-                                        IsEnabled="{Binding CanControl}" />
-                                <Button Content="停止播放" Command="{Binding StopCommand}"
-                                        IsEnabled="{Binding CanControl}" />
-                                <TextBlock Text="{Binding PositionText}" VerticalAlignment="Center" />
-                            </StackPanel>
-                            <TextBlock Text="{Binding MediaInfo}" TextWrapping="Wrap"
-                                       Foreground="{DynamicResource BrushTextSecondary}" />
                             <Grid ColumnDefinitions="Auto,*" ColumnSpacing="8">
                                 <TextBlock Text="服务地址" VerticalAlignment="Center" />
                                 <TextBox Grid.Column="1" Text="{Binding ServiceAddress, Mode=TwoWay}" />
