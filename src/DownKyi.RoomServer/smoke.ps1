@@ -72,6 +72,7 @@ try {
     if ($created.roomCode.Length -ne 22 -or $created.clientId.Length -ne 22) {
         throw "Create did not return high-entropy identifiers."
     }
+    if ($created.snapshot.memberCount -ne 1) { throw "A new room did not report its host as the only member." }
 
     $guest = Connect-Room
     Send-Json $guest ('{"type":"join","roomCode":"' + $created.roomCode + '"}')
@@ -79,6 +80,7 @@ try {
     if ($joined.role -ne "guest" -or $joined.clientId -eq $created.clientId) {
         throw "Second client did not receive an independent guest identity."
     }
+    if ($joined.snapshot.memberCount -ne 2) { throw "A joined guest was not included in the room member count." }
 
     Send-Json $guest '{"type":"login_qr","loginUrl":"https://passport.bilibili.com/obsolete"}'
     $unsupported = Read-Until $guest 'error'
@@ -111,6 +113,7 @@ try {
     $guest.Dispose()
     $guest = $null
     $offline = Read-Until $hostSocket "snapshot" { param($m) $m.snapshot.guest.online -eq $false }
+    if ($offline.snapshot.memberCount -ne 1) { throw "A disconnected guest was counted as present." }
     $guest = Connect-Room
     Send-Json $guest ('{"type":"join","roomCode":"' + $created.roomCode + '","clientId":"' + $joined.clientId + '"}')
     $rejoined = Read-Until $guest "welcome"
@@ -131,14 +134,26 @@ try {
     Send-Json $hostSocket '{"type":"select","media":{"episodeId":251429}}'
     Send-Json $hostSocket '{"type":"ready","ready":true}'
     Send-Json $hostSocket '{"type":"play"}'
-    $pending = Read-Until $hostSocket "snapshot" { param($m) $m.snapshot.waitingForReady -eq $true }
+    $soloPlaying = Read-Until $hostSocket "snapshot" { param($m) $m.snapshot.playing -eq $true }
+    if ($soloPlaying.snapshot.memberCount -ne 1) { throw "A solo host room did not report one member while playing." }
     $guest = Connect-Room
     Send-Json $guest ('{"type":"join","roomCode":"' + $newRoom.roomCode + '"}')
     $newGuest = Read-Until $guest "welcome"
+    if ($newGuest.snapshot.memberCount -ne 2 -or $newGuest.snapshot.playing -or
+        -not $newGuest.snapshot.waitingForReady) {
+        throw "A guest joining a solo playback did not pause and wait for guest readiness."
+    }
     Send-Json $guest '{"type":"ready","ready":true}'
     $startedTogether = Read-Until $hostSocket "snapshot" { param($m) $m.snapshot.playing -eq $true }
+    if ($startedTogether.snapshot.memberCount -ne 2) { throw "Playback did not resume with both members counted." }
+    $guest.Dispose()
+    $guest = $null
+    $continuedAlone = Read-Until $hostSocket "snapshot" {
+        param($m) $m.snapshot.memberCount -eq 1 -and $m.snapshot.playing -eq $true
+    }
+    if ($continuedAlone.snapshot.waitingForReady) { throw "Host playback paused after the guest left." }
     Send-Json $hostSocket '{"type":"close"}'
-    Write-Host "Room server smoke passed: create/join, obsolete login relay rejection, host authority, media URL rejection, ready/play, seek, buffering recovery, reconnect, close, and deferred start."
+    Write-Host "Room server smoke passed: create/join, member count, solo playback, guest-join resynchronization, obsolete login relay rejection, host authority, media URL rejection, ready/play, seek, buffering recovery, reconnect, and close."
 } finally {
     if ($null -ne $guest) { $guest.Dispose() }
     if ($null -ne $hostSocket) { $hostSocket.Dispose() }

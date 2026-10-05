@@ -281,6 +281,7 @@ internal sealed record WatchRoomSnapshot
     public double Rate { get; init; } = 1;
     public long ServerTimeUnixMs { get; init; }
     public bool WaitingForReady { get; init; }
+    public int MemberCount { get; init; }
     public WatchRoomMember? Host { get; init; }
     public WatchRoomMember? Guest { get; init; }
 }

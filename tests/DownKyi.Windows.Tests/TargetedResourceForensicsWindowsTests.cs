@@ -6,6 +6,7 @@ using System.Runtime.Versioning;
 using DownKyi.CentralTestRunner;
 using DownKyi.ProcessSupervision;
 using DownKyi.TestInfrastructure;
+using CentralRunnerProgram = DownKyi.CentralTestRunner.Program;
 using Microsoft.Win32.SafeHandles;
 
 namespace DownKyi.Windows.Tests;
@@ -179,7 +180,7 @@ public sealed class TargetedResourceForensicsWindowsTests
                     cleanupResourceDirectory: targetDirectory)).ConfigureAwait(true);
 
             Assert.Equal(targetDirectory, exception.ResourcePath);
-            var diagnostic = Program.FormatExceptionDiagnostic(exception);
+            var diagnostic = CentralRunnerProgram.FormatExceptionDiagnostic(exception);
             Assert.Contains("cleanup phase=directory-rundown", diagnostic, StringComparison.Ordinal);
             Assert.Contains($"rootPid={rootScope.RootPid}", diagnostic, StringComparison.Ordinal);
             Assert.True(root.HasExited);
@@ -228,7 +229,7 @@ public sealed class TargetedResourceForensicsWindowsTests
             var aggregate = Assert.IsType<AggregateException>(exception);
             Assert.Same(snapshotFailure, aggregate.InnerExceptions[0]);
             Assert.IsType<DirectoryResourceRundownTimeoutException>(aggregate.InnerExceptions[1]);
-            var diagnostic = Program.FormatExceptionDiagnostic(aggregate);
+            var diagnostic = CentralRunnerProgram.FormatExceptionDiagnostic(aggregate);
             Assert.Contains("cleanup phase=snapshot", diagnostic, StringComparison.Ordinal);
             Assert.Contains("cleanup phase=directory-rundown", diagnostic, StringComparison.Ordinal);
             Assert.Contains($"rootPid={rootScope.RootPid}", diagnostic, StringComparison.Ordinal);

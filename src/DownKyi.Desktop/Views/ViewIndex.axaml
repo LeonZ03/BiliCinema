@@ -30,6 +30,7 @@
                   HorizontalAlignment="Right"
                   VerticalAlignment="Bottom"
                   Cursor="Hand"
+                  IsHitTestVisible="{Binding UserName, Converter={x:Static StringConverters.IsNullOrEmpty}}"
                   IsVisible="{Binding LoginPanelVisibility}" ColumnDefinitions="*,*">
                 <Interaction.Behaviors>
                     <EventTriggerBehavior EventName="PointerReleased">

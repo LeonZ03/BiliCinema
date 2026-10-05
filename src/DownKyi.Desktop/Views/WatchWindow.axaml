@@ -29,7 +29,6 @@
                                Foreground="{DynamicResource BrushPrimary}" Margin="7,0,0,26" />
                     <ProgressBar IsVisible="{Binding IsPreparing}" IsIndeterminate="True" Height="4" />
                     <Button Classes="nav" Classes.selected="{Binding ShowLogin}" Content="登录" Command="{Binding ShowLoginCommand}" />
-                    <Button Classes="nav" Classes.selected="{Binding ShowOnline}" Content="在线播放" Command="{Binding ShowOnlineCommand}" />
                     <Button Classes="nav" Classes.selected="{Binding ShowRoom}" Content="观影房间" Command="{Binding ShowRoomCommand}" />
                     <Button Classes="nav" Classes.selected="{Binding ShowDownload}" Content="下载影片" Command="{Binding ShowDownloadCommand}" />
                 </StackPanel>
@@ -39,11 +38,6 @@
         </Border>
 
         <Grid x:Name="WatchLayout" Grid.Column="1" Margin="22" RowDefinitions="Auto,Auto,*" RowSpacing="14">
-            <Border x:Name="OnlinePlayerSurface" Grid.Row="0" Background="Black"
-                    IsVisible="{Binding ShowOnline}"
-                    CornerRadius="{DynamicResource DownKyiRadiusMedium}">
-                <NativeWebView x:Name="OnlineMovieWebView" Height="440" />
-            </Border>
             <Border x:Name="RoomPlayerSurface" Grid.Row="0" Background="Black"
                     IsVisible="{Binding ShowRoom}"
                     CornerRadius="{DynamicResource DownKyiRadiusMedium}">
@@ -61,43 +55,33 @@
             <ScrollViewer x:Name="WatchDetails" Grid.Row="2" VerticalScrollBarVisibility="Auto"
                           IsVisible="{Binding ShowPlayer}">
                 <StackPanel Spacing="14">
-                    <Border IsVisible="{Binding ShowOnline}" Padding="20"
-                            Background="{DynamicResource BrushSurfaceRaised}"
-                            CornerRadius="{DynamicResource DownKyiRadiusMedium}">
-                        <StackPanel Spacing="12">
-                            <TextBlock Text="在线播放" FontSize="24" FontWeight="SemiBold" />
-                            <TextBlock Text="使用 B 站网页播放器直接播放；画质、音量、进度和倍速都可在画面内操作。"
-                                       TextWrapping="Wrap" Foreground="{DynamicResource BrushTextSecondary}" />
-                            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="9">
-                                <TextBox Grid.Column="0" PlaceholderText="粘贴 B 站电影或番剧链接"
-                                         Text="{Binding VideoInput, Mode=TwoWay}" />
-                                <Button Grid.Column="1" Content="解析影片" Command="{Binding ParseCommand}" />
-                            </Grid>
-                            <TextBlock Text="{Binding OnlineFilmTitle}" TextWrapping="Wrap" FontWeight="SemiBold" />
-                            <StackPanel Orientation="Horizontal" Spacing="9">
-                                <Button Content="开始播放" Command="{Binding PlayCommand}" />
-                                <Button Content="停止播放" Command="{Binding StopCommand}" />
-                                <TextBlock Text="{Binding PositionText}" VerticalAlignment="Center" />
-                            </StackPanel>
-                            <TextBlock Text="{Binding MediaInfo}" TextWrapping="Wrap"
-                                       Foreground="{DynamicResource BrushTextSecondary}" />
-                        </StackPanel>
-                    </Border>
-
                     <Border IsVisible="{Binding ShowRoom}" Padding="20"
                             Background="{DynamicResource BrushSurfaceRaised}"
                             CornerRadius="{DynamicResource DownKyiRadiusMedium}">
                         <StackPanel Spacing="12">
                             <TextBlock Text="观影房间" FontSize="24" FontWeight="SemiBold" />
-                            <TextBlock Text="房主选片并控制播放；影片仍由每台电脑直接从 B 站播放。"
+                            <TextBlock Text="未创建房间也能直接播放。创建房间后可邀请对方同步观看；每台电脑都直接从 B 站播放。"
                                        TextWrapping="Wrap" Foreground="{DynamicResource BrushTextSecondary}" />
+                            <TextBlock Text="{Binding RoomParticipantText}" FontSize="14" FontWeight="SemiBold"
+                                       Foreground="{DynamicResource BrushPrimary}" />
                             <Grid ColumnDefinitions="*,Auto" ColumnSpacing="9">
-                                <TextBox Grid.Column="0" PlaceholderText="房间影片链接（与在线播放分开）"
+                                <TextBox Grid.Column="0" PlaceholderText="粘贴 B 站电影或番剧链接"
                                          Text="{Binding RoomVideoInput, Mode=TwoWay}" />
                                 <Button Grid.Column="1" Content="解析影片" Command="{Binding ParseCommand}"
                                         IsEnabled="{Binding CanControl}" />
                             </Grid>
                             <TextBlock Text="{Binding RoomFilmTitle}" TextWrapping="Wrap" FontWeight="SemiBold" />
+                            <StackPanel Orientation="Horizontal" Spacing="9">
+                                <Button Content="开始 / 继续播放" Command="{Binding PlayCommand}"
+                                        IsEnabled="{Binding CanControl}" />
+                                <Button Content="暂停" Command="{Binding PauseCommand}"
+                                        IsEnabled="{Binding CanControl}" />
+                                <Button Content="停止播放" Command="{Binding StopCommand}"
+                                        IsEnabled="{Binding CanControl}" />
+                                <TextBlock Text="{Binding PositionText}" VerticalAlignment="Center" />
+                            </StackPanel>
+                            <TextBlock Text="{Binding MediaInfo}" TextWrapping="Wrap"
+                                       Foreground="{DynamicResource BrushTextSecondary}" />
                             <Grid ColumnDefinitions="Auto,*" ColumnSpacing="8">
                                 <TextBlock Text="服务地址" VerticalAlignment="Center" />
                                 <TextBox Grid.Column="1" Text="{Binding ServiceAddress, Mode=TwoWay}" />

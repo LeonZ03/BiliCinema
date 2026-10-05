@@ -85,7 +85,7 @@ internal sealed class Room(string code, string hostClientId)
     }
 
     public bool CanRun() => Media is not null && Host.Connection is not null && Host.Ready && !Host.Buffering &&
-        Guest is { Connection: not null, Ready: true, Buffering: false };
+        (Guest is not { Connection: not null } || Guest is { Ready: true, Buffering: false });
 
     public void StartIfReady()
     {
@@ -104,6 +104,15 @@ internal sealed class Room(string code, string hostClientId)
         StartRequested = false;
     }
 
+    public void ContinueWithoutGuest()
+    {
+        var resume = Playing || StartRequested;
+        Settle();
+        Playing = false;
+        StartRequested = resume;
+        StartIfReady();
+    }
+
     public object Snapshot() => new
     {
         version = Version,
@@ -113,6 +122,7 @@ internal sealed class Room(string code, string hostClientId)
         rate = Rate,
         serverTimeUnixMs = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
         waitingForReady = StartRequested && !Playing,
+        memberCount = (Host.Connection is null ? 0 : 1) + (Guest?.Connection is null ? 0 : 1),
         host = Host.View,
         guest = Guest?.View
     };
@@ -182,7 +192,8 @@ internal sealed class RoomCoordinator : BackgroundService
 
             MemberSlot slot;
             string role;
-            bool preserveWaitingStart = message.ClientId is null && existing.Guest is null && existing.StartRequested;
+            bool preserveWaitingStart = message.ClientId is null && existing.Guest is null &&
+                (existing.StartRequested || existing.Playing);
             if (message.ClientId is not null)
             {
                 if (message.ClientId == existing.Host.ClientId)
@@ -365,7 +376,14 @@ internal sealed class RoomCoordinator : BackgroundService
             slot.DisconnectedAt = DateTimeOffset.UtcNow;
             slot.Ready = false;
             slot.Buffering = false;
-            room.PauseForDisconnect();
+            if (ReferenceEquals(slot, room.Host))
+            {
+                room.PauseForDisconnect();
+            }
+            else
+            {
+                room.ContinueWithoutGuest();
+            }
             room.Version++;
             room.Broadcast();
         }
@@ -423,7 +441,7 @@ internal sealed class RoomCoordinator : BackgroundService
         slot.Connection?.Complete();
         slot.Connection!.Room = null;
         room.Guest = null;
-        room.PauseForDisconnect();
+        room.ContinueWithoutGuest();
         room.Version++;
         room.Broadcast();
     }

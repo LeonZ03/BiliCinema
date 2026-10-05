@@ -29,11 +29,9 @@ internal sealed partial class WatchWindow : Window
     private readonly WatchWindowViewModel _viewModel;
     private readonly Grid _watchLayout;
     private readonly Border _sidebar;
-    private readonly Border _onlinePlayerSurface;
     private readonly Border _roomPlayerSurface;
-    private readonly NativeWebView _onlineBrowser;
     private readonly NativeWebView _roomBrowser;
-    private NativeWebView CurrentBrowser => _viewModel.ShowRoom ? _roomBrowser : _onlineBrowser;
+    private NativeWebView CurrentBrowser => _roomBrowser;
     private readonly Button _fullscreenButton;
     private readonly DispatcherTimer _fullscreenTimer;
     private WindowState _previousWindowState;
@@ -54,21 +52,16 @@ internal sealed partial class WatchWindow : Window
                        ?? throw new InvalidOperationException("观影布局未加载。");
         _sidebar = this.FindControl<Border>("Sidebar")
                    ?? throw new InvalidOperationException("导航栏未加载。");
-        _onlinePlayerSurface = this.FindControl<Border>("OnlinePlayerSurface")
-                               ?? throw new InvalidOperationException("在线播放容器未加载。");
         _roomPlayerSurface = this.FindControl<Border>("RoomPlayerSurface")
-                             ?? throw new InvalidOperationException("房间播放器容器未加载。");
-        _onlineBrowser = this.FindControl<NativeWebView>("OnlineMovieWebView")
-                         ?? throw new InvalidOperationException("在线播放器未加载。");
+                               ?? throw new InvalidOperationException("房间播放器容器未加载。");
         _roomBrowser = this.FindControl<NativeWebView>("RoomMovieWebView")
                        ?? throw new InvalidOperationException("房间播放器未加载。");
         _fullscreenButton = this.FindControl<Button>("FullscreenButton")
                             ?? throw new InvalidOperationException("全屏按钮未加载。");
         _normalBackground = Background;
-        _normalCornerRadius = _onlinePlayerSurface.CornerRadius;
-        ConfigureBrowser(_onlineBrowser, "BiliCinemaOnline");
+        _normalCornerRadius = _roomPlayerSurface.CornerRadius;
         ConfigureBrowser(_roomBrowser, "BiliCinemaOnline");
-        _viewModel.AttachBrowsers(_onlineBrowser, _roomBrowser);
+        _viewModel.AttachBrowser(_roomBrowser);
         _fullscreenTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(500) };
         _fullscreenTimer.Tick += OnFullscreenTimerTick;
         Opened += OnOpened;
@@ -210,9 +203,7 @@ internal sealed partial class WatchWindow : Window
             _watchLayout.Margin = new Avalonia.Thickness(22);
             _watchLayout.RowDefinitions = new RowDefinitions("Auto,Auto,*");
             _watchLayout.RowSpacing = 14;
-            _onlinePlayerSurface.CornerRadius = _normalCornerRadius;
             _roomPlayerSurface.CornerRadius = _normalCornerRadius;
-            _onlineBrowser.Height = 440;
             _roomBrowser.Height = 440;
             _fullscreenButton.Content = "全屏播放";
             _isFullscreen = false;
@@ -225,9 +216,7 @@ internal sealed partial class WatchWindow : Window
             _watchLayout.Margin = new Avalonia.Thickness(0);
             _watchLayout.RowDefinitions = new RowDefinitions("*,0,0");
             _watchLayout.RowSpacing = 0;
-            _onlinePlayerSurface.CornerRadius = new Avalonia.CornerRadius(0);
             _roomPlayerSurface.CornerRadius = new Avalonia.CornerRadius(0);
-            _onlineBrowser.Height = double.NaN;
             _roomBrowser.Height = double.NaN;
             _isFullscreen = true;
             WindowState = WindowState.FullScreen;

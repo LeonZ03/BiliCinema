@@ -114,8 +114,8 @@ internal sealed class BilibiliWebPlaybackSession : IDisposable
             throw new InvalidOperationException("网页播放器只支持 B 站影片剧集链接。");
         }
 
-        // Both players use the same private WebView2 profile. Refresh the login
-        // cookies without clearing the profile while the other player is open.
+        // Refresh the single player's private WebView2 profile from this
+        // application's current QR login before requesting the Bilibili page.
         browser.Navigate(new Uri("about:blank"));
         NativeWebViewCookieManager? cookieManager = null;
         for (var attempt = 0; attempt < 100 && cookieManager == null; attempt++)
@@ -132,6 +132,8 @@ internal sealed class BilibiliWebPlaybackSession : IDisposable
         {
             throw new InvalidOperationException("网页播放器未能启动。请确认 WebView2 Runtime 已安装。");
         }
+
+        await ClearBilibiliCookiesAsync(browser).ConfigureAwait(true);
 
         var cookies = LoginHelper.GetLoginInfoCookies()
             .Where(cookie => !string.IsNullOrWhiteSpace(cookie.Name)

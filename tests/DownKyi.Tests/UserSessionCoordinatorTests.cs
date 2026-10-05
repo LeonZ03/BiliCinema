@@ -19,7 +19,6 @@ public sealed class UserSessionCoordinatorTests
         using var viewModel = new ViewIndexViewModel(
             new TestDesktopInteractionContext(navigation),
             coordinator,
-            settings.Store,
             searchService,
             NullLogger<ViewIndexViewModel>.Instance);
 
@@ -36,7 +35,6 @@ public sealed class UserSessionCoordinatorTests
         using var viewModel = new ViewIndexViewModel(
             new TestDesktopInteractionContext(navigation),
             coordinator,
-            settings.Store,
             searchService,
             NullLogger<ViewIndexViewModel>.Instance)
         {
@@ -53,6 +51,28 @@ public sealed class UserSessionCoordinatorTests
             "https://www.bilibili.com/video/BV1G1421D7mL",
             request.Parameter);
         Assert.Equal(string.Empty, viewModel.InputText);
+    }
+
+    [Fact]
+    public void SignedInAvatarDoesNotOpenPersonalSpace()
+    {
+        using var settings = new TestSettingsStore();
+        var navigation = new StubNavigationService();
+        using var viewModel = new ViewIndexViewModel(
+            new TestDesktopInteractionContext(navigation),
+            new RecordingUserSessionCoordinator(),
+            new SearchService(settings.Store, navigation),
+            NullLogger<ViewIndexViewModel>.Instance)
+        {
+            UserName = "account-owner"
+        };
+
+        viewModel.LoginCommand.Execute(null);
+        Assert.Empty(navigation.Requests);
+
+        viewModel.UserName = null;
+        viewModel.LoginCommand.Execute(null);
+        Assert.Equal(AppRoute.Login, Assert.Single(navigation.Requests).Route);
     }
 
     [Fact]

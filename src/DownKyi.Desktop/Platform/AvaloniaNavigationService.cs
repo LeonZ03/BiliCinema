@@ -11,20 +11,24 @@ internal sealed class AvaloniaNavigationService : IAppNavigationService, IDispos
     private const int MainHistoryCapacity = 32;
     private readonly Func<AppRoute, object> _viewModelFactory;
     private readonly Action<Action> _dispatch;
+    private readonly bool _allowPrivateAccountRoutes;
     private readonly Dictionary<AppNavigationRegion, List<NavigationEntry>> _entries = [];
     private bool _disposed;
 
     public AvaloniaNavigationService(NavigationViewModelFactory viewModelFactory)
-        : this((viewModelFactory ?? throw new ArgumentNullException(nameof(viewModelFactory))).Create, Dispatch)
+        : this((viewModelFactory ?? throw new ArgumentNullException(nameof(viewModelFactory))).Create,
+            Dispatch, allowPrivateAccountRoutes: !App.WatchMode)
     {
     }
 
     internal AvaloniaNavigationService(
         Func<AppRoute, object> viewModelFactory,
-        Action<Action> dispatch)
+        Action<Action> dispatch,
+        bool allowPrivateAccountRoutes = true)
     {
         _viewModelFactory = viewModelFactory ?? throw new ArgumentNullException(nameof(viewModelFactory));
         _dispatch = dispatch ?? throw new ArgumentNullException(nameof(dispatch));
+        _allowPrivateAccountRoutes = allowPrivateAccountRoutes;
     }
 
     public event EventHandler<AppNavigationChangedEventArgs>? NavigationChanged;
@@ -102,6 +106,12 @@ internal sealed class AvaloniaNavigationService : IAppNavigationService, IDispos
         bool keepHistory)
     {
         ThrowIfDisposed();
+        if (!_allowPrivateAccountRoutes && route is AppRoute.MySpace or AppRoute.MyFavorites
+                or AppRoute.MyBangumiFollow or AppRoute.MyToViewVideo or AppRoute.MyHistory)
+        {
+            return;
+        }
+
         var entries = GetEntries(region);
         if (entries.Count > 0)
         {

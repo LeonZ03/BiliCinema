@@ -13,7 +13,6 @@ public sealed class SettingsArchitectureTests
     [InlineData("src", "DownKyi.Desktop", "ViewModels", "Settings", "ViewVideoViewModel.cs")]
     [InlineData("src", "DownKyi.Desktop", "Views", "MainWindow.axaml.cs")]
     [InlineData("src", "DownKyi.Desktop", "ViewModels", "MainWindowViewModel.cs")]
-    [InlineData("src", "DownKyi.Desktop", "ViewModels", "ViewIndexViewModel.cs")]
     [InlineData("src", "DownKyi.Desktop", "ViewModels", "DownloadManager", "ViewDownloadFinishedViewModel.cs")]
     [InlineData("src", "DownKyi.Desktop", "ViewModels", "Dialogs", "NewVersionAvailableDialogViewModel.cs")]
     [InlineData("src", "DownKyi.Desktop", "ViewModels", "Dialogs", "ViewDownloadSetterViewModel.cs")]

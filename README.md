@@ -1,6 +1,6 @@
 # BiliCinema
 
-BiliCinema 基于 [DownKyi Core](https://github.com/crazysmile-PhD/downkyicore) 开发，保留原项目的影片下载能力，并提供 B 站网页在线播放与双人同步观影。Windows 主界面分为登录、在线播放、观影房间、下载影片四页。
+BiliCinema 基于 [DownKyi Core](https://github.com/crazysmile-PhD/downkyicore) 开发，保留原项目的影片下载能力，并提供 B 站网页播放与双人同步观影。Windows 主界面分为登录、观影房间、下载影片三页；观影房间无需创建或加入房间也能单人播放。
 
 ## 直接运行
 

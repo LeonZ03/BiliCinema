@@ -6,7 +6,6 @@ using System.Threading.Tasks;
 using CommunityToolkit.Mvvm.Input;
 using DownKyi.Application.Desktop;
 using DownKyi.Application.Diagnostics;
-using DownKyi.Core.Settings;
 using DownKyi.Images;
 using DownKyi.Services;
 using DownKyi.Services.Account;
@@ -20,7 +19,6 @@ internal class ViewIndexViewModel : ViewModelBase
     private readonly IUserSessionCoordinator _userSessionCoordinator;
     private readonly ILogger<ViewIndexViewModel> _logger;
     private readonly SearchService _searchService;
-    private readonly ISettingsStore _settingsStore;
     private CancellationTokenSource? _userRefreshCancellation;
 
     private bool _loginPanelVisibility;
@@ -100,13 +98,11 @@ internal class ViewIndexViewModel : ViewModelBase
     public ViewIndexViewModel(
         IDesktopInteractionContext desktopInteractions,
         IUserSessionCoordinator userSessionCoordinator,
-        ISettingsStore settingsStore,
         SearchService searchService,
         ILogger<ViewIndexViewModel> logger) : base(desktopInteractions)
     {
         _userSessionCoordinator = userSessionCoordinator
             ?? throw new ArgumentNullException(nameof(userSessionCoordinator));
-        _settingsStore = settingsStore ?? throw new ArgumentNullException(nameof(settingsStore));
         _searchService = searchService ?? throw new ArgumentNullException(nameof(searchService));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _loginPanelVisibility = true;
@@ -145,24 +141,17 @@ internal class ViewIndexViewModel : ViewModelBase
     /// </summary>
     private void ExecuteLogin()
     {
-        if (UserName is null or "")
+        // Keep the account avatar from opening the signed-in user's personal
+        // space. The home-screen avatar may be visible while an account is
+        // being borrowed, so it must not expose account history or favorites.
+        if (!string.IsNullOrEmpty(UserName))
         {
-            Navigation.Navigate(new AppNavigationRequest(
-                AppRoute.Login,
-                AppRoute.Index));
+            return;
         }
-        else
-        {
-            // 进入用户空间
-            var userInfo = _settingsStore.Current.User;
-            if (userInfo != null && userInfo.Mid != -1)
-            {
-                Navigation.Navigate(new AppNavigationRequest(
-                    AppRoute.MySpace,
-                    AppRoute.Index,
-                    userInfo.Mid));
-            }
-        }
+
+        Navigation.Navigate(new AppNavigationRequest(
+            AppRoute.Login,
+            AppRoute.Index));
     }
 
     // 进入设置页面

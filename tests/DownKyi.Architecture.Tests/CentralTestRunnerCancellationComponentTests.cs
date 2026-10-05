@@ -3,6 +3,7 @@ using System.Diagnostics;
 using DownKyi.CentralTestRunner;
 using DownKyi.ProcessSupervision;
 using DownKyi.TestInfrastructure;
+using CentralRunnerProgram = DownKyi.CentralTestRunner.Program;
 
 namespace DownKyi.Architecture.Tests;
 
@@ -140,7 +141,7 @@ public sealed class CentralTestRunnerCancellationComponentTests
                         primary => snapshotFailure = Assert.IsType<TimeoutException>(primary),
                         cleanup =>
                         {
-                            var cleanupDiagnostic = Program.FormatExceptionDiagnostic(cleanup);
+                            var cleanupDiagnostic = CentralRunnerProgram.FormatExceptionDiagnostic(cleanup);
                             Assert.Contains(
                                 "cleanup phase=scope-termination",
                                 cleanupDiagnostic,
@@ -155,11 +156,11 @@ public sealed class CentralTestRunnerCancellationComponentTests
                 var timeout = Assert.IsType<TimeoutException>(snapshotFailure);
                 Assert.Contains(
                     "cleanup phase=snapshot",
-                    Program.FormatExceptionDiagnostic(timeout),
+                    CentralRunnerProgram.FormatExceptionDiagnostic(timeout),
                     StringComparison.Ordinal);
                 Assert.Contains(
                     $"rootPid={scope.RootPid}",
-                    Program.FormatExceptionDiagnostic(timeout),
+                    CentralRunnerProgram.FormatExceptionDiagnostic(timeout),
                     StringComparison.Ordinal);
                 Assert.False(snapshot.Task.IsCompleted);
                 Assert.True(scope.Host.HasExited);
@@ -187,7 +188,7 @@ public sealed class CentralTestRunnerCancellationComponentTests
         using var cancellation = new CancellationTokenSource();
         await cancellation.CancelAsync();
 
-        var exitCode = await Program.RunCommandAsync(
+        var exitCode = await CentralRunnerProgram.RunCommandAsync(
             [],
             (_, token) => Task.FromCanceled<int>(token),
             cancellation.Token).ConfigureAwait(true);
@@ -201,7 +202,7 @@ public sealed class CentralTestRunnerCancellationComponentTests
         using var cancellation = new CancellationTokenSource();
         await cancellation.CancelAsync();
 
-        var exitCode = await Program.RunCommandAsync(
+        var exitCode = await CentralRunnerProgram.RunCommandAsync(
             [],
             (_, _) => Task.FromException<int>(new TimeoutException("snapshot timeout")),
             cancellation.Token)
@@ -216,7 +217,7 @@ public sealed class CentralTestRunnerCancellationComponentTests
         using var cancellation = new CancellationTokenSource();
         await cancellation.CancelAsync();
 
-        var exitCode = await Program.RunCommandAsync(
+        var exitCode = await CentralRunnerProgram.RunCommandAsync(
             [],
             (_, _) => Task.FromException<int>(new Win32Exception("live process identity failed")),
             cancellation.Token)
@@ -231,7 +232,7 @@ public sealed class CentralTestRunnerCancellationComponentTests
         using var cancellation = new CancellationTokenSource();
         await cancellation.CancelAsync();
 
-        var exitCode = await Program.RunCommandAsync(
+        var exitCode = await CentralRunnerProgram.RunCommandAsync(
             [],
             (_, _) => Task.FromException<int>(
                 new DirectoryResourceRundownTimeoutException(
@@ -255,7 +256,7 @@ public sealed class CentralTestRunnerCancellationComponentTests
             rootPid: 42,
             elapsed: TimeSpan.FromSeconds(5));
 
-        var exitCode = await Program.RunCommandAsync(
+        var exitCode = await CentralRunnerProgram.RunCommandAsync(
             [],
             (_, _) => Task.FromException<int>(cleanupDeadline),
             cancellation.Token).ConfigureAwait(true);
@@ -272,7 +273,7 @@ public sealed class CentralTestRunnerCancellationComponentTests
         var exception = CaptureExceptionWithStack(
             new IOException($"fixture={sensitivePath} token=secret-value"));
 
-        var diagnostic = Program.FormatExceptionDiagnostic(exception);
+        var diagnostic = CentralRunnerProgram.FormatExceptionDiagnostic(exception);
 
         Assert.Contains(typeof(InvalidOperationException).FullName!, diagnostic, StringComparison.Ordinal);
         Assert.Contains(typeof(IOException).FullName!, diagnostic, StringComparison.Ordinal);
@@ -292,7 +293,7 @@ public sealed class CentralTestRunnerCancellationComponentTests
             "downkyi");
         var sensitivePath = Path.Combine(repositoryRoot, "tools", "runner.cs");
 
-        var diagnostic = Program.FormatExceptionDiagnostic(
+        var diagnostic = CentralRunnerProgram.FormatExceptionDiagnostic(
             new IOException($"fixture={sensitivePath}"),
             repositoryRoot);
 
