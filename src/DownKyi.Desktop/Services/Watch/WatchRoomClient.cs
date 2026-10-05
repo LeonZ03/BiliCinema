@@ -14,6 +14,7 @@ internal sealed class WatchRoomClient : IAsyncDisposable
     private ClientWebSocket? _socket;
     private CancellationTokenSource? _receiveCancellation;
     private Task? _receiveTask;
+    private bool _receiveEnded;
     private readonly SemaphoreSlim _sendGate = new(1, 1);
     private long _lastPingUnixMs;
 
@@ -27,7 +28,7 @@ internal sealed class WatchRoomClient : IAsyncDisposable
     public double ClockOffsetMilliseconds { get; private set; }
     public double RoundTripMilliseconds { get; private set; }
     public bool HasClockEstimate { get; private set; }
-    public bool Connected => _socket?.State == WebSocketState.Open;
+    public bool Connected => !_receiveEnded && _socket?.State == WebSocketState.Open;
 
     public async Task<WatchRoomSnapshot> ConnectAsync(
         string serviceAddress,
@@ -86,6 +87,7 @@ internal sealed class WatchRoomClient : IAsyncDisposable
             IsHost = root.GetProperty("role").GetString() == "host";
             var snapshot = root.GetProperty("snapshot").Deserialize<WatchRoomSnapshot>(JsonOptions)
                            ?? throw new InvalidDataException("房间状态为空。");
+            _receiveEnded = false;
             _receiveTask = ReceiveLoopAsync(_receiveCancellation.Token);
             return snapshot;
         }
@@ -180,6 +182,7 @@ internal sealed class WatchRoomClient : IAsyncDisposable
                 else if (type == "closed")
                 {
                     roomClosed = true;
+                    _receiveEnded = true;
                     RoomCode = null;
                     ClientId = null;
                     IsHost = false;
@@ -195,6 +198,7 @@ internal sealed class WatchRoomClient : IAsyncDisposable
         }
         finally
         {
+            _receiveEnded = true;
             if (!cancellationToken.IsCancellationRequested && !roomClosed)
             {
                 Disconnected?.Invoke();

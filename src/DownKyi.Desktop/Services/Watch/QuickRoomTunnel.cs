@@ -9,7 +9,7 @@ using System.Threading.Tasks;
 
 namespace DownKyi.Services.Watch;
 
-internal sealed class QuickRoomTunnel : IDisposable
+internal sealed class QuickRoomTunnel : IAsyncDisposable
 {
     private static readonly Uri LocalHealthAddress = new("http://127.0.0.1:5077/health");
     private static readonly Regex PublicAddressPattern = new(
@@ -26,7 +26,7 @@ internal sealed class QuickRoomTunnel : IDisposable
             return existing;
         }
 
-        Stop();
+        await StopAsync().ConfigureAwait(false);
         using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(4) };
         try
         {
@@ -58,31 +58,31 @@ internal sealed class QuickRoomTunnel : IDisposable
         start.ArgumentList.Add("http://127.0.0.1:5077");
 
         var published = new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
-        var process = new Process { StartInfo = start, EnableRaisingEvents = true };
-        void ReadAddress(object sender, DataReceivedEventArgs args)
-        {
-            if (args.Data is { } line)
-            {
-                var match = PublicAddressPattern.Match(line);
-                if (match.Success)
-                {
-                    published.TrySetResult(match.Value);
-                }
-            }
-        }
-
-        process.OutputDataReceived += ReadAddress;
-        process.ErrorDataReceived += ReadAddress;
-        process.Exited += (_, _) => published.TrySetException(new InvalidOperationException(
-            "Cloudflare Tunnel 已退出。请检查网络，或更新 cloudflared 后重试。"));
         try
         {
+            _process = new Process { StartInfo = start, EnableRaisingEvents = true };
+            var process = _process;
+            void ReadAddress(object sender, DataReceivedEventArgs args)
+            {
+                if (args.Data is { } line)
+                {
+                    var match = PublicAddressPattern.Match(line);
+                    if (match.Success)
+                    {
+                        published.TrySetResult(match.Value);
+                    }
+                }
+            }
+
+            process.OutputDataReceived += ReadAddress;
+            process.ErrorDataReceived += ReadAddress;
+            process.Exited += (_, _) => published.TrySetException(new InvalidOperationException(
+                "Cloudflare Tunnel 已退出。请检查网络，或更新 cloudflared 后重试。"));
             if (!process.Start())
             {
                 throw new InvalidOperationException("无法启动 Cloudflare Tunnel。");
             }
 
-            _process = process;
             process.BeginOutputReadLine();
             process.BeginErrorReadLine();
             using var deadline = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
@@ -109,15 +109,13 @@ internal sealed class QuickRoomTunnel : IDisposable
         }
         catch (Win32Exception error)
         {
-            Stop();
-            process.Dispose();
+            await StopAsync().ConfigureAwait(false);
             throw new InvalidOperationException(
                 "找不到 cloudflared。请先安装 Cloudflare Tunnel 客户端，再创建房间。", error);
         }
         catch
         {
-            Stop();
-            process.Dispose();
+            await StopAsync().ConfigureAwait(false);
             throw;
         }
     }
@@ -156,7 +154,7 @@ internal sealed class QuickRoomTunnel : IDisposable
         }
     }
 
-    private void Stop()
+    private async Task StopAsync()
     {
         var process = _process;
         _process = null;
@@ -171,6 +169,16 @@ internal sealed class QuickRoomTunnel : IDisposable
             {
                 process.Kill(entireProcessTree: true);
             }
+
+            using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+            try
+            {
+                await process.WaitForExitAsync(deadline.Token).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException) when (deadline.IsCancellationRequested)
+            {
+                throw new TimeoutException("Cloudflare Tunnel 未在关闭后及时退出。");
+            }
         }
         catch (InvalidOperationException)
         {
@@ -182,5 +190,5 @@ internal sealed class QuickRoomTunnel : IDisposable
         }
     }
 
-    public void Dispose() => Stop();
+    public ValueTask DisposeAsync() => new(StopAsync());
 }

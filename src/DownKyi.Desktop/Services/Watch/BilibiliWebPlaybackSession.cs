@@ -84,26 +84,40 @@ internal sealed class BilibiliWebPlaybackSession : IDisposable
                 parent.style.setProperty('transform', 'none', 'important');
             }
             if (!window.__biliCinemaFocusObserver) {
-                window.__biliCinemaFocusObserver = new MutationObserver(() => {
-                    if (window.__biliCinemaFocusQueued) return;
-                    window.__biliCinemaFocusQueued = true;
-                    requestAnimationFrame(() => {
-                        window.__biliCinemaFocusQueued = false;
-                        const root = window.__biliCinemaPlayerRoot;
-                        if (!root?.isConnected) return;
-                        for (let kept = root; kept && kept !== document.body; kept = kept.parentElement) {
-                            const parent = kept.parentElement;
-                            if (!parent) break;
-                            for (const sibling of parent.children) {
-                                if (sibling !== kept) {
-                                    sibling.style.setProperty('display', 'none', 'important');
-                                    sibling.style.setProperty('pointer-events', 'none', 'important');
-                                }
+                const enforceFocus = () => {
+                    const root = window.__biliCinemaPlayerRoot;
+                    if (!root?.isConnected) return;
+                    for (let kept = root; kept && kept !== document.body; kept = kept.parentElement) {
+                        const parent = kept.parentElement;
+                        if (!parent) break;
+                        for (const sibling of parent.children) {
+                            if (sibling === kept) continue;
+                            if (sibling.style.getPropertyValue('display') !== 'none'
+                                || sibling.style.getPropertyPriority('display') !== 'important') {
+                                sibling.style.setProperty('display', 'none', 'important');
+                            }
+                            if (sibling.style.getPropertyValue('pointer-events') !== 'none'
+                                || sibling.style.getPropertyPriority('pointer-events') !== 'important') {
+                                sibling.style.setProperty('pointer-events', 'none', 'important');
                             }
                         }
-                    });
+                    }
+                    for (const [name, value] of Object.entries({
+                        position: 'fixed', inset: '0', width: '100vw', height: '100vh',
+                        'max-width': 'none', 'max-height': 'none', margin: '0',
+                        'z-index': '2147483647', visibility: 'visible', background: '#000'
+                    })) {
+                        if (root.style.getPropertyValue(name) !== value
+                            || root.style.getPropertyPriority(name) !== 'important') {
+                            root.style.setProperty(name, value, 'important');
+                        }
+                    }
+                };
+                window.__biliCinemaFocusObserver = new MutationObserver(enforceFocus);
+                window.__biliCinemaFocusObserver.observe(document.body, {
+                    childList: true, subtree: true, attributes: true, attributeFilter: ['class', 'style']
                 });
-                window.__biliCinemaFocusObserver.observe(document.body, { childList: true, subtree: true });
+                enforceFocus();
             }
             for (const [name, value] of Object.entries({
                 position: 'fixed', inset: '0', width: '100vw', height: '100vh',
@@ -168,7 +182,10 @@ internal sealed class BilibiliWebPlaybackSession : IDisposable
         foreach (var cookie in cookies)
         {
             cookieManager.AddOrUpdateCookie(new Cookie(cookie.Name, cookie.Value,
-                "/", cookie.Domain!) { Secure = true });
+                "/", cookie.Domain!)
+            {
+                Secure = true
+            });
         }
 
         var playerUrl = new Uri($"https://www.bilibili.com/bangumi/play/ep{page.EpisodeId.ToString(CultureInfo.InvariantCulture)}");

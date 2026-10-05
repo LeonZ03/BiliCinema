@@ -1,13 +1,18 @@
 using System;
 using System.IO;
+using System.Threading;
+using System.Threading.Tasks;
+using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
-using Avalonia.Interactivity;
 using Avalonia.Media;
 using Avalonia.Platform;
 using Avalonia.Threading;
+using DownKyi.Application.Diagnostics;
+using DownKyi.Application.Lifetime;
 using DownKyi.Core.Storage;
 using DownKyi.ViewModels;
+using Microsoft.Extensions.Logging;
 
 namespace DownKyi.Views;
 
@@ -26,13 +31,27 @@ internal sealed partial class WatchWindow : Window
             return (document.fullscreenElement ? 1 : 0) + (exit ? 2 : 0);
         })()
         """;
+    private const string ToggleDanmakuScript = """
+        (() => {
+            const control = document.querySelector(
+                '.bpx-player-dm-switch, .bpx-player-ctrl-dm, .bilibili-player-video-danmaku-switch');
+            if (control) {
+                control.click();
+                return true;
+            }
+            return document.body?.dispatchEvent(new KeyboardEvent('keydown', {
+                key: 'd', code: 'KeyD', bubbles: true, cancelable: true
+            })) ?? false;
+        })()
+        """;
     private readonly WatchWindowViewModel _viewModel;
+    private readonly IApplicationLifecycle _applicationLifecycle;
+    private readonly ILogger<WatchWindow> _logger;
     private readonly Grid _watchLayout;
     private readonly Border _sidebar;
     private readonly Border _roomPlayerSurface;
     private readonly NativeWebView _roomBrowser;
     private NativeWebView CurrentBrowser => _roomBrowser;
-    private readonly Button _fullscreenButton;
     private readonly DispatcherTimer _fullscreenTimer;
     private WindowState _previousWindowState;
     private bool _isFullscreen;
@@ -40,12 +59,19 @@ internal sealed partial class WatchWindow : Window
     private bool _fullscreenFromBrowser;
     private bool _checkingFullscreen;
     private bool _windowClosing;
+    private bool _closeConfirmed;
+    private bool _closeInProgress;
     private readonly IBrush? _normalBackground;
     private readonly Avalonia.CornerRadius _normalCornerRadius;
 
-    public WatchWindow(WatchWindowViewModel viewModel)
+    public WatchWindow(
+        WatchWindowViewModel viewModel,
+        IApplicationLifecycle applicationLifecycle,
+        ILogger<WatchWindow> logger)
     {
         _viewModel = viewModel ?? throw new ArgumentNullException(nameof(viewModel));
+        _applicationLifecycle = applicationLifecycle ?? throw new ArgumentNullException(nameof(applicationLifecycle));
+        _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         InitializeComponent();
         DataContext = _viewModel;
         _watchLayout = this.FindControl<Grid>("WatchLayout")
@@ -56,8 +82,6 @@ internal sealed partial class WatchWindow : Window
                                ?? throw new InvalidOperationException("房间播放器容器未加载。");
         _roomBrowser = this.FindControl<NativeWebView>("RoomMovieWebView")
                        ?? throw new InvalidOperationException("房间播放器未加载。");
-        _fullscreenButton = this.FindControl<Button>("FullscreenButton")
-                            ?? throw new InvalidOperationException("全屏按钮未加载。");
         _normalBackground = Background;
         _normalCornerRadius = _roomPlayerSurface.CornerRadius;
         ConfigureBrowser(_roomBrowser, "BiliCinemaOnline");
@@ -65,12 +89,58 @@ internal sealed partial class WatchWindow : Window
         _fullscreenTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(500) };
         _fullscreenTimer.Tick += OnFullscreenTimerTick;
         Opened += OnOpened;
-        Closing += (_, _) =>
+    }
+
+    protected override void OnClosing(WindowClosingEventArgs e)
+    {
+        if (Design.IsDesignMode || _closeConfirmed)
         {
-            _windowClosing = true;
-            _fullscreenTimer.Stop();
-            _viewModel.StopForWindowClose();
-        };
+            base.OnClosing(e);
+            return;
+        }
+
+        e.Cancel = true;
+        if (_closeInProgress)
+        {
+            return;
+        }
+
+        _closeInProgress = true;
+        _windowClosing = true;
+        _fullscreenTimer.Stop();
+        ObserveCloseCompletion(CompleteCloseAsync());
+    }
+
+    private async Task CompleteCloseAsync()
+    {
+        try
+        {
+            try
+            {
+                await _viewModel.DisposeAsync().ConfigureAwait(true);
+            }
+            finally
+            {
+                await _applicationLifecycle.RequestShutdownAsync().ConfigureAwait(true);
+            }
+        }
+        finally
+        {
+            _closeConfirmed = true;
+            _closeInProgress = false;
+            Close();
+        }
+    }
+
+    private void ObserveCloseCompletion(Task closeTask)
+    {
+        _ = closeTask.ContinueWith(
+            completed => _logger.LogErrorMessage(
+                "BiliCinema cleanup failed while closing the window.",
+                completed.Exception!.GetBaseException()),
+            CancellationToken.None,
+            TaskContinuationOptions.ExecuteSynchronously | TaskContinuationOptions.OnlyOnFaulted,
+            TaskScheduler.Default);
     }
 
     private static void ConfigureBrowser(NativeWebView browser, string profileName)
@@ -101,32 +171,46 @@ internal sealed partial class WatchWindow : Window
         browser.NewWindowRequested += (_, args) => args.Handled = true;
     }
 
-    private async void OnFullscreenClick(object? sender, RoutedEventArgs args)
+    protected override async void OnKeyDown(KeyEventArgs args)
     {
-        var exitBrowserFullscreen = _isFullscreen && _browserFullscreen;
-        _fullscreenFromBrowser = false;
-        ToggleFullscreen();
-        if (exitBrowserFullscreen)
+        var shortcutAvailable = _viewModel.ShowRoom && _viewModel.PlayerReady
+            && args.KeyModifiers == KeyModifiers.None
+            && FocusManager?.GetFocusedElement() is not TextBox;
+        if (shortcutAvailable && args.Key == Key.D)
         {
+            args.Handled = true;
             try
             {
-                await CurrentBrowser.InvokeScript("document.exitFullscreen?.()").ConfigureAwait(true);
+                await CurrentBrowser.InvokeScript(ToggleDanmakuScript).ConfigureAwait(true);
             }
             catch (Exception error) when (error is InvalidOperationException
                 or ObjectDisposedException or System.Runtime.InteropServices.COMException)
             {
-                // The page may already have left fullscreen or be navigating.
+                // The player may be navigating while the shortcut is pressed.
             }
+            return;
         }
-    }
 
-    protected override void OnKeyDown(KeyEventArgs args)
-    {
-        if ((_isFullscreen && args.Key == Key.Escape) || args.Key == Key.F11)
+        if ((_isFullscreen && args.Key == Key.Escape)
+            || args.Key == Key.F11
+            || (shortcutAvailable && args.Key == Key.F))
         {
+            var exitBrowserFullscreen = _isFullscreen && _browserFullscreen;
             ToggleFullscreen();
             _fullscreenFromBrowser = false;
             args.Handled = true;
+            if (exitBrowserFullscreen)
+            {
+                try
+                {
+                    await CurrentBrowser.InvokeScript("document.exitFullscreen?.()").ConfigureAwait(true);
+                }
+                catch (Exception error) when (error is InvalidOperationException
+                    or ObjectDisposedException or System.Runtime.InteropServices.COMException)
+                {
+                    // The page may already have left fullscreen.
+                }
+            }
         }
 
         base.OnKeyDown(args);
@@ -205,7 +289,6 @@ internal sealed partial class WatchWindow : Window
             _watchLayout.RowSpacing = 14;
             _roomPlayerSurface.CornerRadius = _normalCornerRadius;
             _roomBrowser.Height = 440;
-            _fullscreenButton.Content = "全屏播放";
             _isFullscreen = false;
         }
         else
