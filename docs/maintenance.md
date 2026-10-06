@@ -209,7 +209,8 @@ cross-platform stress proof，不得移除。
 
 [Logo A 原始定稿](assets/logo-a-approved.png)是品牌外观的唯一来源，保留原始像素。
 运行 `pwsh ./script/export-brand-assets.ps1` 可从定稿中提取标识并导出 PNG 和多尺寸 ICO；
-脚本只裁取标识区域和等比缩放，不重新描图、不更改颜色。
+脚本裁取标识区域，将外侧白底转为透明并清除边缘白色杂边，再等比缩放；
+保留内部白色屏幕与座椅图案，不重新描图。
 `Resources/bilicinema-mark.png` 供侧栏、下载首页、二维码分享卡片和 README 共同使用；
 `Resources/favicon.ico` 供 Windows exe、窗口和托盘使用。
 
