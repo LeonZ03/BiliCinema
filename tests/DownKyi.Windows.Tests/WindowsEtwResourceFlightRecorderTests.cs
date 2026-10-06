@@ -1,7 +1,7 @@
 using System.Diagnostics;
 using System.Globalization;
-using DownKyi.CentralTestRunner;
 using DownKyi.TestInfrastructure;
+using CentralRunnerProgram = DownKyi.CentralTestRunner.Program;
 
 namespace DownKyi.Windows.Tests;
 
@@ -105,7 +105,7 @@ public sealed class WindowsEtwResourceFlightRecorderTests
             "exec",
             "--runtimeconfig",
             RuntimeConfigPath,
-            typeof(Program).Assembly.Location,
+            typeof(CentralRunnerProgram).Assembly.Location,
             mode
         };
         result.AddRange(arguments);

@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using DownKyi.CentralTestRunner;
+using CentralRunnerProgram = DownKyi.CentralTestRunner.Program;
 
 namespace DownKyi.Windows.Tests;
 
@@ -31,7 +32,7 @@ public sealed class WindowsProcessSnapshotTests
         startInfo.ArgumentList.Add("exec");
         startInfo.ArgumentList.Add("--runtimeconfig");
         startInfo.ArgumentList.Add(runtimeConfig);
-        startInfo.ArgumentList.Add(typeof(Program).Assembly.Location);
+        startInfo.ArgumentList.Add(typeof(CentralRunnerProgram).Assembly.Location);
         startInfo.ArgumentList.Add("fixture-hold");
         return startInfo;
     }

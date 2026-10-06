@@ -42,6 +42,7 @@ jobs:
         shell: pwsh
         run: ./script/verify-format.ps1
       - name: Full Windows regression
+        timeout-minutes: 10
         shell: pwsh
         run: ./script/test-solution.ps1 -Configuration Release -NoRestore -NoBuild
       - name: Package audit
