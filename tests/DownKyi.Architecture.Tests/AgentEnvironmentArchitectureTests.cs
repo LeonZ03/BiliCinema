@@ -181,25 +181,26 @@ public sealed class AgentEnvironmentArchitectureTests
             "AGENTS.md",
             "ARCHITECTURE.md",
             "docs/design-docs",
-            "docs/exec-plans",
+            "docs/operations/release-policy.md",
             "docs/testing",
             "docs/operations");
 
         var agentGuide = Read("AGENTS.md");
         Assert.Contains("ARCHITECTURE.md", agentGuide, StringComparison.Ordinal);
         Assert.Contains("DesktopComposition.cs", agentGuide, StringComparison.Ordinal);
-        Assert.Contains("docs/refactoring-live-plan.md", agentGuide, StringComparison.Ordinal);
+        Assert.Contains("docs/operations/release-policy.md", agentGuide, StringComparison.Ordinal);
         Assert.Contains("docs/operations/verification-and-rollback.md", agentGuide, StringComparison.Ordinal);
     }
 
     [Fact]
-    public void AgentEntryUsesProgressiveDisclosureAndLivePlanContainsNoMutableWorkState()
+    public void AgentEntryUsesProgressiveDisclosureAndReleasePolicyContainsNoMutableWorkState()
     {
         var agentGuide = Read("AGENTS.md");
-        var livePlan = Read("docs/refactoring-live-plan.md");
+        var releasePolicy = Read("docs/operations/release-policy.md");
 
         Assert.Contains("Progressive Disclosure Map", agentGuide, StringComparison.Ordinal);
-        Assert.Contains("issues/137", agentGuide, StringComparison.Ordinal);
+        Assert.Contains("LeonZ03/BiliCinema", agentGuide, StringComparison.Ordinal);
+        Assert.DoesNotContain("issues/137", agentGuide, StringComparison.Ordinal);
         Assert.DoesNotContain("## 強制閱讀順序", agentGuide, StringComparison.Ordinal);
 
         string[] forbiddenLiveState =
@@ -215,15 +216,16 @@ public sealed class AgentEnvironmentArchitectureTests
 
         foreach (var value in forbiddenLiveState)
         {
-            Assert.DoesNotContain(value, livePlan, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain(value, releasePolicy, StringComparison.OrdinalIgnoreCase);
         }
 
         Assert.DoesNotMatch(
             new System.Text.RegularExpressions.Regex(
                 @"(?m)^\s*-\s+\[[ xX]\]|\b[0-9a-fA-F]{40}\b",
                 System.Text.RegularExpressions.RegexOptions.CultureInvariant),
-            livePlan);
-        Assert.Contains("issues/137", livePlan, StringComparison.Ordinal);
+            releasePolicy);
+        Assert.Contains("LeonZ03/BiliCinema", releasePolicy, StringComparison.Ordinal);
+        Assert.DoesNotContain("issues/137", releasePolicy, StringComparison.Ordinal);
     }
 
     [Fact]

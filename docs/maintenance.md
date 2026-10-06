@@ -20,7 +20,7 @@ PR 修正文件。
 | CI、timeout、TRX、zero tests、cleanup | `DownKyi.CentralTestRunner` + OS test project | TRX + failure recorder | [Test／CI 卡](#test-ci) |
 | SQLite、migration、history、persistence | Domain task + Application service + SQLite store | transition／migration tests | [下載資料卡](#download-persistence) |
 | queue、retry、resume、media selection、aria2、FFmpeg | selection／media contract + coordinator + backend | focused runtime regression | [傳輸與媒體卡](#transfer-media) |
-| 已知 runtime gap、恢復中斷工作 | owner workboard candidate／linked Issue | current-main repro + owner confirmation | [GitHub Issue #137](https://github.com/crazysmile-PhD/downkyicore/issues/137) |
+| 觀影、多人同步、聊天、邀請、WebView2 | WatchWindow／RoomCoordinator／QuickRoomTunnel | desktop room tests + WebSocket smoke | [觀影說明](watch-together.md)、[房間協定](../src/DownKyi.RoomServer/README.md) |
 | settings、schema、invalid file、flush | `ISettingsStore`／`SettingsSchemaMigrator` | settings + architecture + Host tests | [Settings 卡](#settings) |
 | logging、redaction、export、retention | `ApplicationLogProvider` + Infrastructure logging owners | provider stress + Host tests | [Logging 卡](#logging) |
 | Desktop、DI、Host、theme、XAML | Desktop composition + design tokens | architecture + XAML + packaged smoke | [Desktop／Host 卡](#desktop-host) |
@@ -189,11 +189,11 @@ cross-platform stress proof，不得移除。
 
 - **Use when**：version、tag、exact head、manifest、signing、rollback。
 - **Owner**：version／publication=`version.txt` + release workflow；正式命令／rollback=verification doc。
-- **Invariant**：version／tag／manifest 一致且 tag immutable；證據只對 exact final commit 有效。Manifest 覆蓋 DownKyi、aria2、FFmpeg、ffprobe、version、SHA-256。macOS sign 後不改 bundle；ad-hoc 不宣稱 Developer ID／notarization／Gatekeeper。
-- **Do**：review README／CHANGELOG；跑 canonical procedure；先 push `main` 再 tag；發布後 read back packages／sidecars／manifests。
-- **Proof**：exact-head gates、cross-platform packages、`validate-publish-output.ps1`、remote read-back。
+- **Invariant**：BiliCinema 只發布 Windows x64 單一 exe；version／tag 一致且 tag immutable；證據只對 exact final commit 有效。外部工具由固定 manifest 和 SHA-256 驗證。
+- **Do**：review README／CHANGELOG，更新 `version.txt`；跑 canonical procedure 後 push `main`，由 Release workflow 通過所有閘門後自動建立 `bilicinema-v<version>` tag。發布後核對 exe 與 SHA256SUMS。
+- **Proof**：exact-head strict build、Windows regression、CodeQL、單文件打包、aria2 TLS、remote read-back。
 - **Stop**：blocker／required gate 未解決：不改 version、不 tag、不 publish；不以單平台 file-exists 取代 content gate。
-- **Details**：[Release Policy](refactoring-live-plan.md)；[Verification And Rollback](operations/verification-and-rollback.md)。
+- **Details**：[Release Policy](operations/release-policy.md)；[Verification And Rollback](operations/verification-and-rollback.md)。
 
 ## 手動 Smoke 卡
 
@@ -204,6 +204,14 @@ cross-platform stress proof，不得移除。
 - [ ] 刪除 active task 會移除 media 與 `.aria2`／`.download` sidecars。
 - [ ] Subtitle SRT time code 正確。
 - [ ] Diagnostic export 不含私人路徑、Cookie、token、敏感 URL。
+
+## 品牌资源
+
+[Logo A 原始定稿](assets/logo-a-approved.png)是品牌外观的唯一来源，保留原始像素。
+运行 `pwsh ./script/export-brand-assets.ps1` 可从定稿中提取标识并导出 PNG 和多尺寸 ICO；
+脚本只裁取标识区域和等比缩放，不重新描图、不更改颜色。
+`Resources/bilicinema-mark.png` 供侧栏、下载首页、二维码分享卡片和 README 共同使用；
+`Resources/favicon.ico` 供 Windows exe、窗口和托盘使用。
 
 ## 固定名稱
 

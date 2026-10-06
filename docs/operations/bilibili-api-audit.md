@@ -10,7 +10,7 @@
 | Envelope、required fields、error semantics | DTO／adapter + deterministic fixtures | Core／Infrastructure contract tests |
 | WBI key validity／refresh | `IWbiKeyProvider` | WBI tests |
 | Optional live status | audit scripts | ignored JSON under `artifacts/bilibili/` |
-| Current work／migration decision | GitHub Issue #137 或被指派的 Issue | Issue／PR evidence |
+| Current work／migration decision | 當前使用者需求或明確指派的 BiliCinema Issue | Issue／PR evidence |
 
 Live result、日期、commit SHA、通過數與第三方當時狀態不得抄回 endpoint 表。它們只對執行時的環境和 exact commit 有效。
 

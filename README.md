@@ -1,6 +1,6 @@
 # BiliCinema
 
-<img src="docs/assets/bilicinema-mark.svg" alt="BiliCinema 标志" width="96" />
+<img src="src/DownKyi.Desktop/Resources/bilicinema-mark.png" alt="BiliCinema 标志" width="96" />
 
 BiliCinema 是一款 Windows 桌面应用，基于 [DownKyi Core](https://github.com/crazysmile-PhD/downkyicore)，可以播放哔哩哔哩视频、与好友同步观影，也可以下载影片。每个房间最多 **5 人（1 位房主 + 4 位访客）**。
 

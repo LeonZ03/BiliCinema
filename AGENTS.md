@@ -1,4 +1,4 @@
-# AGENTS.md - DownKyi Agent Entry
+# AGENTS.md - BiliCinema Agent Entry
 
 This file is a small repository map and guardrail. Do not read every linked
 document by default. Start from the current task, inspect the affected code and
@@ -7,17 +7,15 @@ change.
 
 ## Work Continuity
 
-- The owner-only Codex workboard is GitHub Issue
-  [#137](https://github.com/crazysmile-PhD/downkyicore/issues/137). It contains
-  only bookmarks and short interruption checkpoints for work the owner asked
-  Codex to do.
-- Load the selected bookmark and its linked PR or task document. Do not scan
-  community Issues or contributor PRs unless the owner explicitly assigns one.
-- When interrupted, update only the short checkpoint in #137. When work is
-  complete, remove its bookmark. Do not keep a completed-work list.
-- Product PRs must not edit `docs/refactoring-live-plan.md` to record Current
-  Item, Next Item, branch, SHA, CI state or progress. That file owns stable
-  release and verification policy only.
+- Work from the current user request and any explicitly assigned Issue or PR
+  in `LeonZ03/BiliCinema`. The upstream DownKyi workboard is not this project's
+  task tracker. Do not update external Issues or send messages without the
+  user's authorization.
+- Keep interruption checkpoints in the current conversation or its assigned
+  task. Stable decisions belong in the relevant architecture or maintenance
+  document; completed history belongs in Git and releases.
+- `docs/operations/release-policy.md` owns stable release and verification
+  policy. Do not add branch, SHA, CI progress or completed-work lists there.
 - Scope containment does not require branch dependency containment. Keep
   separately reviewable root causes as separate commits or evidence, but stop
   extending an unmerged release stack after roughly two or three dependency
@@ -31,7 +29,7 @@ change.
 - Desktop wiring starts at `src/DownKyi.Desktop/Composition/DesktopComposition.cs`;
   follow its local composition call into the affected module, then inspect that
   module's contracts, constructors and focused tests.
-- Release and completion policy: `docs/refactoring-live-plan.md`; formal local
+- Release and completion policy: `docs/operations/release-policy.md`; formal local
   commands and rollback procedure: `docs/operations/verification-and-rollback.md`.
 - Bilibili endpoints, WBI and JSON contracts:
   `docs/operations/bilibili-api-audit.md`.
@@ -39,8 +37,10 @@ change.
   `docs/testing/README.md`.
 - External binaries, dependencies and release maintenance:
   `docs/maintenance.md`.
-- Accepted non-derived decisions: `docs/design-docs/`; active work: GitHub Issue
-  #137; user-facing behavior: `README.md`; release history: `CHANGELOG.md`.
+- Accepted non-derived decisions: `docs/design-docs/`; user-facing behavior:
+  `README.md` and `docs/watch-together.md`; release history: `CHANGELOG.md`.
+- Room lifecycle and protocol: `src/DownKyi.RoomServer/README.md`. Playback,
+  login and chat UI start in `WatchWindow` / `WatchWindowViewModel`.
 
 Open the relevant entry only when the task touches that domain. Stable current
 truth belongs in architecture documents; target designs and baseline snapshots

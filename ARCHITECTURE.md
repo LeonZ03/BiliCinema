@@ -1,4 +1,4 @@
-# DownKyi Architecture
+# BiliCinema Architecture
 
 本文件只保存 current owner、依賴方向、不能從程式碼直接推導的 invariant，以及對應的可執行防線。具體類別清單、呼叫順序與數量以 current code 和 audit 結果為準；若兩者不一致，在同一 PR 修正本文件。
 
@@ -7,7 +7,7 @@
 1. 從 `src/DownKyi.Desktop/Composition/DesktopComposition.cs` 找產品組裝。
 2. 跟進受影響模組的 local composition、contract、constructor 與 focused tests。
 3. 需要正式命令時只讀 `docs/operations/verification-and-rollback.md`。
-4. 目前工作只看 GitHub Issue [#137](https://github.com/crazysmile-PhD/downkyicore/issues/137) 及其連結；完成歷史看 Git、PR 與 `CHANGELOG.md`。
+4. 目前工作以使用者需求與明確指派的 BiliCinema Issue／PR 為準；完成歷史看 Git、Release 與 `CHANGELOG.md`。
 
 領域路由見 `docs/maintenance.md`；仍有效的設計理由見 `docs/design-docs/README.md`。
 
@@ -20,13 +20,14 @@ flowchart TD
     Desktop --> Application["DownKyi.Application\nuse cases + ports"]
     Desktop --> Domain["DownKyi.Domain\nstate rules"]
     Desktop --> Infrastructure["DownKyi.Infrastructure\ndurable adapters"]
+    Desktop --> RoomServer["DownKyi.RoomServer\nroom state + WebSocket protocol"]
     Infrastructure --> Application
     Infrastructure --> Domain
     Core --> Application
     Application --> Domain
 ```
 
-- `DownKyi` 只含最小 `Program` bootstrap，只引用 Desktop；不得擁有 UI、套件、資源或生命週期。
+- `DownKyi` 是最小 `Program` bootstrap，產出 BiliCinema.exe，只引用 Desktop；UI、圖標資源來源與生命週期由 Desktop 擁有。
 - `DownKyi.Desktop` 擁有 Avalonia App、Views、ViewModels、UI projections、desktop adapters、Host composition、導航／對話框與下載 runtime。`DesktopThemeController` 是唯一 theme switch owner；semantic tokens 由 `DesignTokens.axaml` 擁有。
 - `DownKyi.Application` 擁有 use cases，以及 Bilibili HTTP、cookie／buvid、logging、physical output path 等 ports。
 - `DownKyi.Domain` 的 `DownloadTask` 是 durable state transition 的權威。
@@ -34,6 +35,15 @@ flowchart TD
 - `DownKyi.Core` 必須保持 headless；Bilibili DTO／protocol、aria2、FFmpeg 與部分 filesystem compatibility 目前仍在此。把後三者搬到 Infrastructure 是 ownership 方向，不是已完成事實。
 
 Prism、DryIoc、EventAggregator、RegionManager、ContainerLocator、第二個 router／container 或 service locator 都不得重新引入。否則會產生平行生命週期、導航狀態或依賴解析 owner。
+
+## BiliCinema 產品邊界
+
+- 發布產品為 Windows x64 單一 exe，主介面為登入、觀影房間、下載影片。`DownKyi` 命名空間、資料路徑與下載模型保留相容性；名稱不是未使用程式碼的判斷依據。
+- `WatchWindow`／`WatchWindowViewModel` 組合觀影介面；`BilibiliWebPlaybackSession` 使用 WebView2 載入 B 站播放器、同步登入態並維持播放器版面。網站導覽是遠端頁面內容，由播放器隔離邏輯處理。
+- `RoomCoordinator` 是房間狀態的唯一權威，最多 5 人（房主 + 4 位訪客）；只有房主可選片、換集及控制播放。每位在線成員有獨立的就緒／緩衝狀態，離線成員不阻塞其他人。
+- `WatchRoomClient` 接收狀態與控制事件；每台電腦各自向 B 站取流。公開 `memberId` 與私有重連 `clientId` 分離，後者不進入聊天或狀態廣播。
+- `QuickRoomTunnel` 只轉發控制與聊天；房主程序擁有本機服務和隧道生命週期。房間保存在記憶體，退出程序即結束本機服務。重連期限與協定以 [房間服務文件](src/DownKyi.RoomServer/README.md) 為準。
+- 下載沿用共用 runtime；跨平台原生測試、打包驗證腳本仍驗證繼承的共用元件，不代表 BiliCinema 提供 Linux／macOS 發行版。
 
 ## Composition 與外部協定
 

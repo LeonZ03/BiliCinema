@@ -5,10 +5,9 @@ policy. It is not a current-work database. Do not record an active item, next
 item, branch, commit SHA, CI state, progress checklist or completed history
 here.
 
-Owner-requested work that may survive the current Codex context is bookmarked
-in GitHub Issue [#137](https://github.com/crazysmile-PhD/downkyicore/issues/137).
-Each bookmark points to its existing PR or task-specific detail source. Product
-PRs do not update this file merely because their work state changed.
+Active work follows the current user request or an explicitly assigned
+`LeonZ03/BiliCinema` Issue or PR. Keep temporary checkpoints with that task;
+do not use an upstream repository's workboard for this fork.
 
 ## Release Policy
 
@@ -46,9 +45,9 @@ directly.
 ## Completion And Rollback
 
 Work is complete only after implementation, focused regressions, required
-documentation, exact-head CI and review are green. Remove its bookmark from
-#137; stable facts go to architecture, maintenance or release documentation.
-Do not add a completed section to the workboard or this policy.
+documentation, exact-head CI and review are green. Stable facts go to
+architecture, maintenance or release documentation. Do not add a completed
+work log to this policy.
 
 Before merge, rollback means closing the draft and deleting only the feature
 branch. After merge, revert the complete change range without modifying user

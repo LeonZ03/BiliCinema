@@ -166,7 +166,11 @@
 
             <Grid Grid.Row="0" Grid.RowSpan="3" IsVisible="{Binding ShowDownload}">
                 <Grid RowDefinitions="Auto,*" RowSpacing="12">
-                    <TextBlock Grid.Row="0" Text="下载影片" FontSize="24" FontWeight="SemiBold" />
+                    <StackPanel Grid.Row="0" Spacing="4">
+                        <TextBlock Text="下载影片" FontSize="24" FontWeight="SemiBold" />
+                        <TextBlock Text="下载功能源自开源项目 DownKyi Core。" FontSize="12" TextWrapping="Wrap"
+                                   Foreground="{DynamicResource BrushTextSecondary}" />
+                    </StackPanel>
                     <ContentControl Grid.Row="1" Content="{Binding DownloadContent.MainContent}" />
                 </Grid>
             </Grid>

@@ -101,6 +101,17 @@ pwsh ./script/audit-bilibili-authenticated-api.ps1 `
 - Logs：使用測試指定隔離目錄，檢查 redaction、flush、rotation 與 export。
 - System performance：依 `../performance-baseline.md` 記錄 runtime、OS、architecture、dataset、backend 與 SHA。
 
+## 工作目录清理
+
+保留源码、有效测试、许可证、正式文档及构建清单。旧版设计预览、一次性恢复发布脚本
+和已解决问题的本地试验产物可以删除；仍有效的交互约定与决策先迁入对应文档。
+原始 Logo 定稿属于正式资源，不能作为试验稿清除。
+
+`artifacts/` 中的旧 exe、浏览器试验资料和临时证据不参与源码构建。清理前确认相关
+进程已退出，逐一检查目标路径与链接，避免递归到仓库以外。保留仍未解决失败的
+取证文件，以及当前需要的工具和验证结果。用户实际账号、下载和设置目录不在
+项目清理范围内。发布与保留规则见 [Release Policy](release-policy.md)。
+
 ## 回滾
 
 一般 PR 使用非破壞性 revert：

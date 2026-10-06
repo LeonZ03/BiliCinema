@@ -1,4 +1,4 @@
-﻿
+
 Microsoft Visual Studio Solution File, Format Version 12.00
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DownKyi", "DownKyi\DownKyi.csproj", "{545334D8-F429-47C1-99A7-A25EAC17D76A}"
 EndProject
@@ -8,7 +8,6 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution Items", "Solution 
 	ProjectSection(SolutionItems) = preProject
 		.gitignore = .gitignore
 		CHANGELOG.md = CHANGELOG.md
-		cliff.toml = cliff.toml
 		Directory.Build.props = Directory.Build.props
 		Directory.Build.targets = Directory.Build.targets
 		README.md = README.md
