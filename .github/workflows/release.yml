@@ -52,7 +52,7 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           dotnet package list --project ./DownKyi.sln --deprecated --include-transitive
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-      - name: Build single executable
+      - name: Restore Windows runtime and build single executable
         shell: pwsh
         run: ./script/build-bilicinema.ps1
       - name: Verify packaged aria2 security

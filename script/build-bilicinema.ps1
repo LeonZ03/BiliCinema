@@ -96,6 +96,12 @@ $env:PATH = "$env:DOTNET_ROOT;$env:PATH"
 $env:AVALONIA_TELEMETRY_OPTOUT = '1'
 $env:DOTNET_CLI_TELEMETRY_OPTOUT = '1'
 $project = Join-Path $root 'DownKyi\DownKyi.csproj'
+# A clean checkout has only the solution's Release restore, without win-x64
+# runtime packs. Restore the publish configuration before any --no-restore build;
+# do not rely on a failed native command falling through under PowerShell policies.
+& $dotnet restore $project -r win-x64 -p:Configuration=BiliCinema `
+    -p:SelfContained=true -p:PublishSingleFile=true -v minimal
+if ($LASTEXITCODE -ne 0) { throw "Restore failed with exit code $LASTEXITCODE" }
 $publishArgs = @(
     'publish', $project, '-c', 'BiliCinema', '-r', 'win-x64',
     '--self-contained', 'true', '--no-restore',
@@ -105,14 +111,7 @@ $publishArgs = @(
     '-o', $publish, '-v', 'q'
 )
 & $dotnet @publishArgs
-if ($LASTEXITCODE -ne 0) {
-    Write-Host 'Restoring .NET packages and retrying...'
-    & $dotnet restore $project -r win-x64 -p:Configuration=BiliCinema `
-        -p:PublishSingleFile=true -v q
-    if ($LASTEXITCODE -ne 0) { throw "Restore failed with exit code $LASTEXITCODE" }
-    & $dotnet @publishArgs
-    if ($LASTEXITCODE -ne 0) { throw "Publish failed with exit code $LASTEXITCODE" }
-}
+if ($LASTEXITCODE -ne 0) { throw "Publish failed with exit code $LASTEXITCODE" }
 
 $exe = Join-Path $publish 'BiliCinema.exe'
 if (-not [IO.File]::Exists($exe)) { throw 'The single executable was not produced.' }
