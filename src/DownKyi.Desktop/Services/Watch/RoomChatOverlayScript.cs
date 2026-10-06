@@ -5,6 +5,8 @@ using System.Text.Json;
 
 namespace DownKyi.Services.Watch;
 
+internal sealed record WatchRoomActionNotice(int Id, string Text, int RemainingMilliseconds);
+
 // The player is a native WebView, so desktop controls cannot reliably draw above it.
 // Keep the chat layer inside the existing player and insert user text only as text nodes.
 internal static class RoomChatOverlayScript
@@ -21,9 +23,8 @@ internal static class RoomChatOverlayScript
         int revision,
         int toastSequence,
         int toastRemainingMilliseconds,
-        string? hostActionToast,
-        int hostActionToastSequence,
-        int hostActionToastRemainingMilliseconds)
+        IReadOnlyList<WatchRoomActionNotice> hostActionNotices,
+        int hostActionToastSequence)
     {
         var state = new
         {
@@ -34,8 +35,8 @@ internal static class RoomChatOverlayScript
             toastSequence,
             toastRemainingMilliseconds,
             hostActionToastSequence,
-            hostActionToastRemainingMilliseconds,
-            hostActionToast = hostActionToastRemainingMilliseconds > 0 ? hostActionToast : null,
+            hostActionNotices = hostActionNotices.Where(notice => notice.RemainingMilliseconds > 0)
+                .Select(notice => new { notice.Id, notice.Text, notice.RemainingMilliseconds }).ToArray(),
             messages = messages.Select(message => new
             {
                 message.ClientId,
@@ -124,13 +125,13 @@ internal static class RoomChatOverlayScript
                 #bc-room-chat.bc-open .bc-toast { right:min(340px, 41vw); }
                 #bc-room-chat .bc-toast-name { color:#e3ebee; font-weight:650; font-size:12px; margin-bottom:3px; }
                 #bc-room-chat .bc-toast-body { font-size:13px; white-space:pre-wrap; overflow-wrap:anywhere; }
-                #bc-room-chat .bc-action-toast { position:absolute; left:20px; top:38%;
-                    max-width:min(280px,38vw); padding:10px 14px; border-radius:9px;
+                #bc-room-chat .bc-action-toasts { position:absolute; left:20px; top:38%;
+                    max-width:min(280px,38vw); display:flex; flex-direction:column; gap:7px;
+                    pointer-events:none; }
+                #bc-room-chat .bc-action-toast { padding:10px 14px; border-radius:9px;
                     color:#f5f7f8; background:rgba(35,46,52,.78);
                     border-left:3px solid #8bb5c7; backdrop-filter:blur(7px);
-                    box-shadow:0 8px 24px rgba(0,0,0,.2); opacity:0; visibility:hidden;
-                    transition:opacity .16s ease; pointer-events:none; font-size:13px; }
-                #bc-room-chat .bc-action-toast.bc-visible { opacity:1; visibility:visible; }
+                    box-shadow:0 8px 24px rgba(0,0,0,.2); font-size:13px; }
                 @media (prefers-reduced-motion:reduce) {
                     #bc-room-chat .bc-panel,#bc-room-chat .bc-toast,
                     #bc-room-chat .bc-action-toast { transition:none; }
@@ -166,12 +167,12 @@ internal static class RoomChatOverlayScript
             toast.setAttribute('role', 'status');
             const toastName = make('div', 'bc-toast-name');
             const toastBody = make('div', 'bc-toast-body'); toast.append(toastName, toastBody);
-            const actionToast = make('div', 'bc-action-toast');
-            actionToast.setAttribute('role', 'status');
-            host.append(css, edge, panel, toast, actionToast);
+            const actionToasts = make('div', 'bc-action-toasts');
+            actionToasts.setAttribute('role', 'status');
+            host.append(css, edge, panel, toast, actionToasts);
             ui = { host, edge, panel, list, input, count, toast, toastName, toastBody,
-                actionToast, revision:-1, toastSequence:-1, actionSequence:-1,
-                fullscreen:false, inRoom:false, toastTimer:null, actionTimer:null,
+                actionToasts, revision:-1, toastSequence:-1, actionSequence:-1,
+                fullscreen:false, inRoom:false, toastTimer:null, actionTimers:[],
                 listenerAbort:new AbortController() };
             window.__biliCinemaChatUi = ui;
             const send = () => {
@@ -283,13 +284,16 @@ internal static class RoomChatOverlayScript
         }
         if (ui.actionSequence !== state.hostActionToastSequence) {
             ui.actionSequence = state.hostActionToastSequence;
-            clearTimeout(ui.actionTimer);
-            ui.actionToast.classList.remove('bc-visible');
-            if (state.inRoom && state.hostActionToast) {
-                ui.actionToast.textContent = state.hostActionToast;
-                ui.actionToast.classList.add('bc-visible');
-                ui.actionTimer = setTimeout(() => ui.actionToast.classList.remove('bc-visible'),
-                    state.hostActionToastRemainingMilliseconds);
+            for (const timer of ui.actionTimers) clearTimeout(timer);
+            ui.actionTimers = [];
+            ui.actionToasts.replaceChildren();
+            if (state.inRoom) {
+                for (const notice of state.hostActionNotices) {
+                    const row = make('div', 'bc-action-toast');
+                    row.textContent = notice.text;
+                    ui.actionToasts.appendChild(row);
+                    ui.actionTimers.push(setTimeout(() => row.remove(), notice.remainingMilliseconds));
+                }
             }
         }
         return true;

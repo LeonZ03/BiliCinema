@@ -381,9 +381,8 @@ internal sealed partial class WatchWindow : Window
                 chatRevision,
                 toastSequence,
                 _viewModel.ChatToastRemainingMilliseconds,
-                _viewModel.HostActionToast,
-                actionSequence,
-                _viewModel.HostActionToastRemainingMilliseconds)).ConfigureAwait(true);
+                _viewModel.HostActionNotices,
+                actionSequence)).ConfigureAwait(true);
             _lastChatRevision = chatRevision;
             _lastChatToastSequence = toastSequence;
             _lastHostActionToastSequence = actionSequence;

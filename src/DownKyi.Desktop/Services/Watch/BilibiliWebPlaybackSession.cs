@@ -2,6 +2,7 @@ using System;
 using System.Globalization;
 using System.Linq;
 using System.Net;
+using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using Avalonia.Controls;
@@ -10,6 +11,8 @@ using DownKyi.Core.BiliApi.Login;
 using DownKyi.Presentation;
 
 namespace DownKyi.Services.Watch;
+
+internal readonly record struct BilibiliPlayerIdentity(Uri? PageUri, long Cid);
 
 // Use Bilibili's normal playback page. Its HTML video supplies the room's
 // position and playback controls for both bangumi and ordinary videos.
@@ -297,6 +300,44 @@ internal sealed class BilibiliWebPlaybackSession : IDisposable
         await InvokeAsync(FocusPlayerScript, cancellationToken).ConfigureAwait(true);
         return ParseNumber(await InvokeAsync($"{Video}?.currentTime ?? 0", cancellationToken)
             .ConfigureAwait(true));
+    }
+
+    public async Task<BilibiliPlayerIdentity> GetPageIdentityAsync(CancellationToken cancellationToken)
+    {
+        const string script = """
+            (() => {
+                const players = [window.player, window.bilibiliPlayer];
+                let cid = 0;
+                for (const player of players) {
+                    if (typeof player?.getCid !== 'function') continue;
+                    try {
+                        const value = Number(player.getCid());
+                        if (Number.isSafeInteger(value) && value > 0) { cid = value; break; }
+                    } catch {
+                        // The site may replace its player while changing episodes.
+                        // Keep the URL signal when the optional CID probe is unavailable.
+                        cid = 0;
+                    }
+                }
+                return { href: location.href, cid };
+            })()
+            """;
+        var result = await InvokeAsync(script, cancellationToken).ConfigureAwait(true);
+        using var document = JsonDocument.Parse(result);
+        var root = document.RootElement;
+        if (root.ValueKind != JsonValueKind.Object
+            || !root.TryGetProperty("href", out var href)
+            || href.ValueKind != JsonValueKind.String)
+        {
+            throw new InvalidOperationException("网页播放器的媒体状态暂不可用。");
+        }
+
+        var address = href.GetString();
+        var uri = Uri.TryCreate(address, UriKind.Absolute, out var parsed) ? parsed : null;
+        var cid = root.TryGetProperty("cid", out var value)
+            && value.ValueKind == JsonValueKind.Number
+            && value.TryGetInt64(out var parsedCid) && parsedCid > 0 ? parsedCid : 0;
+        return new BilibiliPlayerIdentity(uri, cid);
     }
 
     public async Task<bool> GetPausedAsync(CancellationToken cancellationToken)

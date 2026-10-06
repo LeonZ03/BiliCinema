@@ -45,6 +45,9 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
     private NativeWebView? _roomBrowser;
     private BilibiliWebPlaybackSession? _player => _roomPlayer;
     private VideoPage? _roomPage;
+    private VideoPage[] _roomPages = [];
+    private string _roomVideoTitle = string.Empty;
+    private string? _pendingHostMediaKey;
     private WatchRoomSnapshot? _lastSnapshot;
     private long _lastSnapshotReceivedAtUnixMs;
     private long _lastVersion = -1;
@@ -69,8 +72,7 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
     private long _latestChatToastReceivedAtUnixMs;
     private int _chatRevision;
     private int _chatToastSequence;
-    private string? _hostActionToast;
-    private long _hostActionToastReceivedAtUnixMs;
+    private readonly List<(int Id, string Text, long ReceivedAtUnixMs)> _hostActionNotices = [];
     private int _hostActionToastSequence;
     private long _lastGuestControlWarningAtUnixMs;
     private bool _chatPanelOpen;
@@ -186,11 +188,18 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
     public int ChatToastRemainingMilliseconds => _latestChatToast == null ? 0 :
         (int)Math.Clamp(5000 - (DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()
             - _latestChatToastReceivedAtUnixMs), 0, 5000);
-    public string? HostActionToast => _hostActionToast;
     public int HostActionToastSequence => _hostActionToastSequence;
-    public int HostActionToastRemainingMilliseconds => _hostActionToast == null ? 0 :
-        (int)Math.Clamp(5000 - (DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()
-            - _hostActionToastReceivedAtUnixMs), 0, 5000);
+    public IReadOnlyList<WatchRoomActionNotice> HostActionNotices
+    {
+        get
+        {
+            var now = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+            return _hostActionNotices.Select(notice => new WatchRoomActionNotice(
+                    notice.Id, notice.Text,
+                    (int)Math.Clamp(1000 - (now - notice.ReceivedAtUnixMs), 0, 1000)))
+                .Where(notice => notice.RemainingMilliseconds > 0).ToArray();
+        }
+    }
     public int RoomMemberCount => _roomMemberCount;
     public string? RoomClientId => _room.ClientId;
     public bool ChatPanelOpen => _chatPanelOpen;
@@ -379,9 +388,7 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
                     if (now - _lastGuestControlWarningAtUnixMs >= 3000)
                     {
                         _lastGuestControlWarningAtUnixMs = now;
-                        _hostActionToast = "当前由房主控制播放，可在聊天中提出调整请求";
-                        _hostActionToastReceivedAtUnixMs = now;
-                        _hostActionToastSequence++;
+                        AddHostActionNotice("当前由房主控制播放，可在聊天中提出调整请求");
                     }
                 }
             }
@@ -504,7 +511,7 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
             {
                 return;
             }
-            _hostActionToast = action.Action switch
+            var text = action.Action switch
             {
                 "select" => "房主切换了视频",
                 "play" => "房主开始播放",
@@ -514,20 +521,29 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
                 "rate" when action.Rate is > 0 => $"房主调整为 {action.Rate:0.##} 倍速",
                 _ => null
             };
-            if (_hostActionToast != null)
+            if (text != null)
             {
-                _hostActionToastReceivedAtUnixMs = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
-                _hostActionToastSequence++;
+                AddHostActionNotice(text);
             }
         });
+    }
+
+    private void AddHostActionNotice(string text)
+    {
+        var now = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+        _hostActionNotices.RemoveAll(notice => now - notice.ReceivedAtUnixMs >= 1000);
+        _hostActionToastSequence++;
+        _hostActionNotices.Add((_hostActionToastSequence, text, now));
+        if (_hostActionNotices.Count > 6) _hostActionNotices.RemoveAt(0);
     }
 
     private void ClearRoomChat()
     {
         _chatPanelOpen = false;
+        _pendingHostMediaKey = null;
         _chatMessages.Clear();
         _latestChatToast = null;
-        _hostActionToast = null;
+        _hostActionNotices.Clear();
         _latestChatToastReceivedAtUnixMs = 0;
         _chatRevision++;
         _chatToastSequence++;
@@ -733,8 +749,10 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
                 _resumeAtSeconds = 0;
             }
             _roomPage = page;
+            _roomPages = pages;
+            _roomVideoTitle = detail.VideoInfoView?.Title ?? string.Empty;
             _roomParsedInput = input.Trim();
-            RoomFilmTitle = $"{detail.VideoInfoView?.Title} · {page.Name}";
+            RoomFilmTitle = $"{_roomVideoTitle} · {page.Name}";
             if (_room.Connected && !_room.IsHost)
             {
                 RoomVideoInput = input.Trim();
@@ -774,6 +792,111 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
         }
         return pages.Length > 0 ? pages[0] : null;
     }
+
+    internal static VideoPage? SelectPlayerPage(
+        VideoPage[] pages, Uri uri, long cid = 0, VideoPage? current = null)
+    {
+        if (!IsTrustedPlayerUri(uri)) return null;
+        var selectedByUri = IsPlayerPageUri(uri)
+            ? SelectPage(pages, uri.AbsoluteUri, 0) : null;
+        var routeHasPart = ParsePageNumber(uri.Query) > 0;
+        if (cid > 0 && (selectedByUri == null
+                || uri.AbsolutePath.StartsWith("/video/", StringComparison.Ordinal) && !routeHasPart
+                || current != null && MediaKey(selectedByUri) == MediaKey(current)))
+        {
+            return pages.FirstOrDefault(page => page.Cid == cid) ?? selectedByUri;
+        }
+        return selectedByUri;
+    }
+
+    private async Task<bool> RefreshPlayerSelectionAsync(
+        BilibiliWebPlaybackSession player, CancellationToken cancellationToken)
+    {
+        var current = _roomPage;
+        if (current == null || !ReferenceEquals(player, _player)) return false;
+
+        var identity = await player.GetPageIdentityAsync(cancellationToken).ConfigureAwait(true);
+        if (!ReferenceEquals(player, _player)) return false;
+        var uri = identity.PageUri;
+        if (uri == null) return false;
+        var selected = SelectPlayerPage(_roomPages, uri, identity.Cid, current);
+        if (_room.Connected && !_room.IsHost)
+        {
+            if (!IsTrustedPlayerUri(uri) || selected == null && !IsPlayerPageUri(uri)
+                || selected != null
+                && MediaKey(selected) == MediaKey(current)) return false;
+            // A guest can change Bilibili's local player page, but room media belongs
+            // to the host. Restore the current selection instead of drifting silently.
+            StopPlayback();
+            await StartPlaybackAsync(true, cancellationToken).ConfigureAwait(true);
+            return true;
+        }
+
+        var resolvedPages = _roomPages;
+        var resolvedTitle = _roomVideoTitle;
+        if (selected == null)
+        {
+            if (!IsPlayerPageUri(uri)) return false;
+            var detail = await _parser.LoadDetailAsync(uri.AbsoluteUri, refresh: true, cancellationToken)
+                .ConfigureAwait(true);
+            var pages = detail.VideoSections.SelectMany(section => section.VideoPages).ToArray();
+            selected = SelectPlayerPage(pages, uri, identity.Cid, current);
+            if (selected == null || !IsPlayablePage(selected)) return false;
+            resolvedPages = pages;
+            resolvedTitle = detail.VideoInfoView?.Title ?? string.Empty;
+        }
+
+        if (!ReferenceEquals(player, _player) || MediaKey(selected) == MediaKey(current))
+            return false;
+        var wasPlaying = _lastSnapshot?.Playing == true
+            || !await player.GetPausedAsync(cancellationToken).ConfigureAwait(true);
+        StopPlayback();
+        _roomPages = resolvedPages;
+        _roomVideoTitle = resolvedTitle;
+        _roomPage = selected;
+        RoomFilmTitle = $"{_roomVideoTitle} · {selected.Name}";
+        var selectedUrl = BilibiliWebPlaybackSession.BuildPlayerUri(selected).AbsoluteUri;
+        RoomVideoInput = selectedUrl;
+        _roomParsedInput = selectedUrl;
+        if (_room.IsHost)
+        {
+            _pendingHostMediaKey = MediaKey(selected);
+            try
+            {
+                await _room.SendAsync(new { type = "select", media = MediaForPage(selected) },
+                    cancellationToken).ConfigureAwait(true);
+                await StartPlaybackAsync(true, cancellationToken).ConfigureAwait(true);
+                if (wasPlaying)
+                {
+                    await _room.SendAsync(new { type = "play" }, cancellationToken).ConfigureAwait(true);
+                }
+            }
+            catch
+            {
+                _pendingHostMediaKey = null;
+                throw;
+            }
+        }
+        else
+        {
+            await StartPlaybackAsync(!wasPlaying, cancellationToken).ConfigureAwait(true);
+        }
+        return true;
+    }
+
+    private static bool IsTrustedPlayerUri(Uri uri)
+        => uri.Scheme == Uri.UriSchemeHttps
+            && uri.Host.Equals("www.bilibili.com", StringComparison.OrdinalIgnoreCase)
+            && (uri.AbsolutePath.StartsWith("/bangumi/play/", StringComparison.Ordinal)
+                || uri.AbsolutePath.StartsWith("/video/", StringComparison.Ordinal));
+
+    private static bool IsPlayerPageUri(Uri uri)
+        => IsTrustedPlayerUri(uri)
+            && (uri.AbsolutePath.StartsWith("/bangumi/play/ep", StringComparison.Ordinal)
+                && ParseEntrance.GetBangumiEpisodeId(uri.AbsoluteUri) > 0
+                || uri.AbsolutePath.StartsWith("/video/", StringComparison.Ordinal)
+                    && (!string.IsNullOrEmpty(ParseEntrance.GetBvId(uri.AbsoluteUri))
+                        || ParseEntrance.GetAvId(uri.AbsoluteUri) > 0));
 
     private static bool IsPlayablePage(VideoPage page)
         => page.EpisodeId > 0 || page.Cid > 0
@@ -1215,6 +1338,12 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
                 return;
             }
 
+            if (_room.IsHost && _pendingHostMediaKey != null)
+            {
+                if (!SameMedia(_roomPage, media)) return;
+                _pendingHostMediaKey = null;
+            }
+
             if (_room.IsHost && _startWhenReady && snapshot.Host?.Ready == true
                 && (snapshot.Guest?.Online != true
                     || snapshot.Guest is { Ready: true, Buffering: false }))
@@ -1350,6 +1479,7 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
     {
         Dispatcher.UIThread.Post(() =>
         {
+            _pendingHostMediaKey = null;
             _roomMemberCount = 0;
             OnPropertyChanged(nameof(RoomParticipantText));
             OnPropertyChanged(nameof(IsInRoom));
@@ -1481,6 +1611,11 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
 
                 try
                 {
+                    if (await RefreshPlayerSelectionAsync(player, cancellationToken)
+                        .ConfigureAwait(true))
+                    {
+                        continue;
+                    }
                     _lastPosition = await player.GetPositionAsync(cancellationToken).ConfigureAwait(true);
                     var duration = await player.GetDurationAsync(cancellationToken).ConfigureAwait(true);
                     if (duration > 1)
@@ -1535,7 +1670,8 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
         await _snapshotGate.WaitAsync(cancellationToken).ConfigureAwait(true);
         try
         {
-            if (_lastSnapshot is { } snapshot && _room.Connected)
+            if (_lastSnapshot is { } snapshot && _room.Connected
+                && (_pendingHostMediaKey == null || SameMedia(_roomPage, snapshot.Media)))
             {
                 await CorrectPlaybackAsync(snapshot, cancellationToken).ConfigureAwait(true);
             }
