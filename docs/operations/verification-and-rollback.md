@@ -30,7 +30,7 @@ dotnet build ./DownKyi.sln `
   -p:UseSharedCompilation=false
 
 pwsh ./script/test-solution.ps1 -Configuration Release -NoRestore -NoBuild
-dotnet format ./DownKyi.sln --no-restore --verify-no-changes
+pwsh ./script/verify-format.ps1
 pwsh ./script/audit-module-boundaries.ps1 `
   -OutputPath ./artifacts/architecture/module-boundary-audit.json
 $workflowFiles = Get-ChildItem ./.github/workflows -Filter *.yml | `
@@ -43,6 +43,11 @@ pwsh ./script/scan-secrets.ps1
 ```
 
 `scan-secrets.ps1` 使用 Gitleaks 掃描目前 tracked 與尚未追蹤、但未被 `.gitignore` 排除的候選提交檔。固定驗證版本為 Gitleaks `8.30.1`；Windows x64 release zip 必須先依官方 `gitleaks_8.30.1_checksums.txt` 驗證 SHA-256，再解壓到 `.tools/gitleaks/bin/`。`.gitleaks.toml` 只允許公開 WBI 測試 fixture 與精確的 Avalonia brush resource 行，不得加入整個目錄或一般測試檔的寬鬆排除。
+
+格式驗證由 `verify-format.ps1` 檢查全方案的空白、using 與 code style。
+分析器仍全部由上述嚴格建置執行：`dotnet format` 的 analyzer pass
+[未正確套用 diagnostic suppressors](https://github.com/dotnet/sdk/issues/51364)，
+會將 xUnit 必須公開的測試類等誤報為錯誤。不要因此降低規則嚴重性或移除分析器。
 
 Repository 測試只能經由 `script/test-project.ps1` 或
 `script/test-solution.ps1` 進入 `DownKyi.CentralTestRunner`。Runner 會套用
@@ -70,6 +75,12 @@ Get-ChildItem ./artifacts/BiliCinema-win-x64 -File
 `.github/workflows/quality.yml` 目前僅在 pull request 時執行格式、嚴格建置、
 測試與套件稽核；它不會產生或上傳發行檔案。交付內容是上述 exe，本機建置不需要
 建立壓縮檔或 macOS 安裝包。
+
+`BiliCinema Release` 工作流在 main 的 `version.txt` 或工作流本身變更時執行，
+也可手動執行。它對同一提交完成格式、嚴格建置、Windows 完整回歸、CodeQL、
+單文件打包與實際 aria2 TLS 測試後，才建立 `bilicinema-v<version>` Release，
+上傳 `BiliCinema.exe` 與 SHA-256 校驗檔。現有 Release 不會被覆寫。
+一般 main 程式碼提交仍不會觸發 Strict PR CI。
 
 登入態 API audit 只能由明確授權的 operator 執行：
 

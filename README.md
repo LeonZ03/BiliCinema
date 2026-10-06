@@ -1,21 +1,44 @@
 # BiliCinema
 
-BiliCinema 基于 [DownKyi Core](https://github.com/crazysmile-PhD/downkyicore) 开发，保留原项目的影片下载能力，并提供 B 站网页播放与双人同步观影。Windows 主界面分为登录、观影房间、下载影片三页；观影房间无需创建或加入房间也能单人播放。
+BiliCinema 是一款 Windows 桌面应用，基于 [DownKyi Core](https://github.com/crazysmile-PhD/downkyicore)，可以播放哔哩哔哩影片、邀请另一位用户同步观影，也可以下载影片。
 
-## 直接运行
+## 下载
 
-双击 `artifacts/BiliCinema-win-x64/BiliCinema.exe`。它是 Windows x64 自包含单文件程序；目标电脑无需 .NET SDK，也不用另开房间服务窗口。播放 B 站网页视频需要系统具备 Microsoft Edge WebView2 Runtime。此目录是本地构建产物，不提交到 Git，也不发布压缩包。
+前往 [GitHub Releases](https://github.com/LeonZ03/BiliCinema/releases)，下载最新版本中的 `BiliCinema.exe`，保存到电脑后双击运行。程序以 Windows x64 单文件形式发布，不需要另外安装 .NET。播放视频需要安装 Microsoft Edge WebView2 Runtime；大多数 Windows 电脑已自带该组件。
 
-程序首次启动时会准备内置下载器；进入下载页或创建房间时会按需准备其他媒体工具或 Cloudflare Tunnel 客户端。登录页可把二维码连同 BiliCinema 标识复制为图片，方便私下发送给帮忙扫码的人。观影房间支持 B 站番剧、电影和普通 BV/av 视频，视频播放走本机 WebView2 与 B 站；房主可在同一个房间切换视频，房间服务传选片、播放控制和聊天文字。聊天昵称保存在本机设置中。下载页解析影片后会按所选清晰度、编码和音质显示每项预计大小。
+首次启动需要解压内置组件，请稍候；登录和下载数据默认保存在 `%APPDATA%\DownKyi`。
 
-当前使用和房间同步说明见 [观影使用说明](docs/watch-together.md)。
+## 快速开始
 
-## 构建
+1. **登录**：打开“登录”页，用哔哩哔哩 App 扫描页面上的二维码并确认。也可以点“复制二维码图片”，把图片私下发给可信任的协助者扫码。
+2. **播放视频**：打开“观影房间”页，粘贴 B 站番剧、电影或普通视频链接。解析完成后即可在视频内操作；不创建房间也可以单人观看。
+3. **邀请一起观看**：播放页点击“创建房间”，把生成的邀请链接发给另一位观众。对方运行 BiliCinema 后粘贴邀请链接加入。房间通过临时网络隧道连接，房主需要保持程序运行。
+4. **同步与聊天**：房主控制选片、选集、播放、暂停、跳转和倍速。解析后自动同步实际进度；需要时可点击同步状态右侧的 **↻** 图标：房主发送当前状态，访客重新对齐房主。双方各自从 B 站播放，画质和音量各自设置。
+5. **下载影片**：打开“下载影片”页，解析视频或番剧后选择可用的清晰度、编码和音质，再添加下载任务。页面会显示预计大小；下载功能沿用 DownKyi 的下载器和断点续传能力。
 
-在 Windows x64 开发电脑双击 `Build-BiliCinema.cmd`。构建需要 .NET 10 SDK，并会下载仓库清单中锁定哈希的 aria2、FFmpeg，以及锁定版本和哈希的 cloudflared。完成后只交付 `artifacts/BiliCinema-win-x64/BiliCinema.exe`。程序源码可运行 `dotnet run --project DownKyi/DownKyi.csproj`。
+更详细的操作方式、加入房间后的播放行为和同步说明见[观影使用说明](docs/watch-together.md)。
 
-默认数据目录沿用 DownKyi 的 `%APPDATA%\DownKyi`。可设置 `DOWNKYI_DATA_DIR` 隔离测试账号。下载器仍使用原项目的配置、断点续传和媒体处理逻辑。
+## 观看与聊天
 
-## 仓库
+- **F** 进入或退出全屏，**D** 开关弹幕；聊天输入期间暂停播放快捷键。
+- 全屏时鼠标移到右边缘呼出聊天，移出面板后收起。新消息在画面右侧显示 5 秒。
+- “我的昵称”会记住上次保存的内容，不公开 B 站账号信息。
+- 房间目前支持 **2 人**，也可以先创建空房间再选片。房主退出程序后，房间服务和临时邀请地址随之关闭。
+- 播放权限取决于各自登录的 B 站账号；会员内容需要相应权限。
 
-开发文档位于 [ARCHITECTURE.md](ARCHITECTURE.md)、[docs/maintenance.md](docs/maintenance.md) 和 [测试说明](docs/testing/README.md)。许可和第三方归属见 [LICENSE](LICENSE) 与 [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md)。
+## 开发者入口
+
+需要构建或维护项目时，可从以下文档开始：
+
+- [架构与模块边界](ARCHITECTURE.md)
+- [Agent 修改指南](AGENTS.md)
+- [维护文档](docs/maintenance.md)
+- [测试说明](docs/testing/README.md)
+- [验证与回滚](docs/operations/verification-and-rollback.md)
+- [构建脚本](Build-BiliCinema.cmd)
+
+Windows x64 开发电脑可运行 `Build-BiliCinema.cmd` 构建单文件程序；构建需要 .NET 10 SDK。源码也可通过 `dotnet run --project DownKyi/DownKyi.csproj` 运行。
+
+## 项目与许可
+
+DownKyi 默认数据目录为 `%APPDATA%\DownKyi`，可设置 `DOWNKYI_DATA_DIR` 指定其他目录。BiliCinema 基于 DownKyi Core 开发；许可和第三方组件归属见 [LICENSE](LICENSE) 与 [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md)。

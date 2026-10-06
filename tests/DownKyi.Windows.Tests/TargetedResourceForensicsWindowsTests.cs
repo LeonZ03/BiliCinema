@@ -6,8 +6,8 @@ using System.Runtime.Versioning;
 using DownKyi.CentralTestRunner;
 using DownKyi.ProcessSupervision;
 using DownKyi.TestInfrastructure;
-using CentralRunnerProgram = DownKyi.CentralTestRunner.Program;
 using Microsoft.Win32.SafeHandles;
+using CentralRunnerProgram = DownKyi.CentralTestRunner.Program;
 
 namespace DownKyi.Windows.Tests;
 

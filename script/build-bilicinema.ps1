@@ -1,5 +1,7 @@
 [CmdletBinding()]
-param()
+param(
+    [string]$OutputDirectory = 'artifacts\BiliCinema-win-x64'
+)
 
 $ErrorActionPreference = 'Stop'
 Add-Type -AssemblyName System.IO.Compression.FileSystem
@@ -7,7 +9,7 @@ $root = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
 $manifest = Get-Content -LiteralPath (Join-Path $PSScriptRoot 'assets\external-assets.json') -Raw | ConvertFrom-Json
 $downloads = Join-Path $PSScriptRoot 'downloads'
 $stage = Join-Path $root 'src\DownKyi.Desktop\EmbeddedTools'
-$publish = Join-Path $root 'artifacts\BiliCinema-win-x64'
+$publish = [IO.Path]::GetFullPath($OutputDirectory, $root)
 [IO.Directory]::CreateDirectory($downloads) | Out-Null
 [IO.Directory]::CreateDirectory($stage) | Out-Null
 [IO.Directory]::CreateDirectory($publish) | Out-Null

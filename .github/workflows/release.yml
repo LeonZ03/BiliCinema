@@ -1,0 +1,137 @@
+name: BiliCinema Release
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - version.txt
+      - .github/workflows/release.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: bilicinema-release
+  cancel-in-progress: false
+
+env:
+  DOTNET_CLI_TELEMETRY_OPTOUT: '1'
+  DOTNET_NOLOGO: '1'
+  AVALONIA_TELEMETRY_OPTOUT: '1'
+
+jobs:
+  verify-package:
+    if: github.ref == 'refs/heads/main'
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: '10.0.x'
+      - name: Restore
+        run: dotnet restore ./DownKyi.sln
+      - name: Strict build
+        run: >
+          dotnet build ./DownKyi.sln -c Release --no-restore --no-incremental
+          -p:EnableNETAnalyzers=true -p:AnalysisMode=All -p:EnforceCodeStyleInBuild=true
+          -p:TreatWarningsAsErrors=true -p:CodeAnalysisTreatWarningsAsErrors=true
+          -p:UseSharedCompilation=false
+      - name: Verify formatting
+        shell: pwsh
+        run: ./script/verify-format.ps1
+      - name: Full Windows regression
+        shell: pwsh
+        run: ./script/test-solution.ps1 -Configuration Release -NoRestore -NoBuild
+      - name: Package audit
+        shell: pwsh
+        run: |
+          dotnet package list --project ./DownKyi.sln --vulnerable --include-transitive
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          dotnet package list --project ./DownKyi.sln --deprecated --include-transitive
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Build single executable
+        shell: pwsh
+        run: ./script/build-bilicinema.ps1
+      - name: Verify packaged aria2 security
+        shell: pwsh
+        env:
+          DOWNKYI_ARIA2_BINARY: ${{ github.workspace }}/DownKyi.Core/Binary/win-x64/aria2/aria2c.exe
+          DOWNKYI_ARIA2_RID: win-x64
+          DOWNKYI_ARIA2_TLS_REPORT: ${{ github.workspace }}/artifacts/aria2-tls/win-x64
+        run: ./script/test-project.ps1 -ProjectPath ./tests/DownKyi.Tests/DownKyi.Tests.csproj -Configuration Release -NoRestore -NoBuild -ClassName DownKyi.Tests.Aria2TlsIntegrationTests
+      - name: Record executable checksum
+        shell: pwsh
+        run: |
+          $folder = 'artifacts/BiliCinema-win-x64'
+          $digest = (Get-FileHash "$folder/BiliCinema.exe" -Algorithm SHA256).Hash.ToLowerInvariant()
+          "$digest  BiliCinema.exe" | Set-Content "$folder/SHA256SUMS.txt" -Encoding ascii
+      - uses: actions/upload-artifact@v7
+        with:
+          name: BiliCinema-win-x64
+          path: artifacts/BiliCinema-win-x64/
+          if-no-files-found: error
+      - name: Upload test evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: release-test-evidence
+          path: |
+            artifacts/test-results/
+            artifacts/test-flight-recorder/
+            artifacts/aria2-tls/
+          if-no-files-found: ignore
+
+  codeql:
+    if: github.ref == 'refs/heads/main'
+    runs-on: windows-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      security-events: write
+      actions: read
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: '10.0.x'
+      - uses: github/codeql-action/init@v4
+        with:
+          languages: csharp
+          build-mode: manual
+      - run: dotnet build ./DownKyi.sln -c Release --no-incremental
+      - uses: github/codeql-action/analyze@v4
+
+  publish:
+    needs: [verify-package, codeql]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v8
+        with:
+          name: BiliCinema-win-x64
+          path: release-assets
+      - name: Publish verified executable
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="$(tr -d '\r\n' < version.txt)"
+          [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          tag="bilicinema-v${version}"
+          existing_tag="$(git ls-remote --tags origin "refs/tags/$tag")"
+          if [[ -n "$existing_tag" ]]; then
+            echo 'This tag already exists. Use a new version; tags will not be reused.' >&2
+            exit 1
+          fi
+          if gh release view "$tag" >/dev/null 2>&1; then
+            echo 'This version already has a release. Existing assets will not be replaced.' >&2
+            exit 1
+          fi
+          gh release create "$tag" release-assets/BiliCinema.exe release-assets/SHA256SUMS.txt \
+            --target "$GITHUB_SHA" --title "BiliCinema v${version}" \
+            --notes-file docs/releases/bilicinema.md --latest

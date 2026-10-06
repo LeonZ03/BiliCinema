@@ -1,4 +1,4 @@
-# DownKyi Release And Verification Policy
+# BiliCinema Release And Verification Policy
 
 This document owns stable release, verification, completion and rollback
 policy. It is not a current-work database. Do not record an active item, next
@@ -18,15 +18,20 @@ PRs do not update this file merely because their work state changed.
   but do not grow an unmerged release stack beyond roughly two or three layers
   or material divergence from `main`. Consolidate accepted semantics onto one
   clean current-main integration branch and validate that exact head.
-- Publish only from one clean final commit after strict quality, CodeQL and
-  Windows/Linux/macOS package validation pass for that exact commit.
+- BiliCinema ships one Windows x64 executable. Publish only from one clean
+  final commit after strict quality, CodeQL, the Windows test selection and
+  single-executable package validation pass for that exact commit. The inherited
+  Linux/macOS package formats are not BiliCinema release artifacts; shared-code
+  platform tests remain in the pull-request quality workflow.
 - Preserve settings JSON, legacy SQLite, unfinished tasks, GID, partial-file
   maps, completed keys and resume fixtures unless an approved migration with
   rollback evidence explicitly changes them.
 - Source and packages must not contain Cookie values, account data, local
   Config/Logs/Cache/Storage or developer artifacts.
-- Existing tags are immutable. Do not change `version.txt`, create a tag or
-  publish a release while any release blocker or required gate is unresolved.
+- Existing tags and release assets are immutable. `version.txt` identifies a
+  candidate; the release workflow creates its `bilicinema-v` tag and publishes
+  assets only after all required gates pass. Do not publish locally around a
+  failed gate or replace an existing release.
 
 ## Verification
 
