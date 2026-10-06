@@ -264,13 +264,17 @@ public sealed class AgentEnvironmentArchitectureTests
         AssertPathsExist(
             "docs/maintenance.md",
             "docs/operations/verification-and-rollback.md",
-            "script/validate-publish-output.ps1",
-            ".github/workflows/build.yml");
+            "script/build-bilicinema.ps1",
+            ".github/workflows/quality.yml",
+            ".github/workflows/codeql.yml");
 
         var operations = Read("docs/operations/verification-and-rollback.md");
+        var build = Read("script/build-bilicinema.ps1");
         Assert.Contains("git revert <commit-sha>", operations, StringComparison.Ordinal);
         Assert.Contains("migration", operations, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("rollback", operations, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("-p:PublishSingleFile=true", build, StringComparison.Ordinal);
+        Assert.Contains("artifacts\\BiliCinema-win-x64", build, StringComparison.Ordinal);
     }
 
     private static void AssertPathsExist(params string[] relativePaths)

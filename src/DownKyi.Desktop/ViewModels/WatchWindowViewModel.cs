@@ -462,6 +462,7 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
         }
         catch (OperationCanceledException) when (_lifetime.IsCancellationRequested)
         {
+            // Closing the watch window cancels an in-flight chat send.
         }
         catch (Exception error) when (IsRoutineError(error))
         {
@@ -1092,9 +1093,11 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
         }
         catch (HttpRequestException)
         {
+            // No room server is listening yet; start the embedded host below.
         }
         catch (TaskCanceledException) when (!cancellationToken.IsCancellationRequested)
         {
+            // The short health probe timed out; start the embedded host below.
         }
 
         _localServer = RoomServerHost.Build();

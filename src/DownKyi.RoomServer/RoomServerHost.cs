@@ -77,9 +77,11 @@ internal static class RoomServerHost
             }
             catch (OperationCanceledException) when (context.RequestAborted.IsCancellationRequested)
             {
+                // The peer closed the request; detach the connection in finally.
             }
             catch (WebSocketException)
             {
+                // A broken peer connection is cleaned up in finally.
             }
             finally
             {
@@ -94,9 +96,11 @@ internal static class RoomServerHost
                     }
                     catch (OperationCanceledException)
                     {
+                        // The send loop was canceled during connection teardown.
                     }
                     catch (WebSocketException)
                     {
+                        // The socket closed while the send loop was finishing.
                     }
                 }
             }

@@ -1,6 +1,5 @@
 using System.Diagnostics;
 using System.Text.RegularExpressions;
-using DownKyi.CentralTestRunner;
 
 namespace DownKyi.Architecture.Tests;
 
@@ -65,29 +64,33 @@ public sealed class CentralTestRunnerFixtureDispatchTests
 
     private static async Task<ProcessResult> RunAsync(params string[] arguments)
     {
-        var startInfo = new ProcessStartInfo("dotnet")
-        {
-            UseShellExecute = false,
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            CreateNoWindow = true
-        };
-        startInfo.ArgumentList.Add("exec");
-        startInfo.ArgumentList.Add("--runtimeconfig");
-        startInfo.ArgumentList.Add(Path.Combine(
-            AppContext.BaseDirectory,
-            "DownKyi.Architecture.Tests.runtimeconfig.json"));
-        startInfo.ArgumentList.Add(typeof(Program).Assembly.Location);
-        foreach (var argument in arguments)
-        {
-            startInfo.ArgumentList.Add(argument);
-        }
+        var startInfo = TestFixtureProcess.CreateStartInfo(arguments);
 
         using var process = Process.Start(startInfo);
         Assert.NotNull(process);
         var standardOutput = process.StandardOutput.ReadToEndAsync();
         var standardError = process.StandardError.ReadToEndAsync();
-        await process.WaitForExitAsync(TestContext.Current.CancellationToken).ConfigureAwait(true);
+        using var deadline = CancellationTokenSource.CreateLinkedTokenSource(TestContext.Current.CancellationToken);
+        deadline.CancelAfter(TimeSpan.FromSeconds(15));
+        try
+        {
+            await Task.WhenAll(process.WaitForExitAsync(deadline.Token), standardOutput, standardError)
+                .WaitAsync(deadline.Token).ConfigureAwait(true);
+        }
+        catch (OperationCanceledException) when (!TestContext.Current.CancellationToken.IsCancellationRequested)
+        {
+            var stillRunning = !process.HasExited;
+            var outputComplete = standardOutput.IsCompleted;
+            var errorComplete = standardError.IsCompleted;
+            if (stillRunning)
+            {
+                process.Kill(entireProcessTree: true);
+            }
+
+            throw new TimeoutException($"Central test fixture did not exit: {string.Join(' ', arguments)}; "
+                                       + $"running={stillRunning}, stdout={outputComplete}, stderr={errorComplete}");
+        }
+
         return new ProcessResult(
             process.ExitCode,
             await standardOutput.ConfigureAwait(true),

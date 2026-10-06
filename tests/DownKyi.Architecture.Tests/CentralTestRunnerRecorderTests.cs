@@ -647,27 +647,7 @@ public sealed class CentralTestRunnerRecorderTests
 
     private static ProcessStartInfo CreateFixtureStartInfo(string fixture, params string[] arguments)
     {
-        var runnerAssembly = typeof(FlightRecorderExecution).Assembly.Location;
-        var runtimeConfig = Path.Combine(
-            AppContext.BaseDirectory,
-            "DownKyi.Architecture.Tests.runtimeconfig.json");
-        var startInfo = new ProcessStartInfo("dotnet")
-        {
-            UseShellExecute = false,
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            CreateNoWindow = true
-        };
-        startInfo.ArgumentList.Add("exec");
-        startInfo.ArgumentList.Add("--runtimeconfig");
-        startInfo.ArgumentList.Add(runtimeConfig);
-        startInfo.ArgumentList.Add(runnerAssembly);
-        startInfo.ArgumentList.Add(fixture);
-        foreach (var argument in arguments)
-        {
-            startInfo.ArgumentList.Add(argument);
-        }
-        return startInfo;
+        return TestFixtureProcess.CreateStartInfo([fixture, .. arguments]);
     }
 
     private static async Task<(ProcessExecutionResult Result, int FixturePid)> RunCanceledFixtureAsync(

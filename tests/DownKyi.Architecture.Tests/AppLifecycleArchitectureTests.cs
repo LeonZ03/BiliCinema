@@ -90,7 +90,7 @@ public sealed class AppLifecycleArchitectureTests
     }
 
     [Fact]
-    public void AppDelegatesHostShutdownRestartAndSingleInstanceOwnership()
+    public void AppDelegatesNormalShutdownAndKeepsWatchModeFallbackCleanup()
     {
         var appSource = ReadSource("src", "DownKyi.Desktop", "App.axaml.cs");
         var lifecycleSource = ReadSource(
@@ -110,7 +110,13 @@ public sealed class AppLifecycleArchitectureTests
         var disposeStart = appSource.IndexOf("private async Task DisposeCoreAsync()", StringComparison.Ordinal);
         var createHostStart = appSource.IndexOf("private void CreateHost()", StringComparison.Ordinal);
         Assert.True(disposeStart >= 0 && createHostStart > disposeStart);
-        Assert.DoesNotContain("FlushAsync", appSource[disposeStart..createHostStart], StringComparison.Ordinal);
+        var dispose = appSource[disposeStart..createHostStart];
+        Assert.Matches(@"_applicationLifecycle\s*\.RequestShutdownAsync", dispose);
+        var watchFallback = dispose.IndexOf("else if (WatchMode && _host != null)", StringComparison.Ordinal);
+        var stopHost = dispose.IndexOf("_host.StopAsync(CancellationToken.None)", StringComparison.Ordinal);
+        var flushSettings = dispose.IndexOf("GetRequiredService<ISettingsStore>()", StringComparison.Ordinal);
+        Assert.True(watchFallback >= 0 && stopHost > watchFallback && flushSettings > stopHost);
+        Assert.Contains("FlushAsync(CancellationToken.None)", dispose[flushSettings..], StringComparison.Ordinal);
         Assert.Contains("IProcessRestartLauncher", lifecycleSource, StringComparison.Ordinal);
         Assert.Contains("WaitForExitAsync", restartSource, StringComparison.Ordinal);
         Assert.Contains("ArgumentList.Add", restartSource, StringComparison.Ordinal);
@@ -160,7 +166,15 @@ public sealed class AppLifecycleArchitectureTests
 
         Assert.Contains("DownKyiHost.Create", appSource, StringComparison.Ordinal);
         Assert.Contains("AddDownKyiDesktop", appSource, StringComparison.Ordinal);
-        Assert.DoesNotContain("host.StopAsync", appSource, StringComparison.Ordinal);
+        Assert.Contains("services.AddDownKyiWatch", appSource, StringComparison.Ordinal);
+        var desktopComposition = File.ReadAllText(Path.Combine(
+            RepositoryRoot,
+            "src", "DownKyi.Desktop",
+            "Composition",
+            "DesktopComposition.cs"));
+        Assert.Contains("services.AddDownKyiDesktop(loggerFactory, logService)", desktopComposition,
+            StringComparison.Ordinal);
+        Assert.Contains("services.AddDownloadModule()", desktopComposition, StringComparison.Ordinal);
         Assert.Contains("DownloadBootstrapHostedService", downloadCompositionSource, StringComparison.Ordinal);
         Assert.Contains("IDownloadRuntimeFactory", downloadCompositionSource, StringComparison.Ordinal);
         Assert.DoesNotContain("LoadDownloadStateAsync", appSource, StringComparison.Ordinal);

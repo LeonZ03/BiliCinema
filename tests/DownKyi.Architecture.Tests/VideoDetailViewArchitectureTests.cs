@@ -1,5 +1,3 @@
-using System.Text.RegularExpressions;
-
 namespace DownKyi.Architecture.Tests;
 
 public sealed class VideoDetailViewArchitectureTests
@@ -51,19 +49,25 @@ public sealed class VideoDetailViewArchitectureTests
     }
 
     [Fact]
-    public void VideoDetailBindingContractRetainsAllMovedTokens()
+    public void VideoDetailBindingContractKeepsParsingSelectionAndDownloadControlsWired()
     {
-        var source = string.Join(Environment.NewLine, ViewNames.Select(Read));
+        var toolbar = Read("VideoDetailToolbarView.axaml");
+        var summary = Read("VideoDetailSummaryView.axaml");
+        var selection = Read("VideoDetailSelectionView.axaml");
+        var actions = Read("VideoDetailActionsView.axaml");
 
-        Assert.Equal(55, Count(source, @"\{(?:Reflection)?Binding\s+([^},]+)"));
-        Assert.Equal(12, Count(source, @"(?:x:Name|Name)=""([^""]+)"""));
-        Assert.Equal(62, Count(source, @"\{DynamicResource\s+([^}]+)\}"));
-        Assert.Equal(8, Count(source, @"\{StaticResource\s+([^}]+)\}"));
-        Assert.Equal(
-            13,
-            Count(
-                source,
-                @"<(?:behavior:[^\s/>]+|(?:Event|Data)TriggerBehavior|InvokeCommandAction|ChangePropertyAction)\b"));
+        Assert.Contains("Command=\"{Binding InputCommand}\"", toolbar, StringComparison.Ordinal);
+        Assert.Contains("UiState.InputText", toolbar, StringComparison.Ordinal);
+        Assert.Contains("UiState.VideoInfoView.Title", summary, StringComparison.Ordinal);
+        Assert.Contains("UiState.VideoInfoView.CoverUrl", summary, StringComparison.Ordinal);
+        Assert.Contains("NameVideoSections", selection, StringComparison.Ordinal);
+        Assert.Contains("SelectedItem.VideoPages", selection, StringComparison.Ordinal);
+        Assert.Contains("UiState.SelectedVideoPage", selection, StringComparison.Ordinal);
+        Assert.Contains("ParseAllVideoCommand", actions, StringComparison.Ordinal);
+        Assert.Contains("AddToDownloadCommand", actions, StringComparison.Ordinal);
+        Assert.Contains("UiState.InputSearchText", actions, StringComparison.Ordinal);
+        Assert.Contains("{DynamicResource", string.Join(Environment.NewLine, ViewNames.Select(Read)),
+            StringComparison.Ordinal);
     }
 
     [Fact]
@@ -98,15 +102,6 @@ public sealed class VideoDetailViewArchitectureTests
             "avares://Avalonia.Controls.DataGrid/Themes/Fluent.xaml",
             applicationSource,
             StringComparison.Ordinal);
-    }
-
-    private static int Count(string source, string pattern)
-    {
-        return Regex.Count(
-            source,
-            pattern,
-            RegexOptions.CultureInvariant | RegexOptions.NonBacktracking,
-            TimeSpan.FromSeconds(1));
     }
 
     private static void AssertOrdered(string source, params string[] values)

@@ -49,18 +49,29 @@ public sealed class SettingsArchitectureTests
     }
 
     [Fact]
-    public void ApplicationStartupDelegatesThemeSettingsToTheDesktopThemeController()
+    public void ApplicationStartupAppliesSavedThemeThroughTheDesktopThemeController()
     {
         var applicationSource = ReadSource("src", "DownKyi.Desktop", "App.axaml.cs");
         var controllerSource = ReadSource(
             "src", "DownKyi.Desktop", "Appearance", "DesktopThemeController.cs");
 
-        Assert.DoesNotContain("ISettingsStore", applicationSource, StringComparison.Ordinal);
         Assert.Contains(
             "GetRequiredService<DesktopThemeController>().ApplySavedMode()",
             applicationSource,
             StringComparison.Ordinal);
+        var watchModeBranch = applicationSource.IndexOf("if (WatchMode)", StringComparison.Ordinal);
+        var firstThemeApplication = applicationSource.IndexOf(
+            "GetRequiredService<DesktopThemeController>().ApplySavedMode()",
+            StringComparison.Ordinal);
+        var secondThemeApplication = applicationSource.IndexOf(
+            "GetRequiredService<DesktopThemeController>().ApplySavedMode()",
+            firstThemeApplication + 1,
+            StringComparison.Ordinal);
+        Assert.True(watchModeBranch >= 0 && firstThemeApplication > watchModeBranch);
+        Assert.True(secondThemeApplication > firstThemeApplication);
+        Assert.Contains("ISettingsStore", applicationSource, StringComparison.Ordinal);
         Assert.Contains("ISettingsStore", controllerSource, StringComparison.Ordinal);
+        Assert.Contains("_settingsStore.Current.Basic.ThemeMode", controllerSource, StringComparison.Ordinal);
         Assert.DoesNotContain("SettingsManager.Instance", controllerSource, StringComparison.Ordinal);
     }
 

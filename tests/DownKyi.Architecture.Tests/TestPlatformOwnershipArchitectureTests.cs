@@ -8,8 +8,6 @@ public sealed partial class TestPlatformOwnershipArchitectureTests
     private static readonly string RepositoryRoot = FindRepositoryRoot();
     private static readonly string[] AllowedPlatforms =
         ["Windows", "Linux", "macOS"];
-    private static readonly string[] MacOnlyPlatforms = ["macOS"];
-    private static readonly string[] WindowsOnlyPlatforms = ["Windows"];
 
     [Fact]
     public void EveryRunnableTestProjectDeclaresPlatformOwnership()
@@ -31,35 +29,16 @@ public sealed partial class TestPlatformOwnershipArchitectureTests
     }
 
     [Fact]
-    public void MacSigningBehaviorIsOwnedByMacOSProject()
+    public void BiliCinemaBuildTargetsWindowsAndQualityTestsRunOnSupportedHosts()
     {
-        var macProject = Path.Combine(
-            RepositoryRoot,
-            "tests",
-            "DownKyi.MacOS.Tests",
-            "DownKyi.MacOS.Tests.csproj");
-        var windowsProject = Path.Combine(
-            RepositoryRoot,
-            "tests",
-            "DownKyi.Windows.Tests",
-            "DownKyi.Windows.Tests.csproj");
-        var releaseArchitecture = Read(
-            "tests/DownKyi.Architecture.Tests/ReleaseWorkflowArchitectureTests.cs");
-        var macBehavior = Read("tests/DownKyi.MacOS.Tests/MacSigningScriptTests.cs");
-        var buildWorkflow = Read(".github/workflows/build.yml");
+        var buildScript = Read("script/build-bilicinema.ps1");
+        var qualityWorkflow = Read(".github/workflows/quality.yml");
 
-        Assert.Equal(MacOnlyPlatforms, ReadDeclaredPlatforms(macProject));
-        Assert.Equal(WindowsOnlyPlatforms, ReadDeclaredPlatforms(windowsProject));
-        Assert.DoesNotContain("RunMacSigningFixture", releaseArchitecture, StringComparison.Ordinal);
-        Assert.DoesNotContain(
-            "MacAdHocSigningExecutesUnderNounsetWithoutTimestamp",
-            releaseArchitecture,
-            StringComparison.Ordinal);
-        Assert.Contains("FileName = \"/bin/bash\"", macBehavior, StringComparison.Ordinal);
-        Assert.Contains("AdHocSigningExecutesUnderSystemBashNounsetWithoutTimestamp", macBehavior, StringComparison.Ordinal);
-        Assert.Contains("DeveloperIdSigningIncludesTimestamp", macBehavior, StringComparison.Ordinal);
-        Assert.Contains("macos-15", buildWorkflow, StringComparison.Ordinal);
-        Assert.Contains("./script/test-solution.ps1", buildWorkflow, StringComparison.Ordinal);
+        Assert.Contains("'-c', 'BiliCinema', '-r', 'win-x64'", buildScript, StringComparison.Ordinal);
+        Assert.Contains("'-p:PublishSingleFile=true'", buildScript, StringComparison.Ordinal);
+        Assert.Contains("windows-latest", qualityWorkflow, StringComparison.Ordinal);
+        Assert.Contains("macos-latest", qualityWorkflow, StringComparison.Ordinal);
+        Assert.Contains("./script/test-solution.ps1", qualityWorkflow, StringComparison.Ordinal);
     }
 
     [Fact]

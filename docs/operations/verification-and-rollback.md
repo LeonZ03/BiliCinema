@@ -18,8 +18,6 @@ Audit JSON 記錄 commit SHA、source metrics 與目前 boundary markers，供 A
 ```powershell
 dotnet restore ./DownKyi.sln
 
-pwsh ./script/validate-release-version.ps1
-
 dotnet build ./DownKyi.sln `
   -c Release `
   --no-restore `
@@ -56,42 +54,22 @@ routing、TRX validation 與 exit result。
 bounded stdout/stderr 與一次 best-effort final process snapshot；child 未被
 觀察到不代表已證明不存在。詳細 locator 見 `docs/testing/README.md`。
 
-## 外部 Binary 與跨 RID 發布
+## Windows x64 單文件程序
 
-從儲存庫根目錄執行 Windows 資產腳本；腳本不可依賴目前 working
-directory：
-
-```powershell
-pwsh ./script/aria2.ps1 x64
-pwsh ./script/ffmpeg.ps1 x64
-```
-
-URL 與 SHA-256 只在 `script/assets/external-assets.json` 維護。更新前以
-publisher release API 交叉核對 immutable tag、asset name、size 與 digest；
-禁止改成 mutable `latest`、使用 `curl --insecure` 或略過 checksum。驗證
-`ffmpeg`、`ffprobe`、aria2 非空，並檢查目標平台需要的硬體 encoder。
-
-交叉發布必須明確 restore 同一個目標 RID，再以 `--no-restore` publish。
-Core 只保存外部 binary catalog，不得選擇平台內容或設定 SDK
-`RuntimeIdentifier`。exe 專案必須從明確的 publish RID 建立 asset RID，
-沒有 publish RID 時才可依本機 host 提供開發 fallback，並直接把對應
-catalog 檔案加入 output/publish；自訂 RID 不得跨 ProjectReference。
-推 tag 前手動執行 `build.yml`，下載每個 artifact，重算 package
-sidecar，並檢查 manifest、版本、必要 binary、Fluent theme 與使用者
-資料排除。macOS artifact 另需確認 x64 與 arm64 final app 均已完成簽章並
-通過 `codesign --verify --deep --strict`；缺少 Apple credentials 時使用 ad-hoc
-簽章，Developer ID、notarization、stapling、Gatekeeper 與 signed-DMG 驗證會
-跳過，產物不得宣稱具備這些信任屬性。具備完整 Apple credentials 時才要求
-上述額外步驟全部通過。任何 final app bundle 完整性失敗仍必須 fail closed。
-
-正式 tag 前及 workflow 中均執行：
+從 repository 根目錄執行建置腳本。它會下載並驗證清單鎖定的 aria2、FFmpeg 與
+cloudflared，再產生自包含的 Windows x64 單一執行檔：
 
 ```powershell
-$version = (Get-Content ./version.txt -Raw).Trim()
-pwsh ./script/validate-release-version.ps1 -GitRef "refs/tags/v$version"
+pwsh ./script/build-bilicinema.ps1
+Test-Path ./artifacts/BiliCinema-win-x64/BiliCinema.exe
+Get-ChildItem ./artifacts/BiliCinema-win-x64 -File
 ```
 
-這個檢查要求 tag 與 `version.txt` 完全一致；不得移動或重用既有 tag。
+`script/assets/external-assets.json` 是外部工具版本與 SHA-256 的唯一清單。
+建置會拒絕雜湊不符的下載，並確認輸出目錄中只有 `BiliCinema.exe`。
+`.github/workflows/quality.yml` 目前僅在 pull request 時執行格式、嚴格建置、
+測試與套件稽核；它不會產生或上傳發行檔案。交付內容是上述 exe，本機建置不需要
+建立壓縮檔或 macOS 安裝包。
 
 登入態 API audit 只能由明確授權的 operator 執行：
 

@@ -87,10 +87,7 @@ public sealed class CentralTestRunnerCancellationComponentTests
     [Fact]
     public async Task RelationshipSnapshotCommandFailureIsTyped()
     {
-        var startInfo = CreateDotNetStartInfo();
-        startInfo.ArgumentList.Add("exec");
-        startInfo.ArgumentList.Add(
-            Path.Combine(Path.GetTempPath(), $"missing-snapshot-helper-{Guid.NewGuid():N}.dll"));
+        var startInfo = TestFixtureProcess.CreateStartInfo("not-a-runner-command");
 
         var exception = await Assert.ThrowsAsync<InvalidOperationException>(
             () => ProcessTreeSnapshot.ReadParentIdsAsync(startInfo, TestTimeout)).ConfigureAwait(true);
@@ -359,25 +356,7 @@ public sealed class CentralTestRunnerCancellationComponentTests
 
     private static ProcessStartInfo CreateFixtureStartInfo(string fixtureCommand)
     {
-        var startInfo = CreateDotNetStartInfo();
-        startInfo.ArgumentList.Add("exec");
-        startInfo.ArgumentList.Add("--runtimeconfig");
-        startInfo.ArgumentList.Add(
-            Path.Combine(AppContext.BaseDirectory, "DownKyi.Architecture.Tests.runtimeconfig.json"));
-        startInfo.ArgumentList.Add(typeof(FlightRecorderExecution).Assembly.Location);
-        startInfo.ArgumentList.Add(fixtureCommand);
-        return startInfo;
-    }
-
-    private static ProcessStartInfo CreateDotNetStartInfo()
-    {
-        return new ProcessStartInfo("dotnet")
-        {
-            UseShellExecute = false,
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            CreateNoWindow = true
-        };
+        return TestFixtureProcess.CreateStartInfo(fixtureCommand);
     }
 
     private static async Task StopFixtureAsync(Process? process)

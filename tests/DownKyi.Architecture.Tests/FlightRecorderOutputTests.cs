@@ -96,23 +96,7 @@ public sealed class FlightRecorderOutputTests
 
     private static ProcessStartInfo CreateFixtureStartInfo(string secret, string? readyPath = null)
     {
-        var runnerAssembly = typeof(FlightRecorderExecution).Assembly.Location;
-        var runtimeConfig = Path.Combine(
-            AppContext.BaseDirectory,
-            "DownKyi.Architecture.Tests.runtimeconfig.json");
-        var startInfo = new ProcessStartInfo("dotnet")
-        {
-            UseShellExecute = false,
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            CreateNoWindow = true
-        };
-        startInfo.ArgumentList.Add("exec");
-        startInfo.ArgumentList.Add("--runtimeconfig");
-        startInfo.ArgumentList.Add(runtimeConfig);
-        startInfo.ArgumentList.Add(runnerAssembly);
-        startInfo.ArgumentList.Add("fixture-long-line");
-        startInfo.ArgumentList.Add(secret);
+        var startInfo = TestFixtureProcess.CreateStartInfo("fixture-long-line", secret);
         if (readyPath is not null)
         {
             startInfo.ArgumentList.Add(readyPath);

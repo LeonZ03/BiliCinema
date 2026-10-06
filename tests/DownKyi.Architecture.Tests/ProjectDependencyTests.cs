@@ -59,7 +59,8 @@ public sealed class ProjectDependencyTests
                 "DownKyi.Application",
                 "DownKyi.Core",
                 "DownKyi.Domain",
-                "DownKyi.Infrastructure"
+                "DownKyi.Infrastructure",
+                "DownKyi.RoomServer"
             }
         };
 
@@ -120,19 +121,26 @@ public sealed class ProjectDependencyTests
     }
 
     [Fact]
-    public void OnlyDesktopCompositionRootReferencesHosting()
+    public void DesktopDeclaresHostingAsAFrameworkReferenceForEmbeddedRoomService()
     {
-        var packageOwners = TargetArchitectureProjects
-            .Select(projectName => new
-            {
-                ProjectName = projectName,
-                Packages = LoadPackageReferences(GetTargetProjectPath(projectName))
-            })
-            .Where(item => item.Packages.Contains("Microsoft.Extensions.Hosting", StringComparer.OrdinalIgnoreCase))
-            .Select(item => item.ProjectName)
-            .ToArray();
+        var desktopProject = XDocument.Load(GetTargetProjectPath("DownKyi.Desktop"));
+        Assert.Contains(
+            desktopProject.Descendants("FrameworkReference"),
+            element => string.Equals(
+                (string?)element.Attribute("Include"),
+                "Microsoft.AspNetCore.App",
+                StringComparison.OrdinalIgnoreCase));
 
-        Assert.Equal(["DownKyi.Desktop"], packageOwners);
+        foreach (var projectName in TargetArchitectureProjects.Where(name => name != "DownKyi.Desktop"))
+        {
+            var project = XDocument.Load(GetTargetProjectPath(projectName));
+            Assert.DoesNotContain(
+                project.Descendants("FrameworkReference"),
+                element => string.Equals(
+                    (string?)element.Attribute("Include"),
+                    "Microsoft.AspNetCore.App",
+                    StringComparison.OrdinalIgnoreCase));
+        }
     }
 
     [Fact]
@@ -236,16 +244,6 @@ public sealed class ProjectDependencyTests
             .EnumerateFiles(RepositoryRoot, $"{projectName}.csproj", SearchOption.AllDirectories)
             .Where(IsRepositorySourcePath)
             .Single(path => !IsUnderDirectory(path, "tests"));
-    }
-
-    private static string[] LoadPackageReferences(string projectPath)
-    {
-        return XDocument.Load(projectPath)
-            .Descendants("PackageReference")
-            .Select(element => (string?)element.Attribute("Include"))
-            .Where(package => !string.IsNullOrWhiteSpace(package))
-            .Cast<string>()
-            .ToArray();
     }
 
     private static Dictionary<string, string[]> LoadProductionProjectGraph()
