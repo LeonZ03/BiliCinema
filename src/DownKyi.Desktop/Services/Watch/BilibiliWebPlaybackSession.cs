@@ -61,9 +61,56 @@ internal sealed class BilibiliWebPlaybackSession : IDisposable
         })();
         """;
     private const string MiniPlayerSelector = ".bpx-player-miniplayer, .bpx-player-miniplayer-container, .bpx-player-miniplayer-wrap, .bilibili-player-miniplayer, .bilibili-player-miniplayer-container";
-    private const string Video = "(() => { const mini = '" + MiniPlayerSelector + "'; const videos = [...document.querySelectorAll('#bilibili-player video, #bilibiliPlayer video, .bpx-player-container video, video')].filter(video => { const rect = video.getBoundingClientRect(); const style = getComputedStyle(video); return !video.closest(mini) && rect.width >= 160 && rect.height >= 90 && style.display !== 'none' && style.visibility !== 'hidden' && Number(style.opacity) > 0; }); const byArea = (left, right) => { const a = left.getBoundingClientRect(); const b = right.getBoundingClientRect(); return b.width * b.height - a.width * a.height; }; return videos.sort(byArea)[0] || null; })()";
-    private const string FocusPlayerScript = $$"""
+    private const string Video = "(() => { const mini = '" + MiniPlayerSelector + "'; for (const api of [window.player, window.bilibiliPlayer]) { const root = api?.getElements?.().container; const video = [...(root?.querySelectorAll('video') || [])].find(candidate => { const style = getComputedStyle(candidate); return candidate.offsetWidth > 0 && candidate.offsetHeight > 0 && style.display !== 'none' && style.visibility !== 'hidden' && Number(style.opacity) > 0; }) || root?.querySelector('video'); if (root?.isConnected && video) return video; } const videos = [...document.querySelectorAll('#bilibili-player video, #bilibiliPlayer video, .bpx-player-container video, video')].filter(video => { const rect = video.getBoundingClientRect(); const style = getComputedStyle(video); return !video.closest(mini) && rect.width >= 160 && rect.height >= 90 && style.display !== 'none' && style.visibility !== 'hidden' && Number(style.opacity) > 0; }); const byArea = (left, right) => { const a = left.getBoundingClientRect(); const b = right.getBoundingClientRect(); return b.width * b.height - a.width * a.height; }; return videos.sort(byArea)[0] || null; })()";
+    private const string PlayerModeScript = """
+        if (!window.__biliCinemaEnsureNormalPlayer) {
+            let pending = null;
+            let retryAfter = 0;
+            let retryTimer = null;
+            window.__biliCinemaEnsureNormalPlayer = root => {
+                // Nano's mini player is the SAME container in a different state.
+                // Changing its CSS/data-screen alone leaves its internal controls in tiny mode.
+                const api = [window.player, window.bilibiliPlayer].find(candidate =>
+                    typeof candidate?.getStates === 'function'
+                    && typeof candidate?.requestStatue === 'function'
+                    && candidate.getElements?.().container === root);
+                const kinds = window.nano?.ScreenKind;
+                const state = api?.getStates();
+                const mini = root.getAttribute('data-screen') === 'mini'
+                    || !!root.closest('.mini-player')
+                    || (state?.sideScreen == null && state?.mainScreen === (kinds?.Mini ?? 3));
+                if (!mini) return pending !== api || !pending;
+                window.__biliCinemaLayoutReady = false;
+                if (!api) {
+                    window.__biliCinemaLayoutError = 'mini-mode-api-unavailable';
+                    return false;
+                }
+                if (!pending && performance.now() < retryAfter && !retryTimer) {
+                    retryTimer = setTimeout(() => {
+                        retryTimer = null;
+                        window.__biliCinemaCheckPlayerLayout?.();
+                    }, retryAfter - performance.now() + 1);
+                }
+                if (!pending && performance.now() >= retryAfter) {
+                    pending = api;
+                    retryAfter = performance.now() + 1000;
+                    // This changes layout only: no play/pause, seek, rate or reload.
+                    Promise.resolve().then(() => api.requestStatue(kinds?.Normal ?? 0))
+                        .then(() => { window.__biliCinemaLayoutError = null; })
+                        .catch(() => { window.__biliCinemaLayoutError = 'mini-mode-exit-failed'; })
+                        .finally(() => {
+                            pending = null;
+                            window.__biliCinemaLayoutSignature = null;
+                            requestAnimationFrame(() => window.__biliCinemaFocusPlayer?.());
+                        });
+                }
+                return false;
+            };
+        }
+        """;
+    internal const string FocusPlayerScript = $$"""
         (() => {
+          window.__biliCinemaFocusPlayer = () => {
             const video = {{Video}};
             if (!video) {
                 document.documentElement.style.background = '#000';
@@ -87,9 +134,13 @@ internal sealed class BilibiliWebPlaybackSession : IDisposable
                 }
             }
             if (!player) return false;
+            window.__biliCinemaFocusObserver?.disconnect();
+            if (window.__biliCinemaPlayerRoot !== player)
+                window.__biliCinemaPlayerRoot?.removeAttribute('data-bili-cinema-player');
             window.__biliCinemaPlayerRoot = player;
             player.setAttribute('data-bili-cinema-player', '');
             {{ViewportScript}}
+            {{PlayerModeScript}}
             if (!video.__biliCinemaBound) {
                 video.__biliCinemaBound = true;
                 for (const type of ['play', 'pause', 'seeked', 'ratechange']) {
@@ -127,7 +178,9 @@ internal sealed class BilibiliWebPlaybackSession : IDisposable
             document.body.style.visibility = 'visible';
             video.disablePictureInPicture = true;
             if (document.pictureInPictureElement === video) {
-                document.exitPictureInPicture?.().catch(() => {});
+                document.exitPictureInPicture?.().catch(() => {
+                    window.__biliCinemaLayoutError = 'native-pip-exit-failed';
+                });
             }
             // Disable site mini-player/PiP wrappers while keeping the normal
             // player controls inside the selected inline player root.
@@ -147,21 +200,43 @@ internal sealed class BilibiliWebPlaybackSession : IDisposable
             for (let kept = player; kept && kept !== document.body; kept = kept.parentElement) {
                 const parent = kept.parentElement;
                 if (!parent) break;
+                // An SPA replacement may reuse a formerly hidden sibling mount.
+                if (kept.style.getPropertyValue('display') === 'none'
+                    && kept.style.getPropertyPriority('display') === 'important') {
+                    kept.style.removeProperty('display');
+                    kept.style.removeProperty('pointer-events');
+                }
                 for (const sibling of parent.children) {
                     if (sibling !== kept) {
                         sibling.style.setProperty('display', 'none', 'important');
                         sibling.style.setProperty('pointer-events', 'none', 'important');
                     }
                 }
-                parent.style.setProperty('overflow', 'visible', 'important');
+                // Keep the site's original player mount in the viewport. Collapsing
+                // it while fixing only the inner player can trigger scroll-to-mini.
+                for (const [name, value] of Object.entries({
+                    width: '100%', height: '100vh', 'min-width': '0px', 'max-width': 'none',
+                    margin: '0px', padding: '0px', 'box-sizing': 'border-box'
+                })) {
+                    if (parent.style.getPropertyValue(name) !== value
+                        || parent.style.getPropertyPriority(name) !== 'important')
+                        parent.style.setProperty(name, value, 'important');
+                }
+                parent.style.setProperty('overflow', 'hidden', 'important');
                 parent.style.setProperty('transform', 'none', 'important');
             }
+            if (window.scrollX || window.scrollY) window.scrollTo(0, 0);
             if (!window.__biliCinemaFocusObserver) {
                 const observer = new MutationObserver(() => {
                     if (window.__biliCinemaFocusPending) return;
                     window.__biliCinemaFocusPending = true;
                     requestAnimationFrame(() => {
                         window.__biliCinemaFocusPending = false;
+                        const currentVideo = {{Video}};
+                        if (!window.__biliCinemaPlayerRoot?.isConnected || !currentVideo?.__biliCinemaBound) {
+                            window.__biliCinemaFocusPlayer();
+                            return;
+                        }
                         enforceFocus();
                     });
                 });
@@ -175,6 +250,13 @@ internal sealed class BilibiliWebPlaybackSession : IDisposable
                     observer.disconnect();
                     const layoutNodes = new Set([root]);
                     const containers = new Set();
+                    // Track replacement of the video/control shell, but not the
+                    // animated danmaku subtree or its per-frame style mutations.
+                    for (let node = root.querySelector('video')?.parentElement;
+                        node && root.contains(node); node = node.parentElement) {
+                        containers.add(node);
+                        layoutNodes.add(node);
+                    }
                     disableMiniPlayer();
                     for (let kept = root; kept && kept !== document.body; kept = kept.parentElement) {
                         const parent = kept.parentElement;
@@ -208,22 +290,25 @@ internal sealed class BilibiliWebPlaybackSession : IDisposable
                     }
                     for (const node of layoutNodes) {
                         observer.observe(node, { attributes: true,
-                            attributeFilter: ['class', 'style'], childList: containers.has(node) });
+                            attributeFilter: ['class', 'style', 'data-screen'], childList: containers.has(node) });
                     }
+                    window.__biliCinemaCheckPlayerLayout?.();
                 };
                 window.__biliCinemaFocusObserver = observer;
-                enforceFocus();
+                window.__biliCinemaEnforceFocus = enforceFocus;
             }
             for (let kept = video; kept && kept !== player; kept = kept.parentElement) {
                 for (const [name, value] of Object.entries({
                     width: '100%', height: '100%', 'max-width': 'none', 'max-height': 'none',
-                    margin: '0', 'object-fit': 'contain'
+                    margin: '0px', 'object-fit': 'contain'
                 })) {
                     if (name === 'height' && kept.classList.contains('bpx-player-primary-area')) {
                         kept.style.removeProperty('height');
                         continue;
                     }
-                    kept.style.setProperty(name, value, 'important');
+                    if (kept.style.getPropertyValue(name) !== value
+                        || kept.style.getPropertyPriority(name) !== 'important')
+                        kept.style.setProperty(name, value, 'important');
                 }
             }
             for (const [name, value] of Object.entries({
@@ -241,24 +326,78 @@ internal sealed class BilibiliWebPlaybackSession : IDisposable
                 window.__biliCinemaLayoutSignature = null;
                 window.__biliCinemaResizeObserver = new ResizeObserver(() => {
                     window.__biliCinemaLayoutSignature = null;
+                    window.__biliCinemaCheckPlayerLayout?.();
                 });
                 window.__biliCinemaResizeObserver.observe(player);
             }
-            const box = player.getBoundingClientRect();
-            const controls = player.querySelector('.bpx-player-control-wrap, .bilibili-player-video-control');
-            const signature = [window.innerWidth, window.innerHeight, box.width, box.height, !!controls].join(':');
-            if (window.__biliCinemaLayoutSignature !== signature) {
-                window.__biliCinemaLayoutSignature = signature;
-                window.__biliCinemaLayoutReady = false;
-                requestAnimationFrame(() => {
+            window.__biliCinemaCheckPlayerLayout = (force = false) => {
+                if (!player.isConnected || !video.isConnected) return false;
+                const normal = window.__biliCinemaEnsureNormalPlayer(player);
+                const box = player.getBoundingClientRect();
+                const controls = player.querySelector('.bpx-player-control-wrap, .bilibili-player-video-control');
+                const progress = player.querySelector('.bpx-player-progress-wrap, .bpx-player-progress, .bilibili-player-video-progress');
+                const button = player.querySelector('.bpx-player-ctrl-play, .bilibili-player-video-btn-start');
+                const hasGeometry = node => {
+                    if (!node) return false;
+                    const rect = node.getBoundingClientRect();
+                    return rect.width > 0 && rect.height > 0 && rect.left >= box.left - 2
+                        && rect.right <= box.right + 2 && rect.top >= box.top - 2
+                        && rect.bottom <= box.bottom + 2;
+                };
+                const isExposed = node => {
+                    for (let current = node; current; current = current.parentElement) {
+                        const style = getComputedStyle(current);
+                        if (style.display === 'none' || style.visibility !== 'visible'
+                            || Number(style.opacity) <= 0) return false;
+                        if (current === player) return true;
+                    }
+                    return false;
+                };
+                const geometry = normal && hasGeometry(controls) && hasGeometry(progress) && hasGeometry(button)
+                    && Math.abs(box.width - innerWidth) <= 2 && Math.abs(box.height - innerHeight) <= 2;
+                const signature = [innerWidth, innerHeight, box.width, box.height,
+                    player.getAttribute('data-screen'), normal, geometry].join(':');
+                if (force || window.__biliCinemaLayoutSignature !== signature
+                    || (!window.__biliCinemaLayoutReady && performance.now() >= (window.__biliCinemaNextLayoutProbe || 0))) {
+                    window.__biliCinemaLayoutSignature = signature;
+                    window.__biliCinemaLayoutReady = false;
+                    window.__biliCinemaNextLayoutProbe = performance.now() + 1500;
+                    clearTimeout(window.__biliCinemaLayoutTimer);
+                    // Nano debounces resize by 150ms. Validate AFTER its geometry
+                    // update and hover transition, not just after two paint frames.
                     window.dispatchEvent(new Event('resize'));
-                    requestAnimationFrame(() => {
-                        if (window.__biliCinemaLayoutSignature === signature)
-                            window.__biliCinemaLayoutReady = true;
-                    });
-                });
-            }
-            return !!controls;
+                    window.__biliCinemaLayoutTimer = setTimeout(() => {
+                        if (window.__biliCinemaPlayerRoot !== player || !player.isConnected) return;
+                        const area = video.closest('.bpx-player-video-area') || video;
+                        const rect = area.getBoundingClientRect();
+                        player.dispatchEvent(new MouseEvent('mouseenter'));
+                        area.dispatchEvent(new MouseEvent('mousemove', { bubbles: true,
+                            clientX: rect.left + rect.width / 2, clientY: rect.bottom - 40 }));
+                        window.__biliCinemaLayoutTimer = setTimeout(() => {
+                            if (window.__biliCinemaPlayerRoot !== player
+                                || window.__biliCinemaLayoutSignature !== signature) return;
+                            const rect = button?.getBoundingClientRect();
+                            const hit = rect && document.elementFromPoint(rect.left + rect.width / 2,
+                                rect.top + rect.height / 2);
+                            window.__biliCinemaLayoutReady = !!(geometry && player.isConnected
+                                && window.__biliCinemaEnsureNormalPlayer(player)
+                                && hasGeometry(progress) && hasGeometry(button)
+                                && isExposed(button) && isExposed(progress)
+                                && (hit === button || button.contains(hit)));
+                        }, 220);
+                    }, 180);
+                }
+                if (!geometry) window.__biliCinemaLayoutReady = false;
+                return window.__biliCinemaLayoutReady === true;
+            };
+            window.__biliCinemaEnforceFocus();
+            window.__biliCinemaCheckPlayerLayout();
+            // The native view must be revealed before final hit testing; returning
+            // mounted here breaks the hidden-view/ready dependency during startup.
+            return window.__biliCinemaEnsureNormalPlayer(player)
+                && !!player.querySelector('.bpx-player-control-wrap, .bilibili-player-video-control');
+          };
+          return window.__biliCinemaFocusPlayer();
         })()
         """;
     private readonly NativeWebView _browser;
@@ -416,10 +555,40 @@ internal sealed class BilibiliWebPlaybackSession : IDisposable
 
     public async Task<double> GetPositionAsync(CancellationToken cancellationToken)
     {
-        // The site can add its header and other navigation after the player loads.
-        await InvokeAsync(FocusPlayerScript, cancellationToken).ConfigureAwait(true);
         return ParseNumber(await InvokeAsync($"{Video}?.currentTime ?? 0", cancellationToken)
             .ConfigureAwait(true));
+    }
+
+    public async Task MaintainSurfaceAsync(CancellationToken cancellationToken)
+    {
+        var mounted = await InvokeAsync($"!!window.__biliCinemaPlayerRoot?.isConnected && !!{Video}?.__biliCinemaBound",
+            cancellationToken).ConfigureAwait(true);
+        if (!string.Equals(mounted.Trim('"'), "true", StringComparison.OrdinalIgnoreCase))
+        {
+            await InvokeAsync(FocusPlayerScript, cancellationToken).ConfigureAwait(true);
+        }
+        else
+        {
+            // Steady-state polling checks mode/geometry only. DOM layout writes
+            // belong to the scoped observer and explicit repair, not position reads.
+            await InvokeAsync("window.__biliCinemaCheckPlayerLayout?.()", cancellationToken).ConfigureAwait(true);
+        }
+    }
+
+    public async Task<bool> CheckAndRepairSurfaceAsync(CancellationToken cancellationToken)
+    {
+        await InvokeAsync(FocusPlayerScript, cancellationToken).ConfigureAwait(true);
+        await InvokeAsync("window.__biliCinemaCheckPlayerLayout?.(true)", cancellationToken).ConfigureAwait(true);
+        for (var attempt = 0; attempt < 50; attempt++)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (HasExited) return false;
+            var ready = await InvokeAsync("window.__biliCinemaCheckPlayerLayout?.() === true",
+                cancellationToken).ConfigureAwait(true);
+            if (string.Equals(ready.Trim('"'), "true", StringComparison.OrdinalIgnoreCase)) return true;
+            await Task.Delay(100, cancellationToken).ConfigureAwait(true);
+        }
+        return false;
     }
 
     public async Task<BilibiliPlaybackState> GetPlaybackStateAsync(CancellationToken cancellationToken)

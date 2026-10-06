@@ -125,10 +125,9 @@
                             <TextBlock Text="{Binding RoomState}" TextWrapping="Wrap" />
                             <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
                                 <TextBlock Text="{Binding SyncStatus}" TextWrapping="Wrap" VerticalAlignment="Center" />
-                                <Button Grid.Column="1" Width="36" Height="36" Padding="8"
-                                        IsVisible="{Binding IsInRoom}" IsEnabled="{Binding PlayerReady}"
+                                <Button x:Name="SyncPlaybackButton" Grid.Column="1" Width="36" Height="36" Padding="8"
                                         Command="{Binding SyncPlaybackCommand}"
-                                        AutomationProperties.Name="同步播放进度" ToolTip.Tip="同步播放进度"
+                                        AutomationProperties.Name="同步并检查播放器" ToolTip.Tip="检查播放器状态；房间内同时同步播放进度"
                                         Background="{DynamicResource BrushSurfaceSunken}"
                                         CornerRadius="{DynamicResource DownKyiRadiusMedium}">
                                     <Path Width="18" Height="18" Stretch="Uniform"

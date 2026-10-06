@@ -1,0 +1,72 @@
+<!doctype html>
+<meta charset="utf-8">
+<style>
+    html, body { margin: 0; }
+    .bpx-player-container { width: 100vw; height: 100vh; position: relative; }
+    .bpx-player-video-area, video { width: 100%; height: 100%; }
+    .bpx-player-control-wrap { position: absolute; bottom: 0; width: 100%; height: 64px; }
+    .bpx-player-progress-wrap { position: absolute; top: 0; width: 100%; height: 8px; }
+    .bpx-player-ctrl-play { position: absolute; bottom: 0; left: 10px; width: 30px; height: 30px; }
+</style>
+<div id="mount"><div class="bpx-player-container"><div class="bpx-player-video-area"><video></video>
+    <div class="bpx-player-control-wrap"><div class="bpx-player-progress-wrap"></div>
+        <button class="bpx-player-ctrl-play">Pause</button></div>
+</div></div></div><pre id="result">RUNNING</pre>
+<script>
+    const check = (condition, message) => { if (!condition) throw Error(message); };
+    const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
+    const waitFor = async (condition, message) => {
+        for (let attempt = 0; attempt < 80; attempt++) {
+            if (condition()) return;
+            await delay(50);
+        }
+        throw Error(message);
+    };
+    const rows = () => [...document.querySelectorAll('.bc-action-toast')];
+    const visible = node => {
+        const rect = node.getBoundingClientRect();
+        if (rect.width <= 0 || rect.height <= 0 || rect.left < 0 || rect.right > innerWidth) return false;
+        for (let current = node; current; current = current.parentElement) {
+            const style = getComputedStyle(current);
+            if (style.display === 'none' || style.visibility !== 'visible' || Number(style.opacity) <= 0) return false;
+        }
+        return true;
+    };
+    const renderEmpty = () => { /* EMPTY_OVERLAY */ };
+    const renderPause = () => { /* PAUSE_OVERLAY */ };
+    const renderSeek = () => { /* SEEK_OVERLAY */ };
+    const renderFullscreen = () => { /* FULLSCREEN_OVERLAY */ };
+    (async () => {
+        /* PLAYER_SCRIPT */
+        await waitFor(() => window.__biliCinemaLayoutReady, 'Player did not mount');
+        renderEmpty();
+        const original = document.querySelector('#bc-room-chat');
+        renderPause();
+        check(rows().length === 1 && rows()[0].textContent === '房主暂停了播放', 'Pause notice missing');
+        check(visible(rows()[0]), 'Windowed notice invisible');
+        await delay(250);
+        renderSeek();
+        check(document.querySelector('#bc-room-chat') === original, 'Overlay was unnecessarily rebuilt');
+        check(rows().length === 2 && rows()[1].textContent === '房主跳转到 00:20:00', 'Seek replaced previous notice');
+        window.__biliCinemaFocusPlayer();
+        await waitFor(() => rows().length === 1, 'First notice did not expire independently');
+        check(rows()[0].textContent === '房主跳转到 00:20:00' && visible(rows()[0]), 'Later notice lost after player repair');
+        await waitFor(() => rows().length === 0, 'Second notice did not expire');
+        renderFullscreen();
+        check(original.classList.contains('bc-fullscreen'), 'Fullscreen overlay not active');
+        check(rows().length === 3 && rows().every(visible), 'Fullscreen consecutive notices missing');
+        check(rows()[1].getBoundingClientRect().top > rows()[0].getBoundingClientRect().bottom,
+            'Consecutive notices did not stack on separate lines');
+        await waitFor(() => rows().length === 0, 'Fullscreen notices did not expire');
+        // A new video replaces the player subtree; the first event on its new overlay must also render.
+        const oldPlayer = window.__biliCinemaPlayerRoot;
+        const next = oldPlayer.cloneNode(true);
+        next.querySelector('#bc-room-chat').remove();
+        oldPlayer.replaceWith(next);
+        window.__biliCinemaFocusPlayer();
+        renderFullscreen();
+        check(document.querySelector('#bc-room-chat') !== original && rows().length === 3
+            && rows().every(visible), 'First notices after player replacement missing');
+        document.querySelector('#result').textContent = 'PASS';
+    })().catch(error => { document.querySelector('#result').textContent = `FAIL: ${error.message}`; });
+</script>

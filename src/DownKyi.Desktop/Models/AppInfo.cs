@@ -7,7 +7,7 @@ namespace DownKyi.Models;
 
 internal class AppInfo
 {
-    public string Name { get; } = "哔哩下载姬";
+    public string Name { get; } = "BiliCinema";
     public int VersionCode { get; }
     public string VersionName { get; }
 

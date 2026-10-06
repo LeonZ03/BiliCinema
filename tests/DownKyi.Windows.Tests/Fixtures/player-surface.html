@@ -1,0 +1,85 @@
+<!doctype html>
+<meta charset="utf-8">
+<style>
+    html, body { margin: 0; }
+    #mount { margin-top: 200px; width: 600px; }
+    .bpx-player-container { position: relative; width: 600px; height: 350px; }
+    .bpx-player-primary-area, .bpx-player-video-area, .bpx-player-video-wrap {
+        position: relative; width: 100%; height: 100%;
+    }
+    video { width: 100%; height: 100%; }
+    .bpx-player-control-wrap { position: absolute; bottom: 0; width: 100%; height: 64px; z-index: 75; }
+    .bpx-player-progress-wrap { position: absolute; top: 0; width: 100%; height: 8px; }
+    .bpx-player-ctrl-play { position: absolute; bottom: 0; left: 10px; width: 30px; height: 30px; }
+    .bpx-player-container[data-screen=mini] .bpx-player-control-wrap { display: none; }
+    .bpx-player-mini-warp { display: none; }
+    .bpx-player-container[data-screen=mini] .bpx-player-mini-warp {
+        display: block; position: absolute; inset: 0; z-index: 80; cursor: move;
+    }
+</style>
+<header>Unrelated site navigation</header><div id="mount"></div><pre id="result">RUNNING</pre>
+<script>
+    // Reproduce Nano's state-owned mini mode, including the draggable overlay
+    // and hidden normal controls. Geometry and hit testing use the real browser.
+    window.nano = { ScreenKind: { Normal: 0, Mini: 3, Full: 4 } };
+    const attach = (mode = 3) => {
+        document.querySelector('#mount').innerHTML = `<div class="bpx-player-container" data-screen="${mode === 3 ? 'mini' : 'normal'}">
+            <div class="bpx-player-primary-area"><div class="bpx-player-video-area">
+                <div class="bpx-player-video-wrap"><video></video></div>
+                <div class="bpx-player-control-wrap"><div class="bpx-player-progress-wrap"></div>
+                    <button class="bpx-player-ctrl-play">Pause</button></div>
+                <div class="bpx-player-mini-warp">Pause / Close</div>
+            </div></div></div>`;
+        const root = document.querySelector('.bpx-player-container');
+        const video = root.querySelector('video');
+        video.playbackRate = 1.5;
+        video.currentTime = 123;
+        const state = { mainScreen: mode, sideScreen: null };
+        window.player = {
+            getElements: () => ({ container: root }), getStates: () => state,
+            requestStatue: async kind => {
+                await new Promise(resolve => setTimeout(resolve, 40));
+                state.mainScreen = kind;
+                root.dataset.screen = 'normal';
+            },
+            mini: () => { state.mainScreen = 3; root.dataset.screen = 'mini'; },
+            full: () => { state.mainScreen = 0; state.sideScreen = 4; root.dataset.screen = 'full'; }
+        };
+    };
+    const check = (condition, message) => { if (!condition) throw Error(message); };
+    const waitFor = async (condition, message) => {
+        for (let attempt = 0; attempt < 70; attempt++) {
+            if (condition()) return;
+            await new Promise(resolve => setTimeout(resolve, 50));
+        }
+        throw Error(message);
+    };
+    const ready = () => window.__biliCinemaLayoutReady === true;
+    (async () => {
+        attach();
+        /* PLAYER_SCRIPT */
+        await waitFor(ready, 'Initial mini mode did not recover');
+        check(player.getStates().mainScreen === 0, 'CSS-only repair left internal mini mode active');
+        const video = document.querySelector('video');
+        check(video.currentTime === 123 && video.playbackRate === 1.5 && video.paused, 'Playback was changed');
+        player.mini();
+        await waitFor(() => player.getStates().mainScreen === 0 && ready(), 'Later mini transition not observed');
+        attach();
+        await waitFor(() => window.__biliCinemaPlayerRoot === player.getElements().container && ready(), 'Replacement not repaired');
+        player.mini();
+        await waitFor(() => player.getStates().mainScreen === 0 && ready(), 'Replacement observer was not rebound');
+        player.full();
+        window.__biliCinemaCheckPlayerLayout(true);
+        await waitFor(ready, 'Fullscreen controls did not recover');
+        check(player.getStates().sideScreen === 4, 'Normal fullscreen was cancelled');
+        const controls = document.querySelector('.bpx-player-control-wrap');
+        controls.style.display = 'none';
+        window.__biliCinemaCheckPlayerLayout(true);
+        check(!ready(), 'Hidden controls were accepted');
+        controls.style.removeProperty('display');
+        window.__biliCinemaFocusPlayer();
+        window.__biliCinemaCheckPlayerLayout(true);
+        await waitFor(ready, 'Manual repair did not revalidate controls');
+        document.querySelector('#result').textContent = 'PASS';
+    })().catch(error => { document.querySelector('#result').textContent = `FAIL: ${error.message}`; });
+</script>

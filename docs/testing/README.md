@@ -9,7 +9,7 @@
 - `DownKyi.Desktop.Tests`：real Host、XAML 與 typed navigation smoke tests。
 - `DownKyi.Tests`：executable compatibility 與 end-to-end service tests。
 - `DownKyi.Architecture.Tests`：重要 dependency direction 與 repository wiring。
-- `DownKyi.Windows.Tests`：Windows process、Job Object 與 native handle 行為。
+- `DownKyi.Windows.Tests`：Windows process、Job Object、native handle 與播放器瀏覽器佈局行為。
 - `DownKyi.Linux.Tests`：Linux process、signal 與 descendant lifecycle 行為。
 - `DownKyi.MacOS.Tests`：macOS system Bash、signing 與 packaging 行為。
 
@@ -55,6 +55,12 @@ owner/lifecycle evidence 才能宣稱 root cause proven。不得先 blanket-enab
 tracing、重跑相同失敗或加入 timing workaround。
 
 ## Test Isolation
+
+`BilibiliPlayerSurfaceTests` 使用已安裝的 Microsoft Edge 無介面模式，執行離線頁面
+及正式播放器注入腳本，驗證小窗模式恢復、播放器替換、控制欄可點擊及播放狀態保留；
+操作提示用例實際執行聊天層腳本，確認既有／新播放器、視窗／全屏下逐行顯示及獨立到期。
+此用例不需要 Playwright 套件或 B 站登入；瀏覽器使用獨立臨時 profile，並由 Job Object
+管理與清理。Windows 測試環境須安裝 Edge。
 
 測試不得讀取使用者真實 settings、cookie、下載 DB 或 aria2 session。網路
 contract tests 使用 fixture 或 loopback server。OS-specific behavioral tests

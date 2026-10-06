@@ -1021,16 +1021,36 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
 
     private async Task SynchronizePlaybackAsync()
     {
-        if (!_room.Connected || _roomPlayer == null || _playerLoading) return;
+        var player = _roomPlayer;
+        if (player == null || _playerLoading)
+        {
+            Status = _playerLoading ? "播放器正在准备，请稍候再检查。" : "请先解析视频，再检查播放器。";
+            return;
+        }
+        Status = "正在检查播放器…";
+        var surfaceReady = await player.CheckAndRepairSurfaceAsync(_lifetime.Token).ConfigureAwait(true);
+        if (!ReferenceEquals(player, _roomPlayer) || _playerLoading) return;
+        if (surfaceReady)
+        {
+            PlayerReady = true;
+            PlayerOpacity = 1;
+        }
+        if (!_room.Connected)
+        {
+            Status = surfaceReady ? "播放器检查完成。" : "播放器操作栏尚未恢复，请稍后重试或重新解析视频。";
+            return;
+        }
         if (_room.IsHost)
         {
-            await PublishHostPlaybackAsync(_roomPlayer, _lifetime.Token).ConfigureAwait(true);
-            Status = "已将当前播放状态发送到房间。";
+            await PublishHostPlaybackAsync(player, _lifetime.Token).ConfigureAwait(true);
+            Status = surfaceReady ? "播放器检查完成，已将当前播放状态发送到房间。"
+                : "已同步房间进度；播放器操作栏尚未恢复，请稍后重试。";
         }
         else
         {
             await CorrectLatestPlaybackAsync(_lifetime.Token, forceSync: true).ConfigureAwait(true);
-            Status = "已与房主播放进度同步。";
+            Status = surfaceReady ? "播放器检查完成，已与房主播放进度同步。"
+                : "已与房主同步；播放器操作栏尚未恢复，请稍后重试。";
         }
     }
 
@@ -1653,6 +1673,7 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
 
                 try
                 {
+                    await player.MaintainSurfaceAsync(cancellationToken).ConfigureAwait(true);
                     if (await RefreshPlayerSelectionAsync(player, cancellationToken)
                         .ConfigureAwait(true))
                     {
@@ -1757,6 +1778,8 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
                 await player.SetPausedAsync(false, cancellationToken).ConfigureAwait(true);
             }
 
+            PlayerReady = true;
+            PlayerOpacity = 1;
             Status = "已恢复播放。";
         }
         catch (Exception error) when (IsRoutineError(error))

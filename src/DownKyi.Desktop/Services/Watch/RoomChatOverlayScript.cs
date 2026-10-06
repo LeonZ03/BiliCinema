@@ -56,6 +56,9 @@ internal static class RoomChatOverlayScript
     private const string Script = """
         const player = window.__biliCinemaPlayerRoot;
         if (!player?.isConnected) return false;
+        const make = (tag, name) => {
+            const element = document.createElement(tag); element.className = name; return element;
+        };
         let ui = window.__biliCinemaChatUi;
         if (!ui || !ui.host.isConnected) {
             ui?.listenerAbort?.abort();
@@ -145,9 +148,6 @@ internal static class RoomChatOverlayScript
             const panel = document.createElement('section'); panel.className = 'bc-panel';
             panel.id = 'bc-chat-panel';
             panel.setAttribute('aria-label', '房间聊天');
-            const make = (tag, name) => {
-                const element = document.createElement(tag); element.className = name; return element;
-            };
             const head = make('div', 'bc-head');
             const title = make('span', 'bc-title'); title.textContent = '房间聊天';
             const count = make('span', 'bc-count'); head.append(title, count);

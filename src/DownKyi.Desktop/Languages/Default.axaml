@@ -2,7 +2,7 @@
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
                     xmlns:system="clr-namespace:System;assembly=mscorlib">
     <!--  App  -->
-    <system:String x:Key="AppName">哔哩下载姬</system:String>
+    <system:String x:Key="AppName">BiliCinema</system:String>
     <system:String x:Key="Unknown">未知</system:String>
 
     <!--  系统  -->

@@ -6,7 +6,7 @@ namespace DownKyi.Desktop.Tests;
 public sealed class RoomActionOverlayTests
 {
     [Fact]
-    public void ConsecutiveHostActionsRemainSeparateWithIndividualExpiry()
+    public void PayloadPreservesEachNoticeAndItsRemainingLifetime()
     {
         var script = RoomChatOverlayScript.Build(
             [], null, null, fullscreen: true, inRoom: true, memberCount: 2,
@@ -28,6 +28,5 @@ public sealed class RoomActionOverlayTests
             notice.GetProperty("id").GetInt32())));
         Assert.Equal("300,750,1000", string.Join(',', notices.Select(notice =>
             notice.GetProperty("remainingMilliseconds").GetInt32())));
-        Assert.Contains("ui.actionToasts.appendChild(row)", script, StringComparison.Ordinal);
     }
 }

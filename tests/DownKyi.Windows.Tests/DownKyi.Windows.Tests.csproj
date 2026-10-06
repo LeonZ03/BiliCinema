@@ -28,6 +28,8 @@
 
   <ItemGroup>
     <Using Include="Xunit" />
+    <EmbeddedResource Include="Fixtures\player-surface.html" />
+    <EmbeddedResource Include="Fixtures\room-overlay.html" />
   </ItemGroup>
 
   <ItemGroup>
