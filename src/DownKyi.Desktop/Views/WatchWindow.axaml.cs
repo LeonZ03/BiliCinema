@@ -100,6 +100,10 @@ internal sealed partial class WatchWindow : Window
                                ?? throw new InvalidOperationException("房间播放器容器未加载。");
         _roomBrowser = this.FindControl<NativeWebView>("RoomMovieWebView")
                        ?? throw new InvalidOperationException("房间播放器未加载。");
+        // Keep the native surface sized by its stable Border instead of a
+        // second fixed height. This lets fullscreen expand without changing
+        // the surrounding Avalonia layout during WebView navigation.
+        _roomBrowser.Height = double.NaN;
         _normalBackground = Background;
         _normalCornerRadius = _roomPlayerSurface.CornerRadius;
         ConfigureBrowser(_roomBrowser, "BiliCinemaOnline");
@@ -409,7 +413,7 @@ internal sealed partial class WatchWindow : Window
             _watchLayout.RowDefinitions = new RowDefinitions("Auto,Auto,*");
             _watchLayout.RowSpacing = 14;
             _roomPlayerSurface.CornerRadius = _normalCornerRadius;
-            _roomBrowser.Height = 440;
+            _roomPlayerSurface.Height = 440;
             _isFullscreen = false;
         }
         else
@@ -421,7 +425,7 @@ internal sealed partial class WatchWindow : Window
             _watchLayout.RowDefinitions = new RowDefinitions("*,0,0");
             _watchLayout.RowSpacing = 0;
             _roomPlayerSurface.CornerRadius = new Avalonia.CornerRadius(0);
-            _roomBrowser.Height = double.NaN;
+            _roomPlayerSurface.Height = double.NaN;
             _isFullscreen = true;
             WindowState = WindowState.FullScreen;
         }

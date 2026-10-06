@@ -141,7 +141,20 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
     public string RateText { get => _rateText; set => SetProperty(ref _rateText, value); }
 
     private string _serviceAddress = string.Empty;
-    public string ServiceAddress { get => _serviceAddress; set => SetProperty(ref _serviceAddress, value); }
+    public string ServiceAddress
+    {
+        get => _serviceAddress;
+        set
+        {
+            if (SetProperty(ref _serviceAddress, value))
+            {
+                OnPropertyChanged(nameof(ServiceAddressDisplay));
+            }
+        }
+    }
+    public string ServiceAddressDisplay => string.IsNullOrWhiteSpace(ServiceAddress)
+        ? "暂无房间，待加入或创建"
+        : ServiceAddress;
 
     private string _inviteText = string.Empty;
     public string InviteText { get => _inviteText; set => SetProperty(ref _inviteText, value); }
@@ -945,17 +958,13 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
             return;
         }
 
-        if (string.IsNullOrWhiteSpace(RoomVideoInput))
+        var input = RoomVideoInput.Trim();
+        if (input.Length > 0 && !string.Equals(_roomParsedInput, input, StringComparison.Ordinal))
         {
-            Status = "请在观影房间页面填写影片链接。";
-            return;
+            await ParseInputAsync(input, _lifetime.Token).ConfigureAwait(true);
         }
-
-        if (!string.Equals(_roomParsedInput, RoomVideoInput.Trim(), StringComparison.Ordinal))
-        {
-            await ParseInputAsync(RoomVideoInput, _lifetime.Token).ConfigureAwait(true);
-        }
-        if (_roomPage == null || !string.Equals(_roomParsedInput, RoomVideoInput.Trim(), StringComparison.Ordinal))
+        if (input.Length > 0 && (_roomPage == null
+            || !string.Equals(_roomParsedInput, input, StringComparison.Ordinal)))
         {
             Status = "请先在观影房间页面解析影片链接。";
             return;
@@ -963,11 +972,12 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
 
         try
         {
-            var resumePosition = _player == null
+            var selectedPage = _roomPage;
+            var resumePosition = selectedPage == null || _player == null
                 ? 0
                 : await _player.GetPositionAsync(_lifetime.Token).ConfigureAwait(true);
-            var resumePlaying = _player == null
-                || !await _player.GetPausedAsync(_lifetime.Token).ConfigureAwait(true);
+            var resumePlaying = selectedPage != null && (_player == null
+                || !await _player.GetPausedAsync(_lifetime.Token).ConfigureAwait(true));
             if (UsesAutomaticRoomAddress(ServiceAddress, _quickTunnel.ServiceAddress))
             {
                 IsPreparing = true;
@@ -989,23 +999,29 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
             _startWhenReady = resumePlaying;
             _hostInviteUrl = $"{ServiceAddress}#room={_room.RoomCode}";
             InviteText = string.Empty;
-            RoomState = "房间已创建，可以单人播放或邀请对方加入。";
+            RoomState = selectedPage == null
+                ? "空房间已创建，等待房主选择影片。"
+                : "房间已创建，可以单人播放或邀请对方加入。";
             OnPropertyChanged(nameof(CanControl));
             OnPropertyChanged(nameof(IsInRoom));
             OnPropertyChanged(nameof(RoomRoleText));
-            await _room.SendAsync(new
+            if (selectedPage != null)
             {
-                type = "select",
-                media = MediaForPage(_roomPage)
-            }, _lifetime.Token).ConfigureAwait(true);
-            if (resumePosition > 0)
-            {
-                _resumeMediaKey = MediaKey(_roomPage);
-                _resumeAtSeconds = resumePosition;
-                await _room.SendAsync(new { type = "seek", positionSeconds = resumePosition },
-                    _lifetime.Token).ConfigureAwait(true);
+                await _room.SendAsync(new
+                {
+                    type = "select",
+                    media = MediaForPage(selectedPage)
+                }, _lifetime.Token).ConfigureAwait(true);
+                if (resumePosition > 0)
+                {
+                    _resumeMediaKey = MediaKey(selectedPage);
+                    _resumeAtSeconds = resumePosition;
+                    await _room.SendAsync(new { type = "seek", positionSeconds = resumePosition },
+                        _lifetime.Token).ConfigureAwait(true);
+                }
+
+                await StartPlaybackAsync(true, _lifetime.Token).ConfigureAwait(true);
             }
-            await StartPlaybackAsync(true, _lifetime.Token).ConfigureAwait(true);
             await ApplySnapshotAsync(snapshot).ConfigureAwait(true);
         }
         catch (OperationCanceledException) when (_lifetime.IsCancellationRequested)
@@ -1221,6 +1237,7 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
     {
         if (!connected) return "重连中";
         if (snapshot.Host?.Online != true) return "房主离线，等待重连";
+        if (snapshot.Media is null) return "等待房主选择影片";
         if (snapshot.Guest?.Online != true)
         {
             return snapshot.Playing ? "房间内仅你一人，正在播放" : "房间内仅你一人";

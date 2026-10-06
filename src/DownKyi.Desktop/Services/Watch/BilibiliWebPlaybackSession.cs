@@ -15,7 +15,8 @@ namespace DownKyi.Services.Watch;
 // position and playback controls for both bangumi and ordinary videos.
 internal sealed class BilibiliWebPlaybackSession : IDisposable
 {
-    private const string Video = "(() => { const videos = [...document.querySelectorAll('#bilibili-player video, #bilibiliPlayer video, .bpx-player-container video, video')]; return videos.filter(video => { const rect = video.getBoundingClientRect(); const style = getComputedStyle(video); return rect.width >= 160 && rect.height >= 90 && style.display !== 'none' && style.visibility !== 'hidden' && Number(style.opacity) > 0; }).sort((left, right) => { const a = left.getBoundingClientRect(); const b = right.getBoundingClientRect(); return b.width * b.height - a.width * a.height; })[0] || null; })()";
+    private const string MiniPlayerSelector = ".bpx-player-miniplayer, .bpx-player-miniplayer-container, .bpx-player-miniplayer-wrap, .bilibili-player-miniplayer, .bilibili-player-miniplayer-container";
+    private const string Video = "(() => { const mini = '" + MiniPlayerSelector + "'; const videos = [...document.querySelectorAll('#bilibili-player video, #bilibiliPlayer video, .bpx-player-container video, video')].filter(video => { const rect = video.getBoundingClientRect(); const style = getComputedStyle(video); return rect.width >= 160 && rect.height >= 90 && style.display !== 'none' && style.visibility !== 'hidden' && Number(style.opacity) > 0; }); const byArea = (left, right) => { const a = left.getBoundingClientRect(); const b = right.getBoundingClientRect(); return b.width * b.height - a.width * a.height; }; return videos.filter(video => !video.closest(mini)).sort(byArea)[0] || videos.filter(video => video.closest(mini)).sort(byArea)[0] || null; })()";
     private const string FocusPlayerScript = $$"""
         (() => {
             const video = {{Video}};
@@ -23,14 +24,23 @@ internal sealed class BilibiliWebPlaybackSession : IDisposable
                 document.documentElement.style.background = '#000';
                 return false;
             }
-            let player = [...document.querySelectorAll('#bilibili-player, #bilibiliPlayer, .bpx-player-container, .bilibili-player')]
-                .find(element => element.contains(video))
+            // Prefer the actual inline player shell nearest this video. The outer
+            // #bilibili-player can also contain Bilibili's detached mini-player;
+            // stretching that outer shell leaves the video floating at mini size.
+            const miniPlayerSelector = '{{MiniPlayerSelector}}';
+            const miniPlayer = video.closest(miniPlayerSelector);
+            let player = miniPlayer
+                || video.closest('.bpx-player-container, .bilibili-player')
+                || video.closest('#bilibili-player, #bilibiliPlayer')
                 || video.closest('.player-container, .player-wrap');
             if (!player) {
                 for (let parent = video.parentElement; parent && parent !== document.body; parent = parent.parentElement) {
                     const box = parent.getBoundingClientRect();
                     if (box.width >= 320 && box.height >= 180
-                        && box.width < window.innerWidth * 2 && box.height < window.innerHeight * 2) player = parent;
+                        && box.width < window.innerWidth * 2 && box.height < window.innerHeight * 2) {
+                        player = parent;
+                        break;
+                    }
                 }
             }
             if (!player) return false;
@@ -74,6 +84,19 @@ internal sealed class BilibiliWebPlaybackSession : IDisposable
             if (document.pictureInPictureElement === video) {
                 document.exitPictureInPicture?.().catch(() => {});
             }
+            // Disable site mini-player/PiP wrappers while keeping the normal
+            // player controls inside the selected inline player root.
+            const disableMiniPlayer = () => {
+                const activePlayer = window.__biliCinemaPlayerRoot;
+                for (const mini of document.querySelectorAll(
+                    miniPlayerSelector)) {
+                    if (mini !== activePlayer && !mini.contains(activePlayer)) {
+                        mini.style.setProperty('display', 'none', 'important');
+                        mini.style.setProperty('pointer-events', 'none', 'important');
+                    }
+                }
+            };
+            disableMiniPlayer();
             for (let kept = player; kept && kept !== document.body; kept = kept.parentElement) {
                 const parent = kept.parentElement;
                 if (!parent) break;
@@ -90,6 +113,7 @@ internal sealed class BilibiliWebPlaybackSession : IDisposable
                 const enforceFocus = () => {
                     const root = window.__biliCinemaPlayerRoot;
                     if (!root?.isConnected) return;
+                    disableMiniPlayer();
                     for (let kept = root; kept && kept !== document.body; kept = kept.parentElement) {
                         const parent = kept.parentElement;
                         if (!parent) break;
@@ -108,7 +132,7 @@ internal sealed class BilibiliWebPlaybackSession : IDisposable
                     for (const [name, value] of Object.entries({
                         position: 'fixed', inset: '0', width: '100vw', height: '100vh',
                         'max-width': 'none', 'max-height': 'none', margin: '0',
-                        'z-index': '2147483647', visibility: 'visible', background: '#000'
+                        'z-index': '2147483647', visibility: 'visible', background: '#000', transform: 'none'
                     })) {
                         if (root.style.getPropertyValue(name) !== value
                             || root.style.getPropertyPriority(name) !== 'important') {
@@ -131,7 +155,7 @@ internal sealed class BilibiliWebPlaybackSession : IDisposable
             for (const [name, value] of Object.entries({
                 position: 'fixed', inset: '0', width: '100vw', height: '100vh',
                 'max-width': 'none', 'max-height': 'none', margin: '0',
-                'z-index': '2147483647', visibility: 'visible', background: '#000'
+                'z-index': '2147483647', visibility: 'visible', background: '#000', transform: 'none'
             })) player.style.setProperty(name, value, 'important');
             return true;
         })()
