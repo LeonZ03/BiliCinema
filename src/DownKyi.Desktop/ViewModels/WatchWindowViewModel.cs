@@ -202,7 +202,7 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
         }
     }
     public int RoomMemberCount => _roomMemberCount;
-    public string? RoomClientId => _room.ClientId;
+    public string? RoomMemberId => _room.MemberId;
     public bool ChatPanelOpen => _chatPanelOpen;
 
     private string _syncStatus = string.Empty;
@@ -496,7 +496,7 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
                 _chatMessages.RemoveAt(0);
             }
             _chatRevision++;
-            if (message.ClientId != _room.ClientId)
+            if (message.MemberId != _room.MemberId)
             {
                 _latestChatToast = message;
                 _latestChatToastReceivedAtUnixMs = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
@@ -1165,7 +1165,7 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
             InviteText = string.Empty;
             RoomState = selectedPage == null
                 ? "空房间已创建，等待房主选择影片。"
-                : "房间已创建，可以单人播放或邀请对方加入。";
+                : "房间已创建，可邀请最多 4 位好友加入。";
             OnPropertyChanged(nameof(CanControl));
             OnPropertyChanged(nameof(IsInRoom));
             OnPropertyChanged(nameof(RoomRoleText));
@@ -1282,7 +1282,7 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
         if (_room.IsHost && _hostInviteUrl is { } inviteUrl)
         {
             await _clipboard.SetTextAsync(inviteUrl, _lifetime.Token).ConfigureAwait(true);
-            RoomState = "邀请已复制，可发给对方。";
+            RoomState = "邀请已复制，可发给好友。";
         }
         else
         {
@@ -1384,9 +1384,8 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
                 _pendingHostMediaKey = null;
             }
 
-            if (_room.IsHost && _startWhenReady && snapshot.Host?.Ready == true
-                && (snapshot.Guest?.Online != true
-                    || snapshot.Guest is { Ready: true, Buffering: false }))
+            if (_room.IsHost && _startWhenReady && snapshot.Host is { Ready: true, Buffering: false }
+                && snapshot.AllOnlineGuestsReady)
             {
                 _startWhenReady = false;
                 await _room.SendAsync(new { type = "play" }, _lifetime.Token).ConfigureAwait(true);
@@ -1410,13 +1409,14 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
         if (!connected) return "重连中";
         if (snapshot.Host?.Online != true) return "房主离线，等待重连";
         if (snapshot.Media is null) return "等待房主选择影片";
-        if (snapshot.Guest?.Online != true)
+        if (!snapshot.Guests.Any(guest => guest.Online))
         {
             return snapshot.Playing ? "房间内仅你一人，正在播放" : "房间内仅你一人";
         }
-        if (snapshot.WaitingForReady) return "等待双方缓冲就绪";
-        if (snapshot.Guest.Buffering || snapshot.Host.Buffering) return "一方缓冲中，等待恢复";
-        return "双方在线，已同步";
+        if (snapshot.WaitingForReady) return "等待所有成员缓冲就绪";
+        if (snapshot.Guests.Any(guest => guest.Online && guest.Buffering) || snapshot.Host.Buffering)
+            return "有成员正在缓冲，等待恢复";
+        return "成员在线，已同步";
     }
 
     private async Task<bool> EnsureSnapshotPlayerAsync(WatchRoomMedia media, WatchRoomSnapshot snapshot)
@@ -1435,7 +1435,7 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
         {
             await StartPlaybackAsync(true, _lifetime.Token).ConfigureAwait(true);
         }
-        else if (_room.IsHost ? snapshot.Host?.Ready != true : snapshot.Guest?.Ready != true)
+        else if (snapshot.FindMember(_room.MemberId)?.Ready != true)
         {
             await _room.SendAsync(new { type = "ready", ready = true }, _lifetime.Token)
                 .ConfigureAwait(true);
@@ -1553,7 +1553,7 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
         var count = snapshot.MemberCount > 0
             ? snapshot.MemberCount
             : (snapshot.Host?.Online == true ? 1 : 0)
-              + (snapshot.Guest?.Online == true ? 1 : 0);
+              + snapshot.Guests.Count(guest => guest.Online);
         if (_roomMemberCount != count)
         {
             _roomMemberCount = count;

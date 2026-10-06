@@ -106,7 +106,7 @@ public sealed class RoomMediaSwitchTests
         Assert.True(room.StartRequested);
         Handle(rooms, firstGuest, """{"type":"ready","ready":true}""");
         Assert.True(room.Playing);
-        var firstId = room.Guest?.ClientId;
+        var firstId = Assert.Single(room.Guests).ClientId;
 
         RoomCoordinator.Detach(firstGuest);
         Assert.True(room.Playing);
@@ -115,8 +115,9 @@ public sealed class RoomMediaSwitchTests
         Attach(rooms, replacement, $$"""{"type":"join","roomCode":"{{room.Code}}"}""");
 
         Assert.Same(room, replacement.Room);
-        Assert.NotEqual(firstId, room.Guest?.ClientId);
-        Assert.Same(replacement, room.Guest?.Connection);
+        var onlineGuest = Assert.Single(room.Guests, slot => slot.Connection != null);
+        Assert.NotEqual(firstId, onlineGuest.ClientId);
+        Assert.Same(replacement, onlineGuest.Connection);
         Assert.True(room.StartRequested);
         Handle(rooms, replacement, """{"type":"ready","ready":true}""");
         Assert.True(room.Playing);

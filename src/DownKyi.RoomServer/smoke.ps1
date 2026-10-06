@@ -58,6 +58,7 @@ function Connect-Room {
 
 $hostSocket = $null
 $guest = $null
+$groupGuests = [Collections.Generic.List[Net.WebSockets.ClientWebSocket]]::new()
 try {
     for ($i = 0; $i -lt 50; $i++) {
         try {
@@ -86,7 +87,7 @@ try {
     $hostChat = Read-Until $hostSocket "chat" { param($m) $m.text -eq "晚上好" }
     $guestChat = Read-Until $guest "chat" { param($m) $m.text -eq "晚上好" }
     foreach ($chat in @($hostChat, $guestChat)) {
-        if ($chat.clientId -ne $created.clientId -or $chat.role -ne "host" -or
+        if ($chat.memberId -ne $created.memberId -or $chat.role -ne "host" -or
             $chat.nickname -ne "房主" -or $chat.sentAtUnixMs -le 0) {
             throw "Host chat did not carry server-verified identity and timestamp."
         }
@@ -96,7 +97,7 @@ try {
     $hostGuestChat = Read-Until $hostSocket "chat" { param($m) $m.text -eq "你好" }
     $guestGuestChat = Read-Until $guest "chat" { param($m) $m.text -eq "你好" }
     foreach ($chat in @($hostGuestChat, $guestGuestChat)) {
-        if ($chat.clientId -ne $joined.clientId -or $chat.role -ne "guest" -or
+        if ($chat.memberId -ne $joined.memberId -or $chat.role -ne "guest" -or
             $chat.nickname -ne "访客" -or $chat.sentAtUnixMs -le 0) {
             throw "Guest chat did not carry server-verified identity and timestamp."
         }
@@ -157,12 +158,12 @@ try {
 
     $guest.Dispose()
     $guest = $null
-    $offline = Read-Until $hostSocket "snapshot" { param($m) $m.snapshot.guest.online -eq $false }
+    $offline = Read-Until $hostSocket "snapshot" { param($m) $m.snapshot.memberCount -eq 1 }
     if ($offline.snapshot.memberCount -ne 1) { throw "A disconnected guest was counted as present." }
     $guest = Connect-Room
     Send-Json $guest ('{"type":"join","roomCode":"' + $created.roomCode + '","clientId":"' + $joined.clientId + '"}')
     $rejoined = Read-Until $guest "welcome"
-    if ($rejoined.snapshot.playing -eq $true -or $rejoined.snapshot.guest.ready -eq $true) {
+    if ($rejoined.snapshot.playing -eq $true -or $rejoined.snapshot.guests[0].ready -eq $true) {
         throw "Reconnect did not pause and clear readiness."
     }
     if ($rejoined.PSObject.Properties.Name -contains "history") {
@@ -201,8 +202,49 @@ try {
     }
     if ($continuedAlone.snapshot.waitingForReady) { throw "Host playback paused after the guest left." }
     Send-Json $hostSocket '{"type":"close"}'
+    $hostSocket.Dispose()
+    $hostSocket = Connect-Room
+    Send-Json $hostSocket '{"type":"create"}'
+    $groupRoom = Read-Until $hostSocket 'welcome'
+    for ($index = 0; $index -lt 4; $index++) {
+        $member = Connect-Room
+        $groupGuests.Add($member)
+        Send-Json $member ('{"type":"join","roomCode":"' + $groupRoom.roomCode + '"}')
+        $welcome = Read-Until $member 'welcome'
+        if ($welcome.snapshot.memberCount -ne ($index + 2) -or $welcome.snapshot.capacity -ne 5) {
+            throw 'Five-person room capacity or count is incorrect.'
+        }
+    }
+    $extra = Connect-Room
+    try {
+        Send-Json $extra ('{"type":"join","roomCode":"' + $groupRoom.roomCode + '"}')
+        $full = Read-Until $extra 'error'
+        if ($full.code -ne 'room_full') { throw 'Sixth participant was not rejected.' }
+    } finally { $extra.Dispose() }
+
+    Send-Json $hostSocket '{"type":"select","media":{"episodeId":101}}'
+    Send-Json $hostSocket '{"type":"ready","ready":true}'
+    foreach ($member in $groupGuests) { Send-Json $member '{"type":"ready","ready":true}' }
+    Send-Json $hostSocket '{"type":"play"}'
+    foreach ($member in $groupGuests) {
+        $groupPlaying = Read-Until $member 'snapshot' { param($m) $m.snapshot.playing -and $m.snapshot.memberCount -eq 5 }
+    }
+    Send-Json $hostSocket '{"type":"select","media":{"episodeId":102}}'
+    foreach ($member in $groupGuests) {
+        $changed = Read-Until $member 'snapshot' { param($m) $m.snapshot.media.episodeId -eq 102 }
+        if ($changed.snapshot.playing) { throw 'Media change did not reset group playback.' }
+    }
+    Send-Json $groupGuests[3] '{"type":"chat","nickname":"访客四","text":"五人测试"}'
+    foreach ($member in @($hostSocket) + $groupGuests.ToArray()) {
+        $groupChat = Read-Until $member 'chat' { param($m) $m.text -eq '五人测试' }
+        if ($groupChat.clientId -or -not $groupChat.memberId) { throw 'Chat exposed reconnect credentials.' }
+    }
+    Send-Json $hostSocket '{"type":"close"}'
+    foreach ($member in $groupGuests) { $groupClosed = Read-Until $member 'closed' }
+    Write-Host 'Five-person WebSocket smoke passed: four guests, sixth rejected, all-member readiness, media switching, chat fan-out, and close.'
     Write-Host "Room server smoke passed: create/join, member count, bidirectional room chat, server-verified chat identity and timestamps, LF chat, CRLF normalization, chat input validation, sender spoof rejection, solo playback, guest-join resynchronization, obsolete login relay rejection, host authority, media URL rejection, ready/play, seek, buffering recovery, reconnect without chat history, and close."
 } finally {
+    foreach ($member in $groupGuests) { $member.Dispose() }
     if ($null -ne $guest) { $guest.Dispose() }
     if ($null -ne $hostSocket) { $hostSocket.Dispose() }
     if ($null -ne $server -and -not $server.HasExited) { Stop-Process -Id $server.Id }

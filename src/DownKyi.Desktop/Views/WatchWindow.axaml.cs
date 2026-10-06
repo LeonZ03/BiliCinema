@@ -442,7 +442,7 @@ internal sealed partial class WatchWindow : Window
             await CurrentBrowser.InvokeScript(RoomChatOverlayScript.Build(
                 _viewModel.ChatMessages,
                 _viewModel.LatestChatToast,
-                _viewModel.RoomClientId,
+                _viewModel.RoomMemberId,
                 _isFullscreen,
                 inRoom,
                 memberCount,

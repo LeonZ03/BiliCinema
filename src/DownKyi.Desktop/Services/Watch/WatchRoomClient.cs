@@ -1,5 +1,7 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Net.WebSockets;
 using System.Text.Json;
 using System.Threading;
@@ -26,6 +28,7 @@ internal sealed class WatchRoomClient : IAsyncDisposable
 
     public string? RoomCode { get; private set; }
     public string? ClientId { get; private set; }
+    public string? MemberId { get; private set; }
     public bool IsHost { get; private set; }
     public double ClockOffsetMilliseconds { get; private set; }
     public double RoundTripMilliseconds { get; private set; }
@@ -84,7 +87,7 @@ internal sealed class WatchRoomClient : IAsyncDisposable
                     ? errorCode.GetString() : null;
                 throw new InvalidOperationException(code switch
                 {
-                    "room_full" => "房间已有一位访客，请等待其离开后重试。",
+                    "room_full" => "房间已满（最多 5 人，含房主），请等待成员离开后重试。",
                     "room_unavailable" => "房间已结束或邀请码无效，请向房主获取新邀请。",
                     "server_full" => "房间服务暂时已满，请稍后重试。",
                     _ => "房间拒绝加入，请检查邀请码和连接。"
@@ -92,8 +95,14 @@ internal sealed class WatchRoomClient : IAsyncDisposable
             }
 
             var root = welcome.RootElement;
+            if (!root.TryGetProperty("memberId", out var memberId)
+                || string.IsNullOrEmpty(memberId.GetString()))
+            {
+                throw new InvalidOperationException("房间版本不兼容，请房主和所有访客一起更新 BiliCinema。");
+            }
             RoomCode = root.GetProperty("roomCode").GetString();
             ClientId = root.GetProperty("clientId").GetString();
+            MemberId = memberId.GetString();
             IsHost = root.GetProperty("role").GetString() == "host";
             var snapshot = root.GetProperty("snapshot").Deserialize<WatchRoomSnapshot>(JsonOptions)
                            ?? throw new InvalidDataException("房间状态为空。");
@@ -145,6 +154,7 @@ internal sealed class WatchRoomClient : IAsyncDisposable
         await CloseSocketAsync().ConfigureAwait(false);
         RoomCode = null;
         ClientId = null;
+        MemberId = null;
         IsHost = false;
     }
 
@@ -207,6 +217,7 @@ internal sealed class WatchRoomClient : IAsyncDisposable
                     _receiveEnded = true;
                     RoomCode = null;
                     ClientId = null;
+                    MemberId = null;
                     IsHost = false;
                     Closed?.Invoke();
                     break;
@@ -240,7 +251,7 @@ internal sealed class WatchRoomClient : IAsyncDisposable
     private static WatchRoomChatMessage? ParseChat(JsonElement root)
     {
         var chat = root.Deserialize<WatchRoomChatMessage>(JsonOptions);
-        if (chat == null || string.IsNullOrEmpty(chat.ClientId)
+        if (chat == null || string.IsNullOrEmpty(chat.MemberId)
             || string.IsNullOrEmpty(chat.Nickname) || chat.Nickname.Length > 24
             || string.IsNullOrEmpty(chat.Text) || chat.Text.Length > 500
             || chat.SentAtUnixMs <= 0)
@@ -316,7 +327,7 @@ internal sealed record WatchRoomMedia
 
 internal sealed record WatchRoomChatMessage
 {
-    public string ClientId { get; init; } = string.Empty;
+    public string MemberId { get; init; } = string.Empty;
     public string Role { get; init; } = string.Empty;
     public string Nickname { get; init; } = string.Empty;
     public string Text { get; init; } = string.Empty;
@@ -332,6 +343,7 @@ internal sealed record WatchRoomHostAction
 
 internal sealed record WatchRoomMember
 {
+    public string MemberId { get; init; } = string.Empty;
     public bool Online { get; init; }
     public bool Ready { get; init; }
     public bool Buffering { get; init; }
@@ -349,5 +361,10 @@ internal sealed record WatchRoomSnapshot
     public bool WaitingForReady { get; init; }
     public int MemberCount { get; init; }
     public WatchRoomMember? Host { get; init; }
-    public WatchRoomMember? Guest { get; init; }
+    public IReadOnlyList<WatchRoomMember> Guests { get; init; } = [];
+
+    public bool AllOnlineGuestsReady => Guests.All(guest => !guest.Online || (guest.Ready && !guest.Buffering));
+
+    public WatchRoomMember? FindMember(string? memberId) => Host?.MemberId == memberId
+        ? Host : Guests.FirstOrDefault(guest => guest.MemberId == memberId);
 }

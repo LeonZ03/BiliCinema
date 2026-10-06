@@ -16,7 +16,7 @@ internal static class RoomChatOverlayScript
     public static string Build(
         IReadOnlyList<WatchRoomChatMessage> messages,
         WatchRoomChatMessage? toast,
-        string? ownClientId,
+        string? ownMemberId,
         bool fullscreen,
         bool inRoom,
         int memberCount,
@@ -39,12 +39,12 @@ internal static class RoomChatOverlayScript
                 .Select(notice => new { notice.Id, notice.Text, notice.RemainingMilliseconds }).ToArray(),
             messages = messages.Select(message => new
             {
-                message.ClientId,
+                message.MemberId,
                 message.Role,
                 message.Nickname,
                 message.Text,
                 message.SentAtUnixMs,
-                isSelf = string.Equals(message.ClientId, ownClientId, StringComparison.Ordinal)
+                isSelf = string.Equals(message.MemberId, ownMemberId, StringComparison.Ordinal)
             }).ToArray(),
             toast = toast == null || toastRemainingMilliseconds == 0
                 ? null : new { toast.Nickname, toast.Text }

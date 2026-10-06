@@ -49,20 +49,23 @@ internal sealed class ClientConnection(WebSocket socket)
 internal sealed class MemberSlot(string clientId)
 {
     public string ClientId { get; } = clientId;
+    public string MemberId { get; } = Guid.NewGuid().ToString("N");
     public ClientConnection? Connection { get; set; }
     public bool Ready { get; set; }
     public bool Buffering { get; set; }
     public DateTimeOffset? DisconnectedAt { get; set; }
 
-    public object View => new { online = Connection is not null, ready = Ready, buffering = Buffering };
+    public object View => new { memberId = MemberId, online = Connection is not null, ready = Ready, buffering = Buffering };
 }
 
 internal sealed class Room(string code, string hostClientId)
 {
+    public const int MaxMembers = 5;
     public object Gate { get; } = new();
     public string Code { get; } = code;
     public MemberSlot Host { get; } = new(hostClientId);
-    public MemberSlot? Guest { get; set; }
+    public List<MemberSlot> Guests { get; } = [];
+    public IEnumerable<MemberSlot> Members => Guests.Prepend(Host);
     public MediaIdentity? Media { get; set; }
     public double PositionSeconds { get; set; }
     public double Rate { get; set; } = 1;
@@ -86,7 +89,7 @@ internal sealed class Room(string code, string hostClientId)
     }
 
     public bool CanRun() => Media is not null && Host.Connection is not null && Host.Ready && !Host.Buffering &&
-        (Guest is not { Connection: not null } || Guest is { Ready: true, Buffering: false });
+        Guests.All(guest => guest.Connection is null || guest is { Ready: true, Buffering: false });
 
     public void StartIfReady()
     {
@@ -105,7 +108,7 @@ internal sealed class Room(string code, string hostClientId)
         StartRequested = false;
     }
 
-    public void ContinueWithoutGuest()
+    public void ContinueWithConnectedMembers()
     {
         var resume = Playing || StartRequested;
         Settle();
@@ -124,16 +127,24 @@ internal sealed class Room(string code, string hostClientId)
         rate = Rate,
         serverTimeUnixMs = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
         waitingForReady = StartRequested && !Playing,
-        memberCount = (Host.Connection is null ? 0 : 1) + (Guest?.Connection is null ? 0 : 1),
+        memberCount = Members.Count(member => member.Connection is not null),
+        capacity = MaxMembers,
         host = Host.View,
-        guest = Guest?.View
+        guests = Guests.Select(guest => guest.View).ToArray()
     };
 
     public void Broadcast()
     {
         string message = WireProtocol.Encode(new { type = "snapshot", snapshot = Snapshot() });
-        Host.Connection?.Enqueue(message);
-        Guest?.Connection?.Enqueue(message);
+        SendToMembers(message);
+    }
+
+    public void SendToMembers(string message, bool guestsOnly = false)
+    {
+        foreach (var member in guestsOnly ? Guests : Members)
+        {
+            member.Connection?.Enqueue(message);
+        }
     }
 }
 
@@ -202,9 +213,9 @@ internal sealed class RoomCoordinator : BackgroundService
                     slot = existing.Host;
                     role = "host";
                 }
-                else if (existing.Guest?.ClientId == message.ClientId)
+                else if (existing.Guests.Find(guest => guest.ClientId == message.ClientId) is { } guest)
                 {
-                    slot = existing.Guest;
+                    slot = guest;
                     role = "guest";
                 }
                 else
@@ -214,12 +225,21 @@ internal sealed class RoomCoordinator : BackgroundService
             }
             else
             {
-                if (existing.Guest?.Connection is not null)
+                if (existing.Guests.Count >= Room.MaxMembers - 1)
                 {
-                    throw new RoomProtocolException("room_full");
+                    // Keep reconnect credentials while there is room, but an offline guest
+                    // must not prevent a new viewer from using a vacant seat.
+                    var offline = existing.Guests.Where(guest => guest.Connection is null)
+                        .MinBy(guest => guest.DisconnectedAt);
+                    if (offline is null)
+                    {
+                        throw new RoomProtocolException("room_full");
+                    }
+                    existing.Guests.Remove(offline);
                 }
 
-                slot = existing.Guest = new MemberSlot(NewSecret());
+                slot = new MemberSlot(NewSecret());
+                existing.Guests.Add(slot);
                 role = "guest";
             }
 
@@ -253,7 +273,7 @@ internal sealed class RoomCoordinator : BackgroundService
             }
 
             bool isHost = ReferenceEquals(room.Host.Connection, connection);
-            MemberSlot? member = isHost ? room.Host : room.Guest;
+            MemberSlot? member = room.Members.FirstOrDefault(slot => ReferenceEquals(slot.Connection, connection));
             if (!ReferenceEquals(member?.Connection, connection))
             {
                 throw new RoomProtocolException("not_joined");
@@ -273,12 +293,10 @@ internal sealed class RoomCoordinator : BackgroundService
                     room.AnchorTimestamp = Stopwatch.GetTimestamp();
                     room.Playing = false;
                     room.StartRequested = false;
-                    room.Host.Ready = false;
-                    room.Host.Buffering = false;
-                    if (room.Guest is not null)
+                    foreach (var slot in room.Members)
                     {
-                        room.Guest.Ready = false;
-                        room.Guest.Buffering = false;
+                        slot.Ready = false;
+                        slot.Buffering = false;
                     }
 
                     break;
@@ -342,13 +360,13 @@ internal sealed class RoomCoordinator : BackgroundService
 
             if (isHost && message.Type is ("select" or "play" or "pause" or "seek" or "rate"))
             {
-                room.Guest?.Connection?.Enqueue(WireProtocol.Encode(new
+                room.SendToMembers(WireProtocol.Encode(new
                 {
                     type = "hostAction",
                     action = message.Type,
                     positionSeconds = message.PositionSeconds,
                     rate = message.Rate
-                }));
+                }), guestsOnly: true);
             }
             room.Version++;
             room.Broadcast();
@@ -382,8 +400,7 @@ internal sealed class RoomCoordinator : BackgroundService
 
         lock (room.Gate)
         {
-            MemberSlot? slot = ReferenceEquals(room.Host.Connection, connection) ? room.Host :
-                ReferenceEquals(room.Guest?.Connection, connection) ? room.Guest : null;
+            MemberSlot? slot = room.Members.FirstOrDefault(member => ReferenceEquals(member.Connection, connection));
             if (slot is null || room.Closed)
             {
                 return;
@@ -399,7 +416,7 @@ internal sealed class RoomCoordinator : BackgroundService
             }
             else
             {
-                room.ContinueWithoutGuest();
+                room.ContinueWithConnectedMembers();
             }
             room.Version++;
             room.Broadcast();
@@ -425,9 +442,9 @@ internal sealed class RoomCoordinator : BackgroundService
                     {
                         Close(room);
                     }
-                    else if (room.Guest?.DisconnectedAt is { } guestAt && now - guestAt >= GuestReconnectWindow)
+                    else if (room.Guests.RemoveAll(guest => guest.DisconnectedAt is { } guestAt
+                             && now - guestAt >= GuestReconnectWindow) > 0)
                     {
-                        room.Guest = null;
                         room.Version++;
                         room.Broadcast();
                     }
@@ -442,6 +459,7 @@ internal sealed class RoomCoordinator : BackgroundService
             type = "welcome",
             roomCode = room.Code,
             clientId = slot.ClientId,
+            memberId = slot.MemberId,
             role,
             snapshot = room.Snapshot()
         }));
@@ -457,8 +475,8 @@ internal sealed class RoomCoordinator : BackgroundService
         slot.Connection?.Enqueue(WireProtocol.Encode(new { type = "left" }));
         slot.Connection?.Complete();
         slot.Connection!.Room = null;
-        room.Guest = null;
-        room.ContinueWithoutGuest();
+        room.Guests.Remove(slot);
+        room.ContinueWithConnectedMembers();
         room.Version++;
         room.Broadcast();
     }
@@ -488,14 +506,13 @@ internal sealed class RoomCoordinator : BackgroundService
                 string chat = WireProtocol.Encode(new
                 {
                     type = "chat",
-                    clientId = member.ClientId,
+                    memberId = member.MemberId,
                     role = isHost ? "host" : "guest",
                     nickname = message.ChatNickname,
                     text = message.ChatText,
                     sentAtUnixMs = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()
                 });
-                room.Host.Connection?.Enqueue(chat);
-                room.Guest?.Connection?.Enqueue(chat);
+                room.SendToMembers(chat);
                 return true;
             default:
                 return false;
@@ -510,10 +527,11 @@ internal sealed class RoomCoordinator : BackgroundService
         }
 
         room.Closed = true;
-        room.Host.Connection?.Enqueue(WireProtocol.Encode(new { type = "closed" }));
-        room.Guest?.Connection?.Enqueue(WireProtocol.Encode(new { type = "closed" }));
-        room.Host.Connection?.Complete();
-        room.Guest?.Connection?.Complete();
+        room.SendToMembers(WireProtocol.Encode(new { type = "closed" }));
+        foreach (var member in room.Members)
+        {
+            member.Connection?.Complete();
+        }
         rooms.TryRemove(room.Code, out _);
     }
 
