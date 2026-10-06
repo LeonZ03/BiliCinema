@@ -69,19 +69,12 @@
             </Grid>
         </Grid>
 
-        <ContentControl
-            Grid.Row="1"
-            Margin="0,30,0,0"
-            HorizontalAlignment="Center"
-            VerticalAlignment="Bottom">
-            <Path
-                x:Name="IndexWordmark"
-                Width="{Binding TextLogo.Width}"
-                Height="{Binding TextLogo.Height}"
-                Data="{Binding TextLogo.Data}"
-                Fill="{DynamicResource BrushBrand}"
-                Stretch="UniformToFill" />
-        </ContentControl>
+        <StackPanel Grid.Row="1" Orientation="Horizontal" Spacing="18"
+                    HorizontalAlignment="Center" VerticalAlignment="Center">
+            <Image Width="92" Height="92" Source="/Resources/bilicinema-mark.png" />
+            <TextBlock x:Name="IndexWordmark" Text="BiliCinema" FontSize="42" FontWeight="Bold"
+                       VerticalAlignment="Center" Foreground="{DynamicResource BrushPrimary}" />
+        </StackPanel>
         <Grid Grid.Row="2" ColumnDefinitions="150*,600*,150*">
             <Border
                 x:Name="IndexSearchBorder"

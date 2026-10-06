@@ -30,9 +30,12 @@ public sealed class ViewIndexVisualStateTests
             try
             {
                 window.Show();
+                var wordmark = Assert.IsType<TextBlock>(view.FindControl<TextBlock>("IndexWordmark"));
+                Assert.Equal("BiliCinema", wordmark.Text);
+                var logo = Assert.Single(view.GetVisualDescendants().OfType<Image>(), image => image.Width == 92);
+                Assert.NotNull(logo.Source);
                 var brandFillMarks = new[]
                 {
-                    Assert.IsType<ShapePath>(view.FindControl<ShapePath>("IndexWordmark")),
                     Assert.IsType<ShapePath>(view.FindControl<ShapePath>("IndexDownloadManagerIcon")),
                     Assert.IsType<ShapePath>(view.FindControl<ShapePath>("IndexToolboxIcon"))
                 };
@@ -47,6 +50,7 @@ public sealed class ViewIndexVisualStateTests
                     var brandColor = ResourceColor(application, "BrushBrand", theme);
                     Assert.Equal(Color.FromArgb(0xFF, 0x77, 0xCB, 0xE0), brandColor);
                     Assert.All(brandFillMarks, mark => Assert.Equal(brandColor, SolidColor(mark.Fill)));
+                    Assert.Equal(ResourceColor(application, "BrushPrimary", theme), SolidColor(wordmark.Foreground));
                     Assert.Equal(Colors.Transparent, SolidColor(settingsIcon.Fill));
                     Assert.Equal(brandColor, SolidColor(settingsIcon.Stroke));
                     Assert.Equal(1.75, settingsIcon.StrokeThickness);

@@ -1,7 +1,4 @@
 using System;
-using System.Buffers.Binary;
-using System.IO;
-using System.Runtime.InteropServices;
 using Avalonia.Platform;
 using QRCoder;
 using SkiaSharp;
@@ -10,7 +7,7 @@ namespace DownKyi.Services.Account;
 
 internal static class LoginQrShareImageRenderer
 {
-    private const string IconResource = "avares://DownKyi.Desktop/Resources/favicon.ico";
+    private const string IconResource = "avares://DownKyi.Desktop/Resources/bilicinema-mark.png";
 
     public static byte[] Render(Uri loginUri)
     {
@@ -109,47 +106,7 @@ internal static class LoginQrShareImageRenderer
     private static SKBitmap LoadAppIcon()
     {
         using var resource = AssetLoader.Open(new Uri(IconResource));
-        using var iconStream = new MemoryStream();
-        resource.CopyTo(iconStream);
-        var icon = iconStream.ToArray();
-        if (icon.Length < 62 || icon[2] != 1 || icon[4] == 0)
-        {
-            throw new InvalidOperationException("BiliCinema 图标格式无效。");
-        }
-
-        var dibOffset = checked((int)BinaryPrimitives.ReadUInt32LittleEndian(icon.AsSpan(18, 4)));
-        if (dibOffset < 22 || dibOffset > icon.Length - 40)
-        {
-            throw new InvalidOperationException("BiliCinema 图标数据不完整。");
-        }
-
-        var header = icon.AsSpan(dibOffset);
-        var headerSize = checked((int)BinaryPrimitives.ReadUInt32LittleEndian(header[..4]));
-        var width = BinaryPrimitives.ReadInt32LittleEndian(header.Slice(4, 4));
-        var dibHeight = BinaryPrimitives.ReadInt32LittleEndian(header.Slice(8, 4));
-        var bitDepth = BinaryPrimitives.ReadUInt16LittleEndian(header.Slice(14, 2));
-        var compression = BinaryPrimitives.ReadUInt32LittleEndian(header.Slice(16, 4));
-        if (headerSize < 40 || width is <= 0 or > 512 || dibHeight != width * 2 ||
-            bitDepth != 32 || compression != 0)
-        {
-            throw new InvalidOperationException("BiliCinema 图标像素格式不受支持。");
-        }
-
-        var pixelOffset = checked(dibOffset + headerSize);
-        var pixelBytes = checked(width * width * 4);
-        if (pixelOffset > icon.Length - pixelBytes)
-        {
-            throw new InvalidOperationException("BiliCinema 图标像素数据不完整。");
-        }
-
-        var bitmap = new SKBitmap(new SKImageInfo(width, width, SKColorType.Bgra8888,
-            SKAlphaType.Unpremul));
-        for (var y = 0; y < width; y++)
-        {
-            Marshal.Copy(icon, pixelOffset + (width - 1 - y) * width * 4,
-                IntPtr.Add(bitmap.GetPixels(), y * bitmap.RowBytes), width * 4);
-        }
-
-        return bitmap;
+        return SKBitmap.Decode(resource)
+               ?? throw new InvalidOperationException("BiliCinema 图标图片无法读取。");
     }
 }

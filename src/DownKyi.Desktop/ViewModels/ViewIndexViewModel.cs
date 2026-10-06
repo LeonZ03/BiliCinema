@@ -46,14 +46,6 @@ internal class ViewIndexViewModel : ViewModelBase
     }
 
 
-    private VectorImage _textLogo = new();
-
-    public VectorImage TextLogo
-    {
-        get => _textLogo;
-        set => SetProperty(ref _textLogo, value);
-    }
-
     private string _inputText = string.Empty;
 
     public string InputText
@@ -107,8 +99,6 @@ internal class ViewIndexViewModel : ViewModelBase
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _loginPanelVisibility = true;
         Header = "avares://DownKyi.Desktop/Resources/default_header.jpg";
-
-        TextLogo = LogoIcon.TextLogo;
 
         GeneralSearch = ButtonIcon.GeneralSearch;
 
