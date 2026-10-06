@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using Avalonia;
@@ -29,8 +30,11 @@ internal sealed partial class WatchWindow : Window
                 window.__biliCinemaEscapeHook = true;
                 window.addEventListener('keydown', event => {
                     if (event.key === 'Escape'
-                        && !window.__biliCinemaChatUi?.host?.classList.contains('bc-open'))
+                        && !window.__biliCinemaChatUi?.host?.classList.contains('bc-open')) {
                         window.__biliCinemaEscapeRequested = true;
+                        if (typeof invokeCSharpAction === 'function')
+                            invokeCSharpAction(JSON.stringify({ source: 'biliCinemaViewport', type: 'fullscreenChanged' }));
+                    }
                 }, true);
             }
             const exit = window.__biliCinemaEscapeRequested === true;
@@ -39,7 +43,7 @@ internal sealed partial class WatchWindow : Window
             const chat = window.__biliCinemaChatUi;
             const chatMissing = !chat?.host?.isConnected || !root?.contains(chat.host);
             return (document.fullscreenElement ? 1 : 0) + (exit ? 2 : 0)
-                + (chatMissing ? 4 : 0);
+                + (chatMissing ? 4 : 0) + (window.__biliCinemaUpdateViewport ? 0 : 8);
         })()
         """;
     private const string ToggleDanmakuScript = """
@@ -69,6 +73,8 @@ internal sealed partial class WatchWindow : Window
     private bool _browserFullscreen;
     private bool _fullscreenFromBrowser;
     private bool _checkingFullscreen;
+    private bool _fullscreenCheckPending;
+    private bool? _lastViewportFullscreen;
     private bool _chatOverlayErrorLogged;
     private int _lastChatRevision = -1;
     private int _lastChatToastSequence = -1;
@@ -107,6 +113,8 @@ internal sealed partial class WatchWindow : Window
         _normalBackground = Background;
         _normalCornerRadius = _roomPlayerSurface.CornerRadius;
         ConfigureBrowser(_roomBrowser, "BiliCinemaOnline");
+        _roomBrowser.WebMessageReceived += OnViewportMessageReceived;
+        _roomBrowser.NavigationStarted += (_, _) => _lastViewportFullscreen = null;
         _viewModel.AttachBrowser(_roomBrowser);
         _fullscreenTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(500) };
         _fullscreenTimer.Tick += OnFullscreenTimerTick;
@@ -291,6 +299,7 @@ internal sealed partial class WatchWindow : Window
 
         _checkingFullscreen = true;
         var chatMissing = false;
+        var viewportMissing = false;
         try
         {
             var result = await CurrentBrowser.InvokeScript(FullscreenStateScript).ConfigureAwait(true);
@@ -301,6 +310,7 @@ internal sealed partial class WatchWindow : Window
 
             var state = int.TryParse(result?.Trim('"'), out var parsed) ? parsed : 0;
             chatMissing = (state & 4) != 0;
+            viewportMissing = (state & 8) != 0;
             var wantsFullscreen = (state & 1) != 0;
             if ((state & 2) != 0 && _isFullscreen)
             {
@@ -343,23 +353,64 @@ internal sealed partial class WatchWindow : Window
         {
             try
             {
-                await RefreshPlayerViewportAsync().ConfigureAwait(true);
+                await RefreshPlayerViewportAsync(viewportMissing).ConfigureAwait(true);
                 await RefreshChatOverlayAsync(chatMissing).ConfigureAwait(true);
             }
             finally
             {
                 _checkingFullscreen = false;
+                if (_fullscreenCheckPending && !_windowClosing)
+                {
+                    _fullscreenCheckPending = false;
+                    Dispatcher.UIThread.Post(() => OnFullscreenTimerTick(this, EventArgs.Empty));
+                }
             }
         }
     }
 
-    private async Task RefreshPlayerViewportAsync()
+    private void OnViewportMessageReceived(object? sender, WebMessageReceivedEventArgs args)
     {
-        if (_windowClosing || !_viewModel.ShowRoom) return;
+        if (_windowClosing || !IsFullscreenNotification(args.Body)) return;
+        // The browser notifies immediately. The timer remains a fallback and
+        // maintains chat overlays, rather than imposing up to 500 ms of lag.
+        if (_checkingFullscreen)
+        {
+            _fullscreenCheckPending = true;
+            return;
+        }
+        OnFullscreenTimerTick(this, EventArgs.Empty);
+    }
+
+    internal static bool IsFullscreenNotification(string? message)
+    {
         try
         {
+            using var document = JsonDocument.Parse(message ?? string.Empty);
+            var root = document.RootElement;
+            return root.ValueKind == JsonValueKind.Object
+                && root.TryGetProperty("source", out var source)
+                && source.ValueKind == JsonValueKind.String
+                && source.GetString() == "biliCinemaViewport"
+                && root.TryGetProperty("type", out var type)
+                && type.ValueKind == JsonValueKind.String
+                && type.GetString() == "fullscreenChanged";
+        }
+        catch (JsonException)
+        {
+            return false;
+        }
+    }
+
+    private async Task RefreshPlayerViewportAsync(bool missing = false)
+    {
+        if (_windowClosing || !_viewModel.ShowRoom
+            || !missing && _lastViewportFullscreen == _isFullscreen) return;
+        try
+        {
+            var fullscreen = _isFullscreen;
             await CurrentBrowser.InvokeScript(
-                BilibiliWebPlaybackSession.BuildViewportScript(_isFullscreen)).ConfigureAwait(true);
+                BilibiliWebPlaybackSession.BuildViewportScript(fullscreen)).ConfigureAwait(true);
+            _lastViewportFullscreen = fullscreen;
         }
         catch (Exception error) when (error is InvalidOperationException
             or ObjectDisposedException or System.Runtime.InteropServices.COMException)

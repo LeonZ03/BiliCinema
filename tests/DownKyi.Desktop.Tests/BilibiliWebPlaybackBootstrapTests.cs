@@ -7,6 +7,18 @@ namespace DownKyi.Desktop.Tests;
 
 public sealed class BilibiliWebPlaybackBootstrapTests
 {
+    [Theory]
+    [InlineData("{\"source\":\"biliCinemaViewport\",\"type\":\"fullscreenChanged\"}", true)]
+    [InlineData("{\"source\":\"biliCinemaChat\",\"type\":\"send\"}", false)]
+    [InlineData("{\"source\":\"biliCinemaPlayer\",\"type\":\"pause\"}", false)]
+    [InlineData("{\"source\":\"biliCinemaViewport\",\"type\":false}", false)]
+    [InlineData("[]", false)]
+    [InlineData(null, false)]
+    public void OnlyViewportNotificationsRequestAnImmediateFullscreenCheck(string? message, bool expected)
+    {
+        Assert.Equal(expected, WatchWindow.IsFullscreenNotification(message));
+    }
+
     [Fact]
     public void BangumiPlayerUrlIsAllowedAndUsesEpisodePage()
     {

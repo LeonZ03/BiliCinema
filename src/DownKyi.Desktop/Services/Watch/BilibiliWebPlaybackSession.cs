@@ -51,7 +51,11 @@ internal sealed class BilibiliWebPlaybackSession : IDisposable
                         requestAnimationFrame(() => window.dispatchEvent(new Event('resize')));
                     }
                 };
-                document.addEventListener('fullscreenchange', window.__biliCinemaUpdateViewport);
+                document.addEventListener('fullscreenchange', () => {
+                    window.__biliCinemaUpdateViewport();
+                    if (typeof invokeCSharpAction === 'function')
+                        invokeCSharpAction(JSON.stringify({ source: 'biliCinemaViewport', type: 'fullscreenChanged' }));
+                });
             }
             window.__biliCinemaUpdateViewport();
         })();
@@ -153,15 +157,33 @@ internal sealed class BilibiliWebPlaybackSession : IDisposable
                 parent.style.setProperty('transform', 'none', 'important');
             }
             if (!window.__biliCinemaFocusObserver) {
+                const observer = new MutationObserver(() => {
+                    if (window.__biliCinemaFocusPending) return;
+                    window.__biliCinemaFocusPending = true;
+                    requestAnimationFrame(() => {
+                        window.__biliCinemaFocusPending = false;
+                        enforceFocus();
+                    });
+                });
                 const enforceFocus = () => {
                     const root = window.__biliCinemaPlayerRoot;
                     if (!root?.isConnected) return;
+                    // Observe only the shell and its ancestor/sibling layout. A
+                    // subtree observer also sees every animated danmaku/control
+                    // style update and rescans the page during every video frame.
+                    // Disconnect while enforcing our styles to avoid self work.
+                    observer.disconnect();
+                    const layoutNodes = new Set([root]);
+                    const containers = new Set();
                     disableMiniPlayer();
                     for (let kept = root; kept && kept !== document.body; kept = kept.parentElement) {
                         const parent = kept.parentElement;
                         if (!parent) break;
+                        layoutNodes.add(parent);
+                        containers.add(parent);
                         for (const sibling of parent.children) {
                             if (sibling === kept) continue;
+                            layoutNodes.add(sibling);
                             if (sibling.style.getPropertyValue('display') !== 'none'
                                 || sibling.style.getPropertyPriority('display') !== 'important') {
                                 sibling.style.setProperty('display', 'none', 'important');
@@ -184,11 +206,12 @@ internal sealed class BilibiliWebPlaybackSession : IDisposable
                             root.style.setProperty(name, value, 'important');
                         }
                     }
+                    for (const node of layoutNodes) {
+                        observer.observe(node, { attributes: true,
+                            attributeFilter: ['class', 'style'], childList: containers.has(node) });
+                    }
                 };
-                window.__biliCinemaFocusObserver = new MutationObserver(enforceFocus);
-                window.__biliCinemaFocusObserver.observe(document.body, {
-                    childList: true, subtree: true, attributes: true, attributeFilter: ['class', 'style']
-                });
+                window.__biliCinemaFocusObserver = observer;
                 enforceFocus();
             }
             for (let kept = video; kept && kept !== player; kept = kept.parentElement) {
