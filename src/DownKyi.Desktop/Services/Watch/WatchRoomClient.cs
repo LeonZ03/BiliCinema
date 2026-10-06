@@ -340,6 +340,7 @@ internal sealed record WatchRoomMember
 internal sealed record WatchRoomSnapshot
 {
     public long Version { get; init; }
+    public long SyncRevision { get; init; }
     public WatchRoomMedia? Media { get; init; }
     public double PositionSeconds { get; init; }
     public bool Playing { get; init; }

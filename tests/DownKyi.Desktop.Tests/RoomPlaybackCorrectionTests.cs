@@ -5,6 +5,31 @@ namespace DownKyi.Desktop.Tests;
 
 public sealed class RoomPlaybackCorrectionTests
 {
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void ExplicitSynchronizationAlignsEvenSmallDriftAndRestoresHostRate(bool playing)
+    {
+        var snapshot = new WatchRoomSnapshot
+        {
+            Playing = playing,
+            Rate = 1,
+            Host = new WatchRoomMember { Online = true, Ready = true }
+        };
+
+        var correction = WatchWindowViewModel.CreatePlaybackCorrection(
+            isHost: false, snapshot, drift: 0.2, currentRate: 1.04, forceSync: true);
+
+        Assert.True(correction.Seek);
+        Assert.True(correction.SetRate);
+        Assert.Equal(1, correction.TargetRate);
+        Assert.Equal(!playing, correction.ShouldPause);
+        var host = WatchWindowViewModel.CreatePlaybackCorrection(
+            isHost: true, snapshot, drift: 8, currentRate: 1, forceSync: true);
+        Assert.False(host.Seek);
+        Assert.False(host.SetRate);
+    }
+
     [Fact]
     public void HostPlaybackRateAndPositionRemainAuthoritative()
     {

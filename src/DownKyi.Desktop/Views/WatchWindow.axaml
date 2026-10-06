@@ -120,7 +120,20 @@
                                 <Button Grid.Column="1" Content="加入房间" Command="{Binding JoinRoomCommand}" />
                             </Grid>
                             <TextBlock Text="{Binding RoomState}" TextWrapping="Wrap" />
-                            <TextBlock Text="{Binding SyncStatus}" TextWrapping="Wrap" />
+                            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                                <TextBlock Text="{Binding SyncStatus}" TextWrapping="Wrap" VerticalAlignment="Center" />
+                                <Button Grid.Column="1" Width="36" Height="36" Padding="8"
+                                        IsVisible="{Binding IsInRoom}" IsEnabled="{Binding PlayerReady}"
+                                        Command="{Binding SyncPlaybackCommand}"
+                                        AutomationProperties.Name="同步播放进度" ToolTip.Tip="同步播放进度"
+                                        Background="{DynamicResource BrushSurfaceSunken}"
+                                        CornerRadius="{DynamicResource DownKyiRadiusMedium}">
+                                    <Path Width="18" Height="18" Stretch="Uniform"
+                                              Data="M 17,2 L 17,7 L 12,7 M 17,7 A 7,7 0 0 0 4,5 M 3,18 L 3,13 L 8,13 M 3,13 A 7,7 0 0 0 16,15"
+                                              Stroke="{DynamicResource BrushTextSecondary}" StrokeThickness="1.7"
+                                              StrokeLineCap="Round" StrokeJoin="Round" />
+                                </Button>
+                            </Grid>
                         </StackPanel>
                     </Border>
                 </StackPanel>

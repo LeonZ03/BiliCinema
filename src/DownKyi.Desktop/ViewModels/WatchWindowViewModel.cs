@@ -51,6 +51,7 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
     private WatchRoomSnapshot? _lastSnapshot;
     private long _lastSnapshotReceivedAtUnixMs;
     private long _lastVersion = -1;
+    private long _lastAppliedSyncRevision = -1;
     private double _lastPosition;
     private string? _resumeMediaKey;
     private double _resumeAtSeconds;
@@ -220,6 +221,7 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
     public IAsyncRelayCommand CopyInviteCommand { get; }
     public IAsyncRelayCommand LeaveRoomCommand { get; }
     public IAsyncRelayCommand EndRoomCommand { get; }
+    public IAsyncRelayCommand SyncPlaybackCommand { get; }
     public IRelayCommand SaveRoomNicknameCommand { get; }
 
     public WatchWindowViewModel(
@@ -263,6 +265,7 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
         CopyInviteCommand = new AsyncRelayCommand(CopyInviteAsync);
         LeaveRoomCommand = new AsyncRelayCommand(LeaveRoomAsync);
         EndRoomCommand = new AsyncRelayCommand(EndRoomAsync);
+        SyncPlaybackCommand = new AsyncRelayCommand(() => RunControlSafelyAsync(SynchronizePlaybackAsync));
         SaveRoomNicknameCommand = new RelayCommand(SaveRoomNickname);
         _monitorTask = MonitorPlaybackAsync(_lifetime.Token);
     }
@@ -700,6 +703,7 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
 
         if (_room.IsHost)
         {
+            _pendingHostMediaKey = MediaKey(_roomPage);
             await SendHostControlAsync(new
             {
                 type = "select",
@@ -980,6 +984,10 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
             _recoveries = 0;
             if (_room.Connected)
             {
+                if (_room.IsHost)
+                {
+                    await PublishHostPlaybackAsync(player, cancellationToken).ConfigureAwait(true);
+                }
                 await _room.SendAsync(new { type = "ready", ready = true }, cancellationToken)
                     .ConfigureAwait(true);
             }
@@ -991,6 +999,38 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
         finally
         {
             _playerLoading = false;
+        }
+    }
+
+    private async Task PublishHostPlaybackAsync(BilibiliWebPlaybackSession player,
+        CancellationToken cancellationToken)
+    {
+        var page = _roomPage;
+        if (!_room.Connected || !_room.IsHost || page == null) return;
+        var state = await player.GetPlaybackStateAsync(cancellationToken).ConfigureAwait(true);
+        if (!ReferenceEquals(player, _roomPlayer) || !ReferenceEquals(page, _roomPage)) return;
+        await _room.SendAsync(new
+        {
+            type = "sync",
+            media = MediaForPage(page),
+            positionSeconds = state.PositionSeconds,
+            rate = state.Rate,
+            playing = _startWhenReady || state.Playing
+        }, cancellationToken).ConfigureAwait(true);
+    }
+
+    private async Task SynchronizePlaybackAsync()
+    {
+        if (!_room.Connected || _roomPlayer == null || _playerLoading) return;
+        if (_room.IsHost)
+        {
+            await PublishHostPlaybackAsync(_roomPlayer, _lifetime.Token).ConfigureAwait(true);
+            Status = "已将当前播放状态发送到房间。";
+        }
+        else
+        {
+            await CorrectLatestPlaybackAsync(_lifetime.Token, forceSync: true).ConfigureAwait(true);
+            Status = "已与房主播放进度同步。";
         }
     }
 
@@ -1403,10 +1443,11 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
         return _player != null;
     }
 
-    private async Task CorrectPlaybackAsync(WatchRoomSnapshot snapshot, CancellationToken cancellationToken)
+    private async Task CorrectPlaybackAsync(WatchRoomSnapshot snapshot, CancellationToken cancellationToken,
+        bool forceSync = false)
     {
         var player = _roomPlayer;
-        if (player == null || !SameMedia(_roomPage, snapshot.Media))
+        if (player == null || _playerLoading || !SameMedia(_roomPage, snapshot.Media))
         {
             return;
         }
@@ -1424,10 +1465,9 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
         var actual = await player.GetPositionAsync(cancellationToken).ConfigureAwait(true);
         var drift = expected - actual;
         SyncStatus = $"影片时间差 {Math.Abs(drift):0.00} 秒 · 往返延迟 {_room.RoundTripMilliseconds:0} 毫秒";
-        var shouldPause = !snapshot.Playing || snapshot.WaitingForReady
-            || snapshot.Host?.Online != true;
         var currentRate = await player.GetSpeedAsync(cancellationToken).ConfigureAwait(true);
-        var correction = CreatePlaybackCorrection(_room.IsHost, snapshot, drift, currentRate);
+        var correction = CreatePlaybackCorrection(_room.IsHost, snapshot, drift, currentRate,
+            forceSync || snapshot.SyncRevision > _lastAppliedSyncRevision);
         if (correction.Seek)
         {
             await player.SeekAsync(expected, cancellationToken).ConfigureAwait(true);
@@ -1442,18 +1482,20 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
         {
             await player.SetPausedAsync(correction.ShouldPause, cancellationToken).ConfigureAwait(true);
         }
+        _lastAppliedSyncRevision = snapshot.SyncRevision;
     }
 
     internal static PlaybackCorrection CreatePlaybackCorrection(
         bool isHost,
         WatchRoomSnapshot snapshot,
         double drift,
-        double currentRate)
+        double currentRate,
+        bool forceSync = false)
     {
         var shouldPause = !snapshot.Playing || snapshot.WaitingForReady
             || snapshot.Host?.Online != true;
         var targetRate = snapshot.Rate;
-        if (!isHost && !shouldPause && Math.Abs(drift) is > 0.45 and <= 1.5)
+        if (!isHost && !forceSync && !shouldPause && Math.Abs(drift) is > 0.45 and <= 1.5)
         {
             // A small rate adjustment avoids repeatedly jumping a few frames for guests.
             targetRate = Math.Clamp(snapshot.Rate + drift * 0.08,
@@ -1461,8 +1503,8 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
         }
 
         return new PlaybackCorrection(
-            Seek: !isHost && Math.Abs(drift) > 1.5,
-            SetRate: !isHost && Math.Abs(currentRate - targetRate) > 0.015,
+            Seek: !isHost && (forceSync || Math.Abs(drift) > 1.5),
+            SetRate: !isHost && (forceSync || Math.Abs(currentRate - targetRate) > 0.015),
             TargetRate: targetRate,
             ShouldPause: shouldPause);
     }
@@ -1589,7 +1631,7 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
             {
                 await Task.Delay(1000, cancellationToken).ConfigureAwait(true);
                 var player = _player;
-                if (player == null)
+                if (player == null || _playerLoading)
                 {
                     continue;
                 }
@@ -1665,7 +1707,7 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
         }
     }
 
-    private async Task CorrectLatestPlaybackAsync(CancellationToken cancellationToken)
+    private async Task CorrectLatestPlaybackAsync(CancellationToken cancellationToken, bool forceSync = false)
     {
         await _snapshotGate.WaitAsync(cancellationToken).ConfigureAwait(true);
         try
@@ -1673,7 +1715,7 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
             if (_lastSnapshot is { } snapshot && _room.Connected
                 && (_pendingHostMediaKey == null || SameMedia(_roomPage, snapshot.Media)))
             {
-                await CorrectPlaybackAsync(snapshot, cancellationToken).ConfigureAwait(true);
+                await CorrectPlaybackAsync(snapshot, cancellationToken, forceSync).ConfigureAwait(true);
             }
         }
         finally
@@ -1733,6 +1775,7 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
         _roomPlayer?.Dispose();
         _roomPlayer = null;
         _lastBuffering = false;
+        _lastAppliedSyncRevision = -1;
     }
 
     private static bool IsRoutineError(Exception error)

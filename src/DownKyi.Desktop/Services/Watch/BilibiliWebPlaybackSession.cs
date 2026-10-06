@@ -13,13 +13,51 @@ using DownKyi.Presentation;
 namespace DownKyi.Services.Watch;
 
 internal readonly record struct BilibiliPlayerIdentity(Uri? PageUri, long Cid);
+internal readonly record struct BilibiliPlaybackState(double PositionSeconds, double Rate, bool Playing);
 
 // Use Bilibili's normal playback page. Its HTML video supplies the room's
 // position and playback controls for both bangumi and ordinary videos.
 internal sealed class BilibiliWebPlaybackSession : IDisposable
 {
+    private const string ViewportScript = """
+        (() => {
+            if (!document.body) return;
+            if (!document.getElementById('bili-cinema-viewport-style')) {
+                const style = document.createElement('style');
+                style.id = 'bili-cinema-viewport-style';
+                style.textContent = `
+                    [data-bili-cinema-player] { display: flex !important; flex-direction: column !important; }
+                    [data-bili-cinema-player] .bpx-player-primary-area {
+                        flex: 1 1 0 !important; min-height: 0 !important; height: auto !important;
+                    }
+                    [data-bili-cinema-player] .bpx-player-sending-area { flex: 0 0 auto !important; }
+                    html[data-bili-cinema-fullscreen] .bpx-player-sending-area,
+                    html[data-bili-cinema-fullscreen] .bilibili-player-video-sendbar {
+                        display: none !important;
+                    }
+                    html[data-bili-cinema-fullscreen], html[data-bili-cinema-fullscreen] body {
+                        background: #000 !important;
+                    }
+                `;
+                (document.head || document.documentElement).appendChild(style);
+            }
+            if (!window.__biliCinemaUpdateViewport) {
+                window.__biliCinemaUpdateViewport = () => {
+                    const fullscreen = !!(window.__biliCinemaAppFullscreen || document.fullscreenElement);
+                    const before = document.documentElement.hasAttribute('data-bili-cinema-fullscreen');
+                    document.documentElement.toggleAttribute('data-bili-cinema-fullscreen', fullscreen);
+                    if (before !== fullscreen) {
+                        window.__biliCinemaLayoutSignature = null;
+                        requestAnimationFrame(() => window.dispatchEvent(new Event('resize')));
+                    }
+                };
+                document.addEventListener('fullscreenchange', window.__biliCinemaUpdateViewport);
+            }
+            window.__biliCinemaUpdateViewport();
+        })();
+        """;
     private const string MiniPlayerSelector = ".bpx-player-miniplayer, .bpx-player-miniplayer-container, .bpx-player-miniplayer-wrap, .bilibili-player-miniplayer, .bilibili-player-miniplayer-container";
-    private const string Video = "(() => { const mini = '" + MiniPlayerSelector + "'; const videos = [...document.querySelectorAll('#bilibili-player video, #bilibiliPlayer video, .bpx-player-container video, video')].filter(video => { const rect = video.getBoundingClientRect(); const style = getComputedStyle(video); return rect.width >= 160 && rect.height >= 90 && style.display !== 'none' && style.visibility !== 'hidden' && Number(style.opacity) > 0; }); const byArea = (left, right) => { const a = left.getBoundingClientRect(); const b = right.getBoundingClientRect(); return b.width * b.height - a.width * a.height; }; return videos.filter(video => !video.closest(mini)).sort(byArea)[0] || videos.filter(video => video.closest(mini)).sort(byArea)[0] || null; })()";
+    private const string Video = "(() => { const mini = '" + MiniPlayerSelector + "'; const videos = [...document.querySelectorAll('#bilibili-player video, #bilibiliPlayer video, .bpx-player-container video, video')].filter(video => { const rect = video.getBoundingClientRect(); const style = getComputedStyle(video); return !video.closest(mini) && rect.width >= 160 && rect.height >= 90 && style.display !== 'none' && style.visibility !== 'hidden' && Number(style.opacity) > 0; }); const byArea = (left, right) => { const a = left.getBoundingClientRect(); const b = right.getBoundingClientRect(); return b.width * b.height - a.width * a.height; }; return videos.sort(byArea)[0] || null; })()";
     private const string FocusPlayerScript = $$"""
         (() => {
             const video = {{Video}};
@@ -31,9 +69,7 @@ internal sealed class BilibiliWebPlaybackSession : IDisposable
             // #bilibili-player can also contain Bilibili's detached mini-player;
             // stretching that outer shell leaves the video floating at mini size.
             const miniPlayerSelector = '{{MiniPlayerSelector}}';
-            const miniPlayer = video.closest(miniPlayerSelector);
-            let player = miniPlayer
-                || video.closest('.bpx-player-container, .bilibili-player')
+            let player = video.closest('.bpx-player-container, .bilibili-player')
                 || video.closest('#bilibili-player, #bilibiliPlayer')
                 || video.closest('.player-container, .player-wrap');
             if (!player) {
@@ -48,6 +84,8 @@ internal sealed class BilibiliWebPlaybackSession : IDisposable
             }
             if (!player) return false;
             window.__biliCinemaPlayerRoot = player;
+            player.setAttribute('data-bili-cinema-player', '');
+            {{ViewportScript}}
             if (!video.__biliCinemaBound) {
                 video.__biliCinemaBound = true;
                 for (const type of ['play', 'pause', 'seeked', 'ratechange']) {
@@ -94,8 +132,10 @@ internal sealed class BilibiliWebPlaybackSession : IDisposable
                 for (const mini of document.querySelectorAll(
                     miniPlayerSelector)) {
                     if (mini !== activePlayer && !mini.contains(activePlayer)) {
-                        mini.style.setProperty('display', 'none', 'important');
-                        mini.style.setProperty('pointer-events', 'none', 'important');
+                        if (mini.style.getPropertyValue('display') !== 'none')
+                            mini.style.setProperty('display', 'none', 'important');
+                        if (mini.style.getPropertyValue('pointer-events') !== 'none')
+                            mini.style.setProperty('pointer-events', 'none', 'important');
                     }
                 }
             };
@@ -132,10 +172,12 @@ internal sealed class BilibiliWebPlaybackSession : IDisposable
                             }
                         }
                     }
+                    // Compare CSSOM-normalized values. Comparing '0' with '0px'
+                    // or '#000' with 'rgb(...)' makes this observer trigger itself.
                     for (const [name, value] of Object.entries({
-                        position: 'fixed', inset: '0', width: '100vw', height: '100vh',
-                        'max-width': 'none', 'max-height': 'none', margin: '0',
-                        'z-index': '2147483647', visibility: 'visible', background: '#000', transform: 'none'
+                        position: 'fixed', inset: '0px', width: '100vw', height: '100vh',
+                        'max-width': 'none', 'max-height': 'none', margin: '0px',
+                        'z-index': '2147483647', visibility: 'visible', background: 'rgb(0, 0, 0)', transform: 'none'
                     })) {
                         if (root.style.getPropertyValue(name) !== value
                             || root.style.getPropertyPriority(name) !== 'important') {
@@ -153,14 +195,47 @@ internal sealed class BilibiliWebPlaybackSession : IDisposable
                 for (const [name, value] of Object.entries({
                     width: '100%', height: '100%', 'max-width': 'none', 'max-height': 'none',
                     margin: '0', 'object-fit': 'contain'
-                })) kept.style.setProperty(name, value, 'important');
+                })) {
+                    if (name === 'height' && kept.classList.contains('bpx-player-primary-area')) {
+                        kept.style.removeProperty('height');
+                        continue;
+                    }
+                    kept.style.setProperty(name, value, 'important');
+                }
             }
             for (const [name, value] of Object.entries({
-                position: 'fixed', inset: '0', width: '100vw', height: '100vh',
-                'max-width': 'none', 'max-height': 'none', margin: '0',
-                'z-index': '2147483647', visibility: 'visible', background: '#000', transform: 'none'
+                position: 'fixed', inset: '0px', width: '100vw', height: '100vh',
+                'max-width': 'none', 'max-height': 'none', margin: '0px',
+                'z-index': '2147483647', visibility: 'visible', background: 'rgb(0, 0, 0)', transform: 'none'
             })) player.style.setProperty(name, value, 'important');
-            return true;
+            // Bilibili caches its control-bar geometry. Changing only CSS while
+            // WebView2 is hidden does not trigger the same layout pass as F/fullscreen.
+            // Notify the site once per actual viewport/root change, then wait for
+            // the controls to mount before declaring the player ready.
+            if (window.__biliCinemaLayoutRoot !== player) {
+                window.__biliCinemaResizeObserver?.disconnect();
+                window.__biliCinemaLayoutRoot = player;
+                window.__biliCinemaLayoutSignature = null;
+                window.__biliCinemaResizeObserver = new ResizeObserver(() => {
+                    window.__biliCinemaLayoutSignature = null;
+                });
+                window.__biliCinemaResizeObserver.observe(player);
+            }
+            const box = player.getBoundingClientRect();
+            const controls = player.querySelector('.bpx-player-control-wrap, .bilibili-player-video-control');
+            const signature = [window.innerWidth, window.innerHeight, box.width, box.height, !!controls].join(':');
+            if (window.__biliCinemaLayoutSignature !== signature) {
+                window.__biliCinemaLayoutSignature = signature;
+                window.__biliCinemaLayoutReady = false;
+                requestAnimationFrame(() => {
+                    window.dispatchEvent(new Event('resize'));
+                    requestAnimationFrame(() => {
+                        if (window.__biliCinemaLayoutSignature === signature)
+                            window.__biliCinemaLayoutReady = true;
+                    });
+                });
+            }
+            return !!controls;
         })()
         """;
     private readonly NativeWebView _browser;
@@ -177,6 +252,9 @@ internal sealed class BilibiliWebPlaybackSession : IDisposable
     }
 
     public bool HasExited => _disposed || _failed;
+
+    internal static string BuildViewportScript(bool fullscreen) =>
+        "window.__biliCinemaAppFullscreen = " + (fullscreen ? "true;" : "false;") + ViewportScript;
 
     public static async Task<BilibiliWebPlaybackSession> StartAsync(
         NativeWebView browser, VideoPage page, bool startPaused, CancellationToken cancellationToken)
@@ -230,6 +308,7 @@ internal sealed class BilibiliWebPlaybackSession : IDisposable
         try
         {
             browser.Navigate(playerUrl);
+            var revealed = false;
             for (var attempt = 0; attempt < 600; attempt++)
             {
                 cancellationToken.ThrowIfCancellationRequested();
@@ -246,6 +325,25 @@ internal sealed class BilibiliWebPlaybackSession : IDisposable
                         && string.Equals((await session.InvokeAsync(FocusPlayerScript, cancellationToken)
                             .ConfigureAwait(true)).Trim('"'), "true", StringComparison.OrdinalIgnoreCase))
                     {
+                        if (!revealed)
+                        {
+                            // Showing the native surface can update its client size.
+                            // Keep the focused page and remeasure after that transition.
+                            await session.SetPausedAsync(startPaused, cancellationToken).ConfigureAwait(true);
+                            browser.IsVisible = true;
+                            revealed = true;
+                            await session.InvokeAsync("window.__biliCinemaLayoutSignature = null",
+                                cancellationToken).ConfigureAwait(true);
+                            await Task.Delay(100, cancellationToken).ConfigureAwait(true);
+                            continue;
+                        }
+                        if (!string.Equals((await session.InvokeAsync(
+                            "window.__biliCinemaLayoutReady === true", cancellationToken)
+                            .ConfigureAwait(true)).Trim('"'), "true", StringComparison.OrdinalIgnoreCase))
+                        {
+                            await Task.Delay(100, cancellationToken).ConfigureAwait(true);
+                            continue;
+                        }
                         await session.SetPausedAsync(startPaused, cancellationToken).ConfigureAwait(true);
                         if (startPaused)
                         {
@@ -262,7 +360,6 @@ internal sealed class BilibiliWebPlaybackSession : IDisposable
                         {
                             await session.SetPausedAsync(true, cancellationToken).ConfigureAwait(true);
                         }
-                        browser.IsVisible = true;
                         return session;
                     }
                     if (attempt % 20 == 0)
@@ -300,6 +397,20 @@ internal sealed class BilibiliWebPlaybackSession : IDisposable
         await InvokeAsync(FocusPlayerScript, cancellationToken).ConfigureAwait(true);
         return ParseNumber(await InvokeAsync($"{Video}?.currentTime ?? 0", cancellationToken)
             .ConfigureAwait(true));
+    }
+
+    public async Task<BilibiliPlaybackState> GetPlaybackStateAsync(CancellationToken cancellationToken)
+    {
+        var json = await InvokeAsync($"(() => {{ const v = {Video}; if (!v) return null; return {{ position: v.currentTime, rate: v.playbackRate, playing: !v.paused }}; }})()",
+            cancellationToken).ConfigureAwait(true);
+        using var document = JsonDocument.Parse(json);
+        var root = document.RootElement;
+        if (root.ValueKind != JsonValueKind.Object)
+        {
+            throw new InvalidOperationException("播放器状态暂不可用，请稍后重试。");
+        }
+        return new BilibiliPlaybackState(root.GetProperty("position").GetDouble(),
+            root.GetProperty("rate").GetDouble(), root.GetProperty("playing").GetBoolean());
     }
 
     public async Task<BilibiliPlayerIdentity> GetPageIdentityAsync(CancellationToken cancellationToken)

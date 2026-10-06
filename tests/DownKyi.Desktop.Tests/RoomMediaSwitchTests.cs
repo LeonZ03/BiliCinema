@@ -7,6 +7,61 @@ namespace DownKyi.Desktop.Tests;
 public sealed class RoomMediaSwitchTests
 {
     [Fact]
+    public void RestoredHostPositionIsPublishedBeforeBothPlayersBecomeReady()
+    {
+        using var rooms = new RoomCoordinator();
+        using var hostSocket = new TestWebSocket();
+        var host = new ClientConnection(hostSocket);
+        Attach(rooms, host, """{"type":"create"}""");
+        var room = Assert.IsType<Room>(host.Room);
+        Handle(rooms, host, """{"type":"select","media":{"episodeId":101}}""");
+        using var guestSocket = new TestWebSocket();
+        var guest = new ClientConnection(guestSocket);
+        Attach(rooms, guest, $$"""{"type":"join","roomCode":"{{room.Code}}"}""");
+
+        // The host page resumes its own history while the guest page starts at zero.
+        Handle(rooms, host, """{"type":"sync","media":{"episodeId":101},"positionSeconds":1234.5,"rate":1.25,"playing":true}""");
+        Assert.False(room.Playing);
+        Assert.True(room.StartRequested);
+        Handle(rooms, host, """{"type":"ready","ready":true}""");
+        Handle(rooms, guest, """{"type":"ready","ready":true}""");
+
+        using var snapshot = JsonDocument.Parse(WireProtocol.Encode(room.Snapshot()));
+        Assert.InRange(snapshot.RootElement.GetProperty("positionSeconds").GetDouble(), 1234.5, 1236);
+        Assert.Equal(1.25, snapshot.RootElement.GetProperty("rate").GetDouble());
+        Assert.True(snapshot.RootElement.GetProperty("playing").GetBoolean());
+        Assert.Equal(1, snapshot.RootElement.GetProperty("syncRevision").GetInt64());
+
+        Handle(rooms, host, """{"type":"sync","media":{"episodeId":101},"positionSeconds":42,"rate":1,"playing":false}""");
+        Assert.Equal(42, room.PositionSeconds);
+        Assert.False(room.Playing);
+        Assert.False(room.StartRequested);
+        Assert.Equal(2, room.SyncRevision);
+    }
+
+    [Fact]
+    public void GuestsAndStaleMediaCannotReplaceHostPlaybackState()
+    {
+        using var rooms = new RoomCoordinator();
+        using var hostSocket = new TestWebSocket();
+        var host = new ClientConnection(hostSocket);
+        Attach(rooms, host, """{"type":"create"}""");
+        var room = Assert.IsType<Room>(host.Room);
+        Handle(rooms, host, """{"type":"select","media":{"episodeId":102}}""");
+        using var guestSocket = new TestWebSocket();
+        var guest = new ClientConnection(guestSocket);
+        Attach(rooms, guest, $$"""{"type":"join","roomCode":"{{room.Code}}"}""");
+
+        Assert.Throws<RoomProtocolException>(() => Handle(rooms, guest,
+            """{"type":"sync","media":{"episodeId":102},"positionSeconds":42,"rate":1,"playing":true}"""));
+        Assert.Throws<RoomProtocolException>(() => Handle(rooms, host,
+            """{"type":"sync","media":{"episodeId":101},"positionSeconds":42,"rate":1,"playing":true}"""));
+        Assert.Equal(0, room.PositionSeconds);
+        Assert.Equal(0, room.SyncRevision);
+        Assert.False(room.Playing);
+    }
+
+    [Fact]
     public void HostCanSelectAnotherVideoWithoutRecreatingRoom()
     {
         using var rooms = new RoomCoordinator();

@@ -31,7 +31,8 @@ internal sealed record WireMessage(
     string? Nonce = null,
     long? ClientTimeUnixMs = null,
     string? ChatNickname = null,
-    string? ChatText = null);
+    string? ChatText = null,
+    bool? Playing = null);
 
 internal static class WireProtocol
 {
@@ -131,6 +132,16 @@ internal static class WireProtocol
             case "seek":
                 RequireFields(root, "type", "positionSeconds");
                 return new(type, PositionSeconds: RequiredNumber(root, "positionSeconds", 0, 86400));
+            case "sync":
+                RequireFields(root, "type", "media", "positionSeconds", "rate", "playing");
+                if (!root.TryGetProperty("media", out var syncMedia))
+                {
+                    throw new RoomProtocolException("invalid_media");
+                }
+                return new(type, Media: ParseMedia(syncMedia),
+                    PositionSeconds: RequiredNumber(root, "positionSeconds", 0, 86400),
+                    Rate: RequiredNumber(root, "rate", 0.25, 3),
+                    Playing: RequiredBoolean(root, "playing"));
             case "rate":
                 RequireFields(root, "type", "rate");
                 return new(type, Rate: RequiredNumber(root, "rate", 0.25, 3));

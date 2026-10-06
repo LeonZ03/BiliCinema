@@ -264,6 +264,7 @@ internal sealed partial class WatchWindow : Window
             ToggleFullscreen();
             _fullscreenFromBrowser = false;
             args.Handled = true;
+            await RefreshPlayerViewportAsync().ConfigureAwait(true);
             if (exitBrowserFullscreen)
             {
                 try
@@ -342,12 +343,28 @@ internal sealed partial class WatchWindow : Window
         {
             try
             {
+                await RefreshPlayerViewportAsync().ConfigureAwait(true);
                 await RefreshChatOverlayAsync(chatMissing).ConfigureAwait(true);
             }
             finally
             {
                 _checkingFullscreen = false;
             }
+        }
+    }
+
+    private async Task RefreshPlayerViewportAsync()
+    {
+        if (_windowClosing || !_viewModel.ShowRoom) return;
+        try
+        {
+            await CurrentBrowser.InvokeScript(
+                BilibiliWebPlaybackSession.BuildViewportScript(_isFullscreen)).ConfigureAwait(true);
+        }
+        catch (Exception error) when (error is InvalidOperationException
+            or ObjectDisposedException or System.Runtime.InteropServices.COMException)
+        {
+            // Navigation replaces the document; the next layout tick reapplies its mode.
         }
     }
 

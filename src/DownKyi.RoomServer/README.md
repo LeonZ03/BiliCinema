@@ -56,10 +56,18 @@ Only the host may send the authority commands:
 {"type":"pause"}
 {"type":"seek","positionSeconds":120.5}
 {"type":"rate","rate":1.25}
+{"type":"sync","media":{"episodeId":12345},"positionSeconds":120.5,"rate":1,"playing":false}
 {"type":"close"}
 ```
 
 The `media` object accepts positive `episodeId`, `aid`, or `cid` integers and/or a 12-character `bvid` starting with `BV`. At least one identifier is required. No URL, title, account name, or extra fields are accepted. Seek position is 0–86400 seconds; rate is 0.25–3. A selection resets both members' ready state and pauses the room. The host may send `play` before both peers are ready: `waitingForReady` then becomes true, and the room starts when both are online, ready, and not buffering. A peer reporting buffering pauses both; playback resumes when both clear buffering and remain ready. Disconnection pauses the room and clears the pending start, so the host explicitly starts again after reconnection.
+
+`sync` atomically publishes the host player's actual position, rate and play
+intent after page initialization/history restoration, or on a manual sync. Its
+media identity must equal the selected identity; stale-media samples and guest
+commands are rejected. The snapshot's `syncRevision` increases for each accepted
+sample so guests align immediately even when drift is below the normal tolerance.
+Readiness and buffering still gate playback; synchronization cannot bypass them.
 
 Both members may send:
 

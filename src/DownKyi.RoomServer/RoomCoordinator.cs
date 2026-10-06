@@ -70,6 +70,7 @@ internal sealed class Room(string code, string hostClientId)
     public bool StartRequested { get; set; }
     public bool Closed { get; set; }
     public long Version { get; set; } = 1;
+    public long SyncRevision { get; set; }
     public long AnchorTimestamp { get; set; } = Stopwatch.GetTimestamp();
 
     public double CurrentPosition()
@@ -116,6 +117,7 @@ internal sealed class Room(string code, string hostClientId)
     public object Snapshot() => new
     {
         version = Version,
+        syncRevision = SyncRevision,
         media = Media,
         positionSeconds = CurrentPosition(),
         playing = Playing,
@@ -305,6 +307,11 @@ internal sealed class RoomCoordinator : BackgroundService
                     room.Settle();
                     room.Rate = message.Rate!.Value;
                     break;
+                case "sync":
+                    RequireHost(isHost);
+                    RequireMedia(room);
+                    SynchronizePlayback(room, message);
+                    break;
                 case "ready":
                     RequireMedia(room);
                     member!.Ready = message.Ready!.Value;
@@ -346,6 +353,23 @@ internal sealed class RoomCoordinator : BackgroundService
             room.Version++;
             room.Broadcast();
         }
+    }
+
+    private static void SynchronizePlayback(Room room, WireMessage message)
+    {
+        if (room.Media != message.Media)
+        {
+            throw new RoomProtocolException("media_changed");
+        }
+        // Commit one authoritative player sample before announcing readiness.
+        // A web player may restore history after the room selected this media.
+        room.PositionSeconds = message.PositionSeconds!.Value;
+        room.Rate = message.Rate!.Value;
+        room.AnchorTimestamp = Stopwatch.GetTimestamp();
+        room.Playing = false;
+        room.StartRequested = message.Playing!.Value;
+        room.StartIfReady();
+        room.SyncRevision++;
     }
 
     public static void Detach(ClientConnection connection)
