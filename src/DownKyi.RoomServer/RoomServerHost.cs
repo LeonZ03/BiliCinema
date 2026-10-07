@@ -87,20 +87,43 @@ internal static class RoomServerHost
             {
                 RoomCoordinator.Detach(connection);
                 connection.Complete();
-                socket.Abort();
-                if (sender is not null)
+                using var closeDeadline = new CancellationTokenSource(TimeSpan.FromSeconds(3));
+                try
                 {
-                    try
+                    // Preserve queued protocol/error frames before closing. Abort
+                    // immediately after SendAsync can turn them into a transport error.
+                    if (sender is not null)
                     {
-                        await sender.ConfigureAwait(false);
+                        await sender.WaitAsync(closeDeadline.Token).ConfigureAwait(false);
                     }
-                    catch (OperationCanceledException)
+                    if (socket.State is WebSocketState.Open or WebSocketState.CloseReceived)
                     {
-                        // The send loop was canceled during connection teardown.
+                        await socket.CloseAsync(WebSocketCloseStatus.NormalClosure,
+                            "Room connection ended", closeDeadline.Token).ConfigureAwait(false);
                     }
-                    catch (WebSocketException)
+                }
+                catch (OperationCanceledException)
+                {
+                    // A peer that does not complete closure cannot keep the handler alive.
+                }
+                catch (WebSocketException)
+                {
+                    // A broken connection is forcefully released below.
+                }
+                finally
+                {
+                    socket.Abort();
+                    if (sender is not null)
                     {
-                        // The socket closed while the send loop was finishing.
+                        try { await sender.ConfigureAwait(false); }
+                        catch (OperationCanceledException)
+                        {
+                            // The sender stopped when the connection was canceled.
+                        }
+                        catch (WebSocketException)
+                        {
+                            // Abort released a sender still writing to the peer.
+                        }
                     }
                 }
             }

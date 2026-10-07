@@ -31,6 +31,20 @@
 repository state 的 runner。不要直接新增平行的 `dotnet test` / `vstest`
 repository entry。
 
+## 房间网络验证
+
+房间网络验证使用完整类名 `DownKyi.Desktop.Tests.RoomTransportTests`：默认仅跑本机
+WebSocket 握手、关闭重建和网关拒绝场景。在线 Cloudflare 场景仅在
+`BILICINEMA_LIVE_TUNNEL_TEST=1` 时运行，CI 默认跳过。在线验证需要空闲的 5077 端口，
+以及构建清单中的 cloudflared 位于 PATH（源码构建缓存为
+`src/DownKyi.Desktop/EmbeddedTools`）；它创建两条临时隧道并验证访客加入，结束时释放
+服务和进程，不使用 B 站账号。
+
+```powershell
+pwsh ./script/test-project.ps1 -ProjectPath tests/DownKyi.Desktop.Tests/DownKyi.Desktop.Tests.csproj `
+  -ClassName DownKyi.Desktop.Tests.RoomTransportTests -Configuration Release -NoRestore -NoBuild
+```
+
 ## Lightweight Flight Recorder
 
 CentralTestRunner 從 test process 啟動時記錄 slice identity、root PID 與

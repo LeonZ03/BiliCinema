@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Net;
 using System.Net.WebSockets;
 using System.Text.Json;
 using System.Threading;
@@ -16,7 +17,7 @@ internal sealed class WatchRoomClient : IAsyncDisposable
     private ClientWebSocket? _socket;
     private CancellationTokenSource? _receiveCancellation;
     private Task? _receiveTask;
-    private bool _receiveEnded;
+    private bool _receiveEnded = true;
     private readonly SemaphoreSlim _sendGate = new(1, 1);
     private long _lastPingUnixMs;
 
@@ -34,6 +35,7 @@ internal sealed class WatchRoomClient : IAsyncDisposable
     public double RoundTripMilliseconds { get; private set; }
     public bool HasClockEstimate { get; private set; }
     public bool Connected => !_receiveEnded && _socket?.State == WebSocketState.Open;
+    public CancellationToken ConnectionCancellation => _receiveCancellation?.Token ?? new CancellationToken(true);
 
     public async Task<WatchRoomSnapshot> ConnectAsync(
         string serviceAddress,
@@ -52,13 +54,17 @@ internal sealed class WatchRoomClient : IAsyncDisposable
             ? ClientId
             : null;
         await CloseSocketAsync().ConfigureAwait(false);
+        _receiveEnded = true;
         var socket = new ClientWebSocket();
         socket.Options.KeepAliveInterval = TimeSpan.FromSeconds(15);
-        await socket.ConnectAsync(uri, cancellationToken).ConfigureAwait(false);
+        socket.Options.CollectHttpResponseDetails = true;
         _socket = socket;
-        _receiveCancellation = new CancellationTokenSource();
+        using var deadline = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        deadline.CancelAfter(TimeSpan.FromSeconds(20));
         try
         {
+            await socket.ConnectAsync(uri, deadline.Token).ConfigureAwait(false);
+            _receiveCancellation = new CancellationTokenSource();
             var requestedRoom = create ? null : roomCode ?? RoomCode;
             if (!create && string.IsNullOrWhiteSpace(requestedRoom))
             {
@@ -67,19 +73,19 @@ internal sealed class WatchRoomClient : IAsyncDisposable
 
             if (create)
             {
-                await SendAsync(new { type = "create" }, cancellationToken).ConfigureAwait(false);
+                await SendAsync(new { type = "create" }, deadline.Token).ConfigureAwait(false);
             }
             else if (reconnectClientId != null)
             {
                 await SendAsync(new { type = "join", roomCode = requestedRoom, clientId = reconnectClientId },
-                    cancellationToken).ConfigureAwait(false);
+                    deadline.Token).ConfigureAwait(false);
             }
             else
             {
-                await SendAsync(new { type = "join", roomCode = requestedRoom }, cancellationToken)
+                await SendAsync(new { type = "join", roomCode = requestedRoom }, deadline.Token)
                     .ConfigureAwait(false);
             }
-            using var welcome = await ReceiveOneAsync(socket, cancellationToken).ConfigureAwait(false);
+            using var welcome = await ReceiveOneAsync(socket, deadline.Token).ConfigureAwait(false);
             var type = welcome.RootElement.GetProperty("type").GetString();
             if (type != "welcome")
             {
@@ -109,6 +115,24 @@ internal sealed class WatchRoomClient : IAsyncDisposable
             _receiveEnded = false;
             _receiveTask = ReceiveLoopAsync(_receiveCancellation.Token);
             return snapshot;
+        }
+        catch (OperationCanceledException error) when (!cancellationToken.IsCancellationRequested)
+        {
+            await CloseSocketAsync().ConfigureAwait(false);
+            throw new InvalidOperationException("连接房间超时，请检查网络或让房主重新创建房间并分享新邀请。", error);
+        }
+        catch (WebSocketException error)
+        {
+            var status = socket.HttpStatusCode;
+            await CloseSocketAsync().ConfigureAwait(false);
+            throw new InvalidOperationException(status switch
+            {
+                HttpStatusCode.BadGateway or HttpStatusCode.ServiceUnavailable or HttpStatusCode.GatewayTimeout
+                    => $"房间公网通道暂不可用（HTTP {(int)status}），请房主重新创建房间并分享新邀请。",
+                HttpStatusCode.Forbidden or HttpStatusCode.Unauthorized
+                    => $"房间连接被拒绝（HTTP {(int)status}），请检查双方的网络或代理设置。",
+                _ => "无法连接房间通道，请检查网络和邀请地址；若持续失败，请房主重新创建房间。"
+            }, error);
         }
         catch
         {
@@ -147,6 +171,26 @@ internal sealed class WatchRoomClient : IAsyncDisposable
     {
         _lastPingUnixMs = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
         return SendAsync(new { type = "ping", clientTimeUnixMs = _lastPingUnixMs }, cancellationToken);
+    }
+
+    public async Task CloseRoomAsync(CancellationToken cancellationToken)
+    {
+        if (!IsHost || !Connected || _receiveTask == null)
+            throw new InvalidOperationException("当前没有可结束的房主房间。");
+        var receiving = _receiveTask;
+        using var deadline = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        deadline.CancelAfter(TimeSpan.FromSeconds(5));
+        try
+        {
+            await SendAsync(new { type = "close" }, deadline.Token).ConfigureAwait(false);
+            // Wait for the server's closed frame before shutting down the route.
+            await receiving.WaitAsync(deadline.Token).ConfigureAwait(false);
+            if (RoomCode != null) throw new InvalidOperationException("房间关闭确认未收到，连接已断开。");
+        }
+        catch (OperationCanceledException error) when (!cancellationToken.IsCancellationRequested)
+        {
+            throw new InvalidOperationException("房间关闭确认超时，将释放本机房间服务。", error);
+        }
     }
 
     public async Task LeaveAsync()

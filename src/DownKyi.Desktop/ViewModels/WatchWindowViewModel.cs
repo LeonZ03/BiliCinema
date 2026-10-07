@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Globalization;
 using System.Linq;
 using System.Net.Http;
@@ -16,6 +17,7 @@ using DownKyi.Application.Desktop;
 using DownKyi.Core.BiliApi.BiliUtils;
 using DownKyi.Core.BiliApi.Login;
 using DownKyi.Core.Settings;
+using DownKyi.Models;
 using DownKyi.Presentation;
 using DownKyi.RoomServer;
 using DownKyi.Services.Account;
@@ -39,6 +41,9 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
     private readonly QuickRoomTunnel _quickTunnel = new();
     private readonly CancellationTokenSource _lifetime = new();
     private readonly SemaphoreSlim _snapshotGate = new(1, 1);
+    private readonly SemaphoreSlim _roomOperationGate = new(1, 1);
+    private CancellationTokenSource? _roomReconnectCancellation;
+    private CancellationTokenSource? _roomSessionCancellation;
     private readonly Task _monitorTask;
     private CancellationTokenSource? _loginCancellation;
     private BilibiliWebPlaybackSession? _roomPlayer;
@@ -63,6 +68,32 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
     private bool _disposed;
     private bool _isPreparing;
     public bool IsPreparing { get => _isPreparing; private set => SetProperty(ref _isPreparing, value); }
+    private readonly Stopwatch _roomCreationClock = new();
+    private bool _isCreatingRoom;
+    private bool _showRoomCreationProgress;
+    private int _roomCreationPercentage;
+    private string _roomCreationStep = string.Empty;
+    private int _roomCreationElapsedSeconds;
+    public string VersionDisplay { get; } = $"v{new AppInfo().VersionName}";
+    public bool ShowRoomCreationProgress
+    {
+        get => _showRoomCreationProgress;
+        private set => SetProperty(ref _showRoomCreationProgress, value);
+    }
+    public int RoomCreationPercentage
+    {
+        get => _roomCreationPercentage;
+        private set
+        {
+            if (SetProperty(ref _roomCreationPercentage, value)) OnPropertyChanged(nameof(RoomCreationSummary));
+        }
+    }
+    public string RoomCreationStep
+    {
+        get => _roomCreationStep;
+        private set => SetProperty(ref _roomCreationStep, value);
+    }
+    public string RoomCreationSummary => $"创建房间 {RoomCreationPercentage}% · 已用 {_roomCreationElapsedSeconds} 秒";
     private bool _downloadLoaded;
     private string _connectAddress = "ws://127.0.0.1:5077/ws";
     private string? _roomParsedInput;
@@ -260,11 +291,12 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
         ParseCommand = new AsyncRelayCommand(ParseAsync);
         SeekCommand = new AsyncRelayCommand(() => RunControlSafelyAsync(SeekAsync));
         RateCommand = new AsyncRelayCommand(() => RunControlSafelyAsync(SetRateAsync));
-        CreateRoomCommand = new AsyncRelayCommand(CreateRoomAsync);
-        JoinRoomCommand = new AsyncRelayCommand(JoinRoomAsync);
+        CreateRoomCommand = new AsyncRelayCommand(() => RunRoomOperationAsync(CreateRoomAsync, creating: true));
+        JoinRoomCommand = new AsyncRelayCommand(() => RunRoomOperationAsync(JoinRoomAsync));
         CopyInviteCommand = new AsyncRelayCommand(CopyInviteAsync);
-        LeaveRoomCommand = new AsyncRelayCommand(LeaveRoomAsync);
-        EndRoomCommand = new AsyncRelayCommand(EndRoomAsync);
+        LeaveRoomCommand = new AsyncRelayCommand(() => RunRoomOperationAsync(LeaveRoomAsync));
+        EndRoomCommand = new AsyncRelayCommand(() => ValidateEndRoomAuthority()
+            ? RunRoomOperationAsync(EndRoomAsync) : Task.CompletedTask);
         SyncPlaybackCommand = new AsyncRelayCommand(() => RunControlSafelyAsync(SynchronizePlaybackAsync));
         SaveRoomNicknameCommand = new RelayCommand(SaveRoomNickname);
         _monitorTask = MonitorPlaybackAsync(_lifetime.Token);
@@ -733,6 +765,7 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
             Status = "正在解析影片…";
             var detail = await _parser.LoadDetailAsync(input.Trim(), refresh: true, cancellationToken)
                 .ConfigureAwait(true);
+            cancellationToken.ThrowIfCancellationRequested();
             var pages = detail.VideoSections.SelectMany(section => section.VideoPages).ToArray();
             var page = SelectPage(pages, input, selectedCid);
             if (page == null)
@@ -1134,14 +1167,109 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
         }
     }
 
+    private void ReportRoomCreationProgress(RoomCreationProgress progress)
+    {
+        if (!_isCreatingRoom || _disposed) return;
+        RoomCreationPercentage = Math.Max(RoomCreationPercentage, Math.Clamp(progress.Percentage, 0, 100));
+        RoomCreationStep = progress.Step;
+    }
+
+    private async Task RunRoomOperationAsync(Func<Task> action, bool creating = false)
+    {
+        if (_disposed) return;
+        if (creating)
+        {
+            if (_room.Connected && !(_room.IsHost && string.IsNullOrWhiteSpace(ServiceAddress)))
+            {
+                RoomState = "已经在房间内；请先结束或离开当前房间。";
+                return;
+            }
+            _isCreatingRoom = true;
+            _roomCreationClock.Restart();
+            _roomCreationElapsedSeconds = 0;
+            RoomCreationPercentage = 0;
+            RoomCreationStep = "等待前一次房间操作完成";
+            ShowRoomCreationProgress = true;
+            IsPreparing = true;
+        }
+        try
+        {
+            if (_roomReconnectCancellation is { } reconnect)
+                await reconnect.CancelAsync().ConfigureAwait(true);
+            await _roomOperationGate.WaitAsync(_lifetime.Token).ConfigureAwait(true);
+            try
+            {
+                if (!_disposed) await action().ConfigureAwait(true);
+            }
+            finally { _roomOperationGate.Release(); }
+        }
+        catch (OperationCanceledException) when (_lifetime.IsCancellationRequested)
+        {
+            // Closing the application cancels pending room operations.
+        }
+        catch (Exception error) when (IsRoutineError(error))
+        {
+            RoomState = error is InvalidOperationException or TimeoutException
+                ? error.Message : "房间操作失败，请稍后重试。";
+        }
+        finally
+        {
+            if (creating)
+            {
+                _roomCreationClock.Stop();
+                _roomCreationElapsedSeconds = (int)_roomCreationClock.Elapsed.TotalSeconds;
+                if (RoomCreationPercentage < 100) RoomCreationStep = $"未完成：{RoomState}";
+                _isCreatingRoom = false;
+                IsPreparing = false;
+                OnPropertyChanged(nameof(RoomCreationSummary));
+            }
+        }
+    }
+
+    private async Task BeginRoomSessionAsync()
+    {
+        var previous = _roomSessionCancellation;
+        _roomSessionCancellation = CancellationTokenSource.CreateLinkedTokenSource(_lifetime.Token);
+        if (previous != null)
+        {
+            await previous.CancelAsync().ConfigureAwait(true);
+            previous.Dispose();
+        }
+    }
+
     private async Task CreateRoomAsync()
     {
         if (_room.Connected)
         {
+            if (_room.IsHost && string.IsNullOrWhiteSpace(ServiceAddress))
+            {
+                try
+                {
+                    ReportRoomCreationProgress(new(55, "本机房间已创建，重新准备公网邀请"));
+                    var retryProgress = new Progress<RoomCreationProgress>(ReportRoomCreationProgress);
+                    ServiceAddress = await _quickTunnel.StartAsync(retryProgress, _lifetime.Token)
+                        .ConfigureAwait(true);
+                    _hostInviteUrl = $"{ServiceAddress}#room={_room.RoomCode}";
+                    RoomState = "房间已创建，可复制邀请给好友。";
+                    ReportRoomCreationProgress(new(100, "公网邀请已准备好"));
+                }
+                catch (Exception error) when (IsRoutineError(error))
+                {
+                    ServiceAddress = string.Empty;
+                    RoomState = error is InvalidOperationException
+                        ? $"本机房间已创建，但公网邀请仍未准备好：{error.Message}"
+                        : "本机房间已创建，但公网邀请仍未准备好，请稍后重试。";
+                }
+                return;
+            }
+
             RoomState = "已经在房间内；请先结束或离开当前房间。";
             return;
         }
 
+        await BeginRoomSessionAsync().ConfigureAwait(true);
+        _hostInviteUrl = null;
+        ReportRoomCreationProgress(new(5, "准备影片与房间状态"));
         var input = RoomVideoInput.Trim();
         if (input.Length > 0 && !string.Equals(_roomParsedInput, input, StringComparison.Ordinal))
         {
@@ -1162,24 +1290,19 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
                 : await _player.GetPositionAsync(_lifetime.Token).ConfigureAwait(true);
             var resumePlaying = selectedPage != null && (_player == null
                 || !await _player.GetPausedAsync(_lifetime.Token).ConfigureAwait(true));
-            if (UsesAutomaticRoomAddress(ServiceAddress, _quickTunnel.ServiceAddress))
-            {
-                IsPreparing = true;
-                await EnsureLocalRoomServerAsync(_lifetime.Token).ConfigureAwait(true);
-                RoomState = "正在生成 Cloudflare 房间地址…";
-                ServiceAddress = await _quickTunnel.StartAsync(_lifetime.Token).ConfigureAwait(true);
-                _connectAddress = "ws://127.0.0.1:5077/ws";
-            }
-            else
-            {
-                _connectAddress = ServiceAddress;
-            }
-
+            ReportRoomCreationProgress(new(20, "启动本机房间服务"));
+            await EnsureLocalRoomServerAsync(_lifetime.Token).ConfigureAwait(true);
+            _connectAddress = "ws://127.0.0.1:5077/ws";
+            ReportRoomCreationProgress(new(35, "创建本机房间"));
             var snapshot = await _room.ConnectAsync(_connectAddress, create: true, null,
                 _lifetime.Token).ConfigureAwait(true);
             ClearRoomChat();
             _lastVersion = -1;
             UpdateRoomMemberCount(snapshot);
+            RoomState = "房间已创建，正在准备公网邀请…";
+            ReportRoomCreationProgress(new(45, "本机房间已创建，准备公网邀请"));
+            var progress = new Progress<RoomCreationProgress>(ReportRoomCreationProgress);
+            ServiceAddress = await _quickTunnel.StartAsync(progress, _lifetime.Token).ConfigureAwait(true);
             _startWhenReady = resumePlaying;
             _hostInviteUrl = $"{ServiceAddress}#room={_room.RoomCode}";
             InviteText = string.Empty;
@@ -1191,6 +1314,7 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
             OnPropertyChanged(nameof(RoomRoleText));
             if (selectedPage != null)
             {
+                ReportRoomCreationProgress(new(95, "同步影片与播放状态"));
                 await _room.SendAsync(new
                 {
                     type = "select",
@@ -1207,6 +1331,7 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
                 await StartPlaybackAsync(true, _lifetime.Token).ConfigureAwait(true);
             }
             await ApplySnapshotAsync(snapshot).ConfigureAwait(true);
+            ReportRoomCreationProgress(new(100, "房间已创建，可以复制邀请"));
         }
         catch (OperationCanceledException) when (_lifetime.IsCancellationRequested)
         {
@@ -1214,7 +1339,10 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
         }
         catch (Exception error) when (IsRoutineError(error))
         {
-            if (!_room.Connected) ServiceAddress = string.Empty;
+            if (!_room.Connected)
+            {
+                await LeaveRoomAsync().ConfigureAwait(true);
+            }
             RoomState = error is InvalidOperationException
                 ? error.Message
                 : "创建房间失败，请检查服务地址和网络。";
@@ -1235,6 +1363,7 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
                 return;
             }
 
+            await BeginRoomSessionAsync().ConfigureAwait(true);
             var (address, code) = ParseInvite(InviteText, ServiceAddress);
             ServiceAddress = address;
             _connectAddress = address;
@@ -1251,7 +1380,12 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
         }
         catch (Exception error) when (IsRoutineError(error))
         {
-            if (!_room.Connected) ServiceAddress = string.Empty;
+            if (!_room.Connected)
+            {
+                if (_roomSessionCancellation is { } session)
+                    await session.CancelAsync().ConfigureAwait(true);
+                ResetRoomState();
+            }
             RoomState = error is InvalidOperationException
                 ? error.Message : "加入失败，请检查邀请和服务连接。";
         }
@@ -1312,11 +1446,14 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
 
     private async Task LeaveRoomAsync()
     {
+        if (_roomSessionCancellation is { } session)
+            await session.CancelAsync().ConfigureAwait(true);
         if (_room.Connected)
         {
             try
             {
-                await _room.SendAsync(new { type = "leave" }, _lifetime.Token).ConfigureAwait(true);
+                if (_room.IsHost) await _room.CloseRoomAsync(_lifetime.Token).ConfigureAwait(true);
+                else await _room.SendAsync(new { type = "leave" }, _lifetime.Token).ConfigureAwait(true);
             }
             catch (Exception error) when (IsRoutineError(error))
             {
@@ -1325,10 +1462,25 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
         }
 
         await _room.LeaveAsync().ConfigureAwait(true);
+        // The invitation route belongs to this room, not the application lifetime.
+        try { await StopLocalServerAsync().ConfigureAwait(true); }
+        finally
+        {
+            try { await _quickTunnel.StopAsync().ConfigureAwait(true); }
+            finally { ResetRoomState(); }
+        }
+    }
+
+    private void ResetRoomState()
+    {
+        if (!_isCreatingRoom) ShowRoomCreationProgress = false;
         ClearRoomChat();
         ServiceAddress = string.Empty;
+        _connectAddress = string.Empty;
         _lastSnapshot = null;
         _lastVersion = -1;
+        _lastAppliedSyncRevision = -1;
+        _pendingHostMediaKey = null;
         _startWhenReady = false;
         _hostInviteUrl = null;
         SyncStatus = string.Empty;
@@ -1340,35 +1492,41 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
         OnPropertyChanged(nameof(RoomRoleText));
     }
 
+    private bool ValidateEndRoomAuthority()
+    {
+        if (_room.IsHost) return true;
+        RoomState = _room.Connected ? "只有房主可以结束房间，你可以选择“离开房间”。" : "尚未加入房间。";
+        return false;
+    }
+
     private async Task EndRoomAsync()
     {
-        if (_room.Connected && _room.IsHost)
-        {
-            try
-            {
-                await _room.SendAsync(new { type = "close" }, _lifetime.Token).ConfigureAwait(true);
-            }
-            catch (Exception error) when (IsRoutineError(error))
-            {
-                RoomState = "房间连接已断开。";
-            }
-        }
-
+        // Recheck after the operation gate in case membership changed while waiting.
+        if (!ValidateEndRoomAuthority()) return;
         await LeaveRoomAsync().ConfigureAwait(true);
+        RoomState = "房间已结束，可继续单人播放。";
     }
 
     private void OnSnapshotReceived(WatchRoomSnapshot snapshot)
     {
-        Dispatcher.UIThread.Post(() => _ = ApplySnapshotSafelyAsync(snapshot));
+        var token = _roomSessionCancellation?.Token ?? _lifetime.Token;
+        var connectionToken = _room.ConnectionCancellation;
+        Dispatcher.UIThread.Post(() =>
+        {
+            if (!token.IsCancellationRequested && !connectionToken.IsCancellationRequested && !_disposed)
+                _ = ApplySnapshotSafelyAsync(snapshot, token, connectionToken);
+        });
     }
 
-    private async Task ApplySnapshotSafelyAsync(WatchRoomSnapshot snapshot)
+    private async Task ApplySnapshotSafelyAsync(WatchRoomSnapshot snapshot, CancellationToken cancellationToken,
+        CancellationToken connectionToken)
     {
         try
         {
-            await ApplySnapshotAsync(snapshot).ConfigureAwait(true);
+            await ApplySnapshotAsync(snapshot, cancellationToken, connectionToken).ConfigureAwait(true);
         }
-        catch (OperationCanceledException) when (_lifetime.IsCancellationRequested)
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested
+            || connectionToken.IsCancellationRequested)
         {
             return;
         }
@@ -1378,11 +1536,18 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
         }
     }
 
-    private async Task ApplySnapshotAsync(WatchRoomSnapshot snapshot)
+    private async Task ApplySnapshotAsync(WatchRoomSnapshot snapshot, CancellationToken? sessionToken = null,
+        CancellationToken? connectionToken = null)
     {
-        await _snapshotGate.WaitAsync(_lifetime.Token).ConfigureAwait(true);
+        using var applying = CancellationTokenSource.CreateLinkedTokenSource(
+            sessionToken ?? _roomSessionCancellation?.Token ?? _lifetime.Token,
+            connectionToken ?? _room.ConnectionCancellation);
+        var cancellationToken = applying.Token;
+        await _snapshotGate.WaitAsync(cancellationToken).ConfigureAwait(true);
         try
         {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (!_room.Connected) return;
             if (snapshot.Version <= _lastVersion)
             {
                 return;
@@ -1408,15 +1573,16 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
                 && snapshot.AllOnlineGuestsReady)
             {
                 _startWhenReady = false;
-                await _room.SendAsync(new { type = "play" }, _lifetime.Token).ConfigureAwait(true);
+                await _room.SendAsync(new { type = "play" }, cancellationToken).ConfigureAwait(true);
             }
 
-            if (!await EnsureSnapshotPlayerAsync(media, snapshot).ConfigureAwait(true))
+            if (!await EnsureSnapshotPlayerAsync(media, snapshot, cancellationToken).ConfigureAwait(true))
             {
                 return;
             }
 
-            await CorrectPlaybackAsync(snapshot, _lifetime.Token).ConfigureAwait(true);
+            cancellationToken.ThrowIfCancellationRequested();
+            await CorrectPlaybackAsync(snapshot, cancellationToken).ConfigureAwait(true);
         }
         finally
         {
@@ -1439,11 +1605,13 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
         return "成员在线，已同步";
     }
 
-    private async Task<bool> EnsureSnapshotPlayerAsync(WatchRoomMedia media, WatchRoomSnapshot snapshot)
+    private async Task<bool> EnsureSnapshotPlayerAsync(WatchRoomMedia media, WatchRoomSnapshot snapshot,
+        CancellationToken cancellationToken)
     {
         if (!SameMedia(_roomPage, media))
         {
-            await ParseInputAsync(MediaUrl(media), _lifetime.Token, media.Cid).ConfigureAwait(true);
+            await ParseInputAsync(MediaUrl(media), cancellationToken, media.Cid).ConfigureAwait(true);
+            cancellationToken.ThrowIfCancellationRequested();
             if (!SameMedia(_roomPage, media))
             {
                 RoomState = "本机未能打开此视频，请检查账号权限。";
@@ -1453,11 +1621,11 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
 
         if (_player == null)
         {
-            await StartPlaybackAsync(true, _lifetime.Token).ConfigureAwait(true);
+            await StartPlaybackAsync(true, cancellationToken).ConfigureAwait(true);
         }
         else if (snapshot.FindMember(_room.MemberId)?.Ready != true)
         {
-            await _room.SendAsync(new { type = "ready", ready = true }, _lifetime.Token)
+            await _room.SendAsync(new { type = "ready", ready = true }, cancellationToken)
                 .ConfigureAwait(true);
         }
         return _player != null;
@@ -1483,6 +1651,7 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
         }
 
         var actual = await player.GetPositionAsync(cancellationToken).ConfigureAwait(true);
+        cancellationToken.ThrowIfCancellationRequested();
         var drift = expected - actual;
         SyncStatus = $"影片时间差 {Math.Abs(drift):0.00} 秒 · 往返延迟 {_room.RoundTripMilliseconds:0} 毫秒";
         var currentRate = await player.GetSpeedAsync(cancellationToken).ConfigureAwait(true);
@@ -1539,8 +1708,12 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
 
     private void OnRoomDisconnected()
     {
+        var token = _roomSessionCancellation?.Token ?? _lifetime.Token;
+        var connectionToken = _room.ConnectionCancellation;
         Dispatcher.UIThread.Post(() =>
         {
+            if (token.IsCancellationRequested || connectionToken.IsCancellationRequested
+                || _disposed || _room.Connected) return;
             _pendingHostMediaKey = null;
             _roomMemberCount = 0;
             OnPropertyChanged(nameof(RoomParticipantText));
@@ -1552,19 +1725,17 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
 
     private void OnRoomClosed()
     {
+        var token = _roomSessionCancellation?.Token ?? _lifetime.Token;
+        var connectionToken = _room.ConnectionCancellation;
         Dispatcher.UIThread.Post(() =>
         {
-            _lastSnapshot = null;
-            ClearRoomChat();
-            ServiceAddress = string.Empty;
-            _startWhenReady = false;
-            _hostInviteUrl = null;
-            _roomMemberCount = 0;
-            OnPropertyChanged(nameof(RoomParticipantText));
-            RoomState = "房间已结束，可继续单人播放。";
-            OnPropertyChanged(nameof(CanControl));
-            OnPropertyChanged(nameof(IsInRoom));
-            OnPropertyChanged(nameof(RoomRoleText));
+            if (token.IsCancellationRequested || connectionToken.IsCancellationRequested || _disposed) return;
+            _ = RunRoomOperationAsync(async () =>
+            {
+                if (token.IsCancellationRequested || connectionToken.IsCancellationRequested) return;
+                await LeaveRoomAsync().ConfigureAwait(true);
+                RoomState = "房间已结束，可继续单人播放。";
+            });
         });
     }
 
@@ -1584,55 +1755,64 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
     private async Task ReconnectSafelyAsync()
     {
         var code = _room.RoomCode;
-        if (code == null || _lifetime.IsCancellationRequested)
+        if (code == null || _lifetime.IsCancellationRequested || _roomReconnectCancellation != null)
         {
             return;
         }
 
+        using var reconnect = CancellationTokenSource.CreateLinkedTokenSource(_lifetime.Token,
+            _roomSessionCancellation?.Token ?? _lifetime.Token);
+        _roomReconnectCancellation = reconnect;
         try
         {
-            RoomState = "房间断线，正在重连…";
-            if (_roomPlayer != null)
+            await _roomOperationGate.WaitAsync(reconnect.Token).ConfigureAwait(true);
+            try
             {
-                await _roomPlayer.SetPausedAsync(true, _lifetime.Token).ConfigureAwait(true);
-            }
-
-            if (ServiceAddress == _quickTunnel.ServiceAddress && !_quickTunnel.IsRunning)
-            {
-                InviteText = string.Empty;
-                RoomState = "Cloudflare 地址已失效；请重新创建房间并分享新邀请。";
-                return;
-            }
-
-            for (var attempt = 1; attempt <= 3; attempt++)
-            {
-                try
+                if (_room.Connected) return;
+                RoomState = "房间断线，正在重连…";
+                if (_roomPlayer != null)
                 {
-                    await Task.Delay(TimeSpan.FromSeconds(attempt), _lifetime.Token).ConfigureAwait(true);
-                    var snapshot = await _room.ConnectAsync(_connectAddress, create: false, code,
-                        _lifetime.Token).ConfigureAwait(true);
-                    _lastVersion = -1;
-                    OnPropertyChanged(nameof(IsInRoom));
-                    OnPropertyChanged(nameof(RoomRoleText));
-                    OnPropertyChanged(nameof(CanControl));
-                    if (_roomPlayer != null)
-                    {
-                        await _room.SendAsync(new { type = "ready", ready = true }, _lifetime.Token)
-                            .ConfigureAwait(true);
-                    }
+                    await _roomPlayer.SetPausedAsync(true, reconnect.Token).ConfigureAwait(true);
+                }
 
-                    await ApplySnapshotAsync(snapshot).ConfigureAwait(true);
+                if (ServiceAddress == _quickTunnel.ServiceAddress && !_quickTunnel.IsRunning)
+                {
+                    InviteText = string.Empty;
+                    RoomState = "Cloudflare 地址已失效；请重新创建房间并分享新邀请。";
                     return;
                 }
-                catch (Exception error) when (IsRoutineError(error))
-                {
-                    continue;
-                }
-            }
 
-            RoomState = "重连失败；可重新粘贴邀请加入。";
+                for (var attempt = 1; attempt <= 3; attempt++)
+                {
+                    try
+                    {
+                        await Task.Delay(TimeSpan.FromSeconds(attempt), reconnect.Token).ConfigureAwait(true);
+                        var snapshot = await _room.ConnectAsync(_connectAddress, create: false, code,
+                            reconnect.Token).ConfigureAwait(true);
+                        _lastVersion = -1;
+                        OnPropertyChanged(nameof(IsInRoom));
+                        OnPropertyChanged(nameof(RoomRoleText));
+                        OnPropertyChanged(nameof(CanControl));
+                        if (_roomPlayer != null)
+                        {
+                            await _room.SendAsync(new { type = "ready", ready = true }, reconnect.Token)
+                                .ConfigureAwait(true);
+                        }
+
+                        await ApplySnapshotAsync(snapshot, reconnect.Token).ConfigureAwait(true);
+                        return;
+                    }
+                    catch (Exception error) when (IsRoutineError(error))
+                    {
+                        continue;
+                    }
+                }
+
+                RoomState = "重连失败；可重新粘贴邀请加入。";
+            }
+            finally { _roomOperationGate.Release(); }
         }
-        catch (OperationCanceledException) when (_lifetime.IsCancellationRequested)
+        catch (OperationCanceledException) when (reconnect.IsCancellationRequested)
         {
             return;
         }
@@ -1640,6 +1820,7 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
         {
             RoomState = "重连失败；请检查网络后重新加入。";
         }
+        finally { _roomReconnectCancellation = null; }
     }
 
     private async Task MonitorPlaybackAsync(CancellationToken cancellationToken)
@@ -1650,6 +1831,11 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
             while (!cancellationToken.IsCancellationRequested)
             {
                 await Task.Delay(1000, cancellationToken).ConfigureAwait(true);
+                if (_isCreatingRoom)
+                {
+                    _roomCreationElapsedSeconds = (int)_roomCreationClock.Elapsed.TotalSeconds;
+                    OnPropertyChanged(nameof(RoomCreationSummary));
+                }
                 var player = _player;
                 if (player == null || _playerLoading)
                 {
@@ -1730,18 +1916,26 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
 
     private async Task CorrectLatestPlaybackAsync(CancellationToken cancellationToken, bool forceSync = false)
     {
-        await _snapshotGate.WaitAsync(cancellationToken).ConfigureAwait(true);
+        using var correction = CancellationTokenSource.CreateLinkedTokenSource(
+            _roomSessionCancellation?.Token ?? cancellationToken, _room.ConnectionCancellation);
+        var roomToken = correction.Token;
         try
         {
-            if (_lastSnapshot is { } snapshot && _room.Connected
-                && (_pendingHostMediaKey == null || SameMedia(_roomPage, snapshot.Media)))
+            await _snapshotGate.WaitAsync(roomToken).ConfigureAwait(true);
+            try
             {
-                await CorrectPlaybackAsync(snapshot, cancellationToken, forceSync).ConfigureAwait(true);
+                if (_lastSnapshot is { } snapshot && _room.Connected
+                    && (_pendingHostMediaKey == null || SameMedia(_roomPage, snapshot.Media)))
+                {
+                    await CorrectPlaybackAsync(snapshot, roomToken, forceSync).ConfigureAwait(true);
+                }
             }
+            finally { _snapshotGate.Release(); }
         }
-        finally
+        catch (OperationCanceledException) when (roomToken.IsCancellationRequested
+            && !cancellationToken.IsCancellationRequested)
         {
-            _snapshotGate.Release();
+            // Ending a room cancels correction without stopping the single-player monitor.
         }
     }
 
@@ -1803,7 +1997,7 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
 
     private static bool IsRoutineError(Exception error)
     {
-        return error is InvalidOperationException or ArgumentException or FormatException
+        return error is InvalidOperationException or ArgumentException or FormatException or TimeoutException
             or System.IO.IOException or UnauthorizedAccessException
             or System.Security.Cryptography.CryptographicException
             or System.Net.Http.HttpRequestException
@@ -1831,6 +2025,9 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
         }
         finally
         {
+            await _roomOperationGate.WaitAsync().ConfigureAwait(true);
+            _roomReconnectCancellation?.Dispose();
+            _roomReconnectCancellation = null;
             _loginCancellation?.Dispose();
             _room.SnapshotReceived -= OnSnapshotReceived;
             _room.ChatReceived -= OnRoomChatReceived;
@@ -1864,6 +2061,9 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
                         LoginQrCode = null;
                         _loginQrUri = null;
                         _snapshotGate.Dispose();
+                        _roomSessionCancellation?.Dispose();
+                        _roomSessionCancellation = null;
+                        _roomOperationGate.Dispose();
                         _lifetime.Dispose();
                     }
                 }

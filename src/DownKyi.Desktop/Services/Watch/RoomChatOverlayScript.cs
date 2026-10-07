@@ -71,7 +71,7 @@ internal static class RoomChatOverlayScript
                     color:#f8f9fa; font:14px/1.45 'Segoe UI','Microsoft YaHei',sans-serif;
                     pointer-events:none!important; }
                 #bc-room-chat * { box-sizing:border-box; }
-                #bc-room-chat .bc-edge { position:absolute; top:0; right:0; bottom:0; width:18px;
+                #bc-room-chat .bc-edge { position:absolute; top:0; right:0; bottom:96px; width:18px;
                     pointer-events:auto; cursor:pointer; }
                 #bc-room-chat .bc-panel { position:absolute; top:0; right:0; bottom:0;
                     width:min(320px, 38vw); min-width:260px; display:flex; flex-direction:column;
@@ -112,7 +112,7 @@ internal static class RoomChatOverlayScript
                 #bc-room-chat .bc-input::placeholder { color:#d4d9da; }
                 #bc-room-chat .bc-actions { display:flex; align-items:center; justify-content:space-between;
                     gap:7px; margin-top:7px; }
-                #bc-room-chat .bc-hint { font-size:11px; color:#d4d9da; }
+                #bc-room-chat .bc-hint { font-size:11px; color:#d4d9da; white-space:pre-line; }
                 #bc-room-chat .bc-send { min-width:72px; min-height:32px; padding:5px 12px;
                     border:1px solid rgba(255,255,255,.22); border-radius:8px; color:#fff;
                     background:#84929a; font-weight:600;
@@ -158,7 +158,7 @@ internal static class RoomChatOverlayScript
             input.maxLength = 500; input.placeholder = '说点什么…';
             input.setAttribute('aria-label', '聊天消息');
             const actions = make('div', 'bc-actions');
-            const hint = make('span', 'bc-hint'); hint.textContent = 'Shift+Enter 换行 · Alt 收起';
+            const hint = make('span', 'bc-hint'); hint.textContent = 'Shift+Enter 换行\nAlt 收起';
             const sendButton = make('button', 'bc-send');
             sendButton.type = 'button'; sendButton.textContent = '发送';
             actions.append(hint, sendButton); compose.append(input, actions);
@@ -214,6 +214,24 @@ internal static class RoomChatOverlayScript
             };
             const close = () => setOpen(false, false);
             ui.closePanel = close;
+            // Reserve the control bar even when Bilibili has hidden its buttons.
+            // The edge's hit area and the hover decision use the same boundary.
+            ui.updateEdgeArea = () => {
+                const root = window.__biliCinemaPlayerRoot;
+                const controls = root?.querySelector('.bpx-player-control-wrap, .bilibili-player-video-control');
+                const rect = controls?.getBoundingClientRect();
+                const frame = root?.querySelector('.bpx-player-primary-area, .bilibili-player-area')
+                    || root?.querySelector('.bpx-player-video-area, video') || root;
+                const frameBottom = frame?.getBoundingClientRect().bottom ?? innerHeight;
+                const controlHeight = rect?.height > 0 ? rect.height : 64;
+                const controlTop = Math.min(rect?.height > 0 ? rect.top : innerHeight,
+                    frameBottom - controlHeight);
+                const reserved = Math.max(96, innerHeight - controlTop + 12);
+                const bottom = Math.min(innerHeight, reserved);
+                ui.edge.style.bottom = `${bottom}px`;
+                return innerHeight - bottom;
+            };
+            window.addEventListener('resize', ui.updateEdgeArea, {signal:ui.listenerAbort.signal});
             // Hover opens the panel, but an active conversation owns focus until
             // explicitly dismissed. IME candidate windows can cause blur/leave.
             const keepOpen = () => ui.editing || ui.composing || ui.input.value.length > 0;
@@ -268,7 +286,10 @@ internal static class RoomChatOverlayScript
                 if (!event.isTrusted || !ui.inRoom) return;
                 const panelLeft = window.innerWidth - ui.panel.getBoundingClientRect().width;
                 const overPanel = ui.host.classList.contains('bc-open') && event.clientX >= panelLeft;
-                if (event.clientX >= window.innerWidth - 18 || overPanel) {
+                const edgeBottom = ui.updateEdgeArea();
+                const overEdge = event.clientX >= window.innerWidth - 18
+                    && event.clientY >= 0 && event.clientY < edgeBottom;
+                if (overEdge || overPanel) {
                     setOpen(true, true);
                 } else {
                     deferClose();
@@ -282,6 +303,7 @@ internal static class RoomChatOverlayScript
         const mount = fullElement && player.contains(fullElement)
             && fullElement.tagName !== 'VIDEO' ? fullElement : player;
         if (ui.host.parentElement !== mount) mount.appendChild(ui.host);
+        ui.updateEdgeArea();
         ui.fullscreen = state.fullscreen;
         ui.inRoom = state.inRoom;
         ui.host.style.display = state.inRoom ? 'block' : 'none';

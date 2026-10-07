@@ -16,7 +16,7 @@ pwsh -File src/DownKyi.RoomServer/smoke.ps1
 
 ## Private internet deployment
 
-For temporary remote viewing, the BiliCinema EXE starts its bundled `cloudflared` client, waits for the public health check, and puts a `wss://…trycloudflare.com/ws` address into the invitation. The host connects locally; guests use the same public invitation. The service stays bound to loopback; closing the host application ends its Tunnel, and a new Tunnel gets a new address. Quick Tunnels are intended for temporary use and have no uptime guarantee.
+For temporary remote viewing, the BiliCinema EXE creates the local room first, then starts its bundled `cloudflared` client and verifies the public WebSocket upgrade used by guests. The host connects locally while the invitation route is preparing; a failed route can be retried without recreating the local room. Ending or leaving a hosted room closes the owned local service and Tunnel; application shutdown does the same. Creation waits for prior teardown and always starts a fresh Tunnel. Old invitations cannot join the new room. Quick Tunnels are intended for temporary use and have no uptime guarantee.
 
 For a stable hostname, set up a named Cloudflare Tunnel or run the service on a host you control with a TLS reverse proxy. Keep the default loopback listener. For example, a Caddy site can use:
 

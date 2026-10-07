@@ -47,6 +47,28 @@
         /* CHAT_OVERLAY */
         const ui = window.__biliCinemaChatUi;
         const isOpen = () => ui.host.classList.contains('bc-open');
+        const checkControlCorner = async () => {
+            const x = innerWidth - 2;
+            const y = innerHeight - 20;
+            await move(x, y);
+            await delay(250);
+            check(!isOpen(), 'Player control corner opened chat');
+            const target = document.elementFromPoint(x, y);
+            check(target && !ui.host.contains(target), 'Chat edge intercepted player controls');
+            await click(x, y);
+            check(!isOpen(), 'Clicking player controls opened chat');
+        };
+        await checkControlCorner();
+        const controls = document.querySelector('.bpx-player-control-wrap');
+        controls.style.height = '128px';
+        controls.style.transform = 'translateY(100%)';
+        await move(innerWidth - 2, innerHeight - 110);
+        await delay(250);
+        check(!isOpen(), 'Hidden expanded control bar opened chat');
+        check(!ui.host.contains(document.elementFromPoint(innerWidth - 2, innerHeight - 110)),
+            'Hidden control bar region was intercepted');
+        controls.style.height = '';
+        controls.style.transform = '';
         let probes = 0;
         document.querySelector('.bpx-player-video-area').addEventListener('mousemove', event => {
             if (!event.isTrusted) probes++;
@@ -104,9 +126,11 @@
         await key('Alt', 18);
         check(!isOpen() && events.at(-1).type === 'panelState' && !events.at(-1).open,
             'Alt did not dismiss and restore player shortcuts');
-        check(ui.host.querySelector('.bc-hint').textContent === 'Shift+Enter 换行 · Alt 收起',
+        check(ui.host.querySelector('.bc-hint').textContent === 'Shift+Enter 换行\nAlt 收起'
+            && getComputedStyle(ui.host.querySelector('.bc-hint')).whiteSpace === 'pre-line',
             'Chat shortcut hint is outdated');
         renderWindowed();
+        await checkControlCorner();
         await move(innerWidth - 2);
         await delay(250);
         const panelBox = ui.panel.getBoundingClientRect();

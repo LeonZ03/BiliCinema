@@ -35,8 +35,10 @@
                     <Button Classes="nav" Classes.selected="{Binding ShowRoom}" Content="观影房间" Command="{Binding ShowRoomCommand}" />
                     <Button Classes="nav" Classes.selected="{Binding ShowDownload}" Content="下载影片" Command="{Binding ShowDownloadCommand}" />
                 </StackPanel>
-                <TextBlock Text="与好友一起看 B 站" VerticalAlignment="Bottom" Margin="7,0,0,0"
-                           Foreground="{DynamicResource BrushTextSecondary}" FontSize="12" />
+                <StackPanel VerticalAlignment="Bottom" Margin="7,0,0,0" Spacing="4">
+                    <TextBlock Text="与好友一起看 B 站" Foreground="{DynamicResource BrushTextSecondary}" FontSize="12" />
+                    <TextBlock Text="{Binding VersionDisplay}" Foreground="{DynamicResource BrushTextSecondary}" FontSize="11" />
+                </StackPanel>
             </DockPanel>
         </Border>
 
@@ -117,6 +119,19 @@
                                 <Button Content="离开房间" Command="{Binding LeaveRoomCommand}" />
                                 <Button Content="结束房间" Command="{Binding EndRoomCommand}" />
                             </StackPanel>
+                            <Border IsVisible="{Binding ShowRoomCreationProgress}" Padding="12"
+                                    Background="{DynamicResource BrushSurfaceSunken}"
+                                    CornerRadius="{DynamicResource DownKyiRadiusMedium}">
+                                <StackPanel Spacing="7">
+                                    <TextBlock Text="{Binding RoomCreationSummary}" FontWeight="SemiBold" FontSize="13" />
+                                    <ProgressBar Minimum="0" Maximum="100" Value="{Binding RoomCreationPercentage}" Height="5"
+                                                 AutomationProperties.Name="创建房间步骤完成度" />
+                                    <TextBlock Text="{Binding RoomCreationStep}" FontSize="13" TextWrapping="Wrap"
+                                               Foreground="{DynamicResource BrushTextSecondary}" />
+                                    <TextBlock Text="按步骤完成度显示；网络等待时进度保持不变" FontSize="11" TextWrapping="Wrap"
+                                               Foreground="{DynamicResource BrushTextSecondary}" />
+                                </StackPanel>
+                            </Border>
                             <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
                                 <TextBox Grid.Column="0" PlaceholderText="加入其他房间时，在这里粘贴邀请地址"
                                          Text="{Binding InviteText, Mode=TwoWay}" />
