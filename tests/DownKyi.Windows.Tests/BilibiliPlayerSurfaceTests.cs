@@ -12,6 +12,21 @@ namespace DownKyi.Windows.Tests;
 public sealed class BilibiliPlayerSurfaceTests
 {
     [Fact]
+    public async Task ChatKeepsTypingFocusAndDefersPlayerProbesUntilDismissed()
+    {
+        await RunFixtureAsync("chat-focus", new Dictionary<string, string>
+        {
+            ["/* PLAYER_SCRIPT */"] = BilibiliWebPlaybackSession.FocusPlayerScript,
+            ["/* CHAT_OVERLAY */"] = RoomChatOverlayScript.Build([], null, null, fullscreen: true,
+                inRoom: true, memberCount: 2, revision: 0, toastSequence: 0,
+                toastRemainingMilliseconds: 0, hostActionNotices: [], hostActionToastSequence: 0),
+            ["/* WINDOWED_OVERLAY */"] = RoomChatOverlayScript.Build([], null, null, fullscreen: false,
+                inRoom: true, memberCount: 2, revision: 0, toastSequence: 0,
+                toastRemainingMilliseconds: 0, hostActionNotices: [], hostActionToastSequence: 0)
+        });
+    }
+
+    [Fact]
     public async Task MiniModeAndReplacedPlayerRecoverRealControlsWithoutChangingPlayback()
     {
         await RunFixtureAsync("player-surface", new Dictionary<string, string>
@@ -93,6 +108,19 @@ public sealed class BilibiliPlayerSurfaceTests
                     while (true)
                     {
                         var result = await ReadFixtureResultAsync(socket, ++sequence, deadline.Token).ConfigureAwait(false);
+                        if (result.StartsWith("INPUT:", StringComparison.Ordinal))
+                        {
+                            // Browser-dispatched input is trusted and follows real
+                            // focus/hit testing, unlike dispatchEvent-only fixtures.
+                            using var input = JsonDocument.Parse(result[6..]);
+                            var method = input.RootElement.GetProperty("method").GetString()!;
+                            Assert.StartsWith("Input.", method, StringComparison.Ordinal);
+                            await CallDebuggerAsync(socket, ++sequence, method,
+                                input.RootElement.GetProperty("params"), deadline.Token).ConfigureAwait(false);
+                            await CallDebuggerAsync(socket, ++sequence, "Runtime.evaluate",
+                                new { expression = "window.completeInput()" }, deadline.Token).ConfigureAwait(false);
+                            continue;
+                        }
                         if (result != "RUNNING" && result.Length > 0)
                         {
                             Assert.Equal("PASS", result);
@@ -136,9 +164,30 @@ public sealed class BilibiliPlayerSurfaceTests
     private static async Task<Uri> FindPageDebuggerAsync(string directory, CancellationToken cancellationToken)
     {
         var portFile = Path.Combine(directory, "profile", "DevToolsActivePort");
-        while (!File.Exists(portFile)) await Task.Delay(50, cancellationToken).ConfigureAwait(false);
-        var lines = await File.ReadAllLinesAsync(portFile, cancellationToken).ConfigureAwait(false);
-        var port = int.Parse(lines[0], CultureInfo.InvariantCulture);
+        var port = 0;
+        while (port == 0)
+        {
+            if (File.Exists(portFile))
+            {
+                try
+                {
+                    // Chromium creates this file before its write handle closes.
+                    // Readiness requires a complete port, not just file existence.
+                    using var stream = new FileStream(portFile, FileMode.Open, FileAccess.Read,
+                        FileShare.ReadWrite | FileShare.Delete, 4096, FileOptions.Asynchronous);
+                    using var reader = new StreamReader(stream);
+                    var line = await reader.ReadLineAsync(cancellationToken).ConfigureAwait(false);
+                    if (int.TryParse(line, NumberStyles.None, CultureInfo.InvariantCulture, out var candidate)
+                        && candidate is > 0 and <= 65535) port = candidate;
+                }
+                catch (IOException error) when ((error.HResult & 0xffff) is 32 or 33)
+                {
+                    // A startup sharing/lock violation is still pending readiness;
+                    // the caller's deadline bounds this wait and preserves evidence.
+                }
+            }
+            if (port == 0) await Task.Delay(50, cancellationToken).ConfigureAwait(false);
+        }
         using var handler = new HttpClientHandler { UseProxy = false, CheckCertificateRevocationList = true };
         using var client = new HttpClient(handler);
         var endpoint = new Uri($"http://127.0.0.1:{port.ToString(CultureInfo.InvariantCulture)}/json/list");
@@ -160,11 +209,20 @@ public sealed class BilibiliPlayerSurfaceTests
     private static async Task<string> ReadFixtureResultAsync(ClientWebSocket socket, int sequence,
         CancellationToken cancellationToken)
     {
+        var response = await CallDebuggerAsync(socket, sequence, "Runtime.evaluate",
+            new { expression = "document.querySelector('#result')?.textContent || ''", returnByValue = true },
+            cancellationToken).ConfigureAwait(false);
+        return response.GetProperty("result").GetProperty("value").GetString() ?? "";
+    }
+
+    private static async Task<JsonElement> CallDebuggerAsync(ClientWebSocket socket, int sequence,
+        string method, object parameters, CancellationToken cancellationToken)
+    {
         var request = JsonSerializer.SerializeToUtf8Bytes(new
         {
             id = sequence,
-            method = "Runtime.evaluate",
-            @params = new { expression = "document.querySelector('#result')?.textContent || ''", returnByValue = true }
+            method,
+            @params = parameters
         });
         await socket.SendAsync(request.AsMemory(), WebSocketMessageType.Text, true, cancellationToken).ConfigureAwait(false);
         var buffer = new byte[4096];
@@ -181,7 +239,10 @@ public sealed class BilibiliPlayerSurfaceTests
             } while (!received.EndOfMessage);
             using var document = JsonDocument.Parse(message.ToArray());
             if (document.RootElement.TryGetProperty("id", out var id) && id.GetInt32() == sequence)
-                return document.RootElement.GetProperty("result").GetProperty("result").GetProperty("value").GetString() ?? "";
+            {
+                Assert.False(document.RootElement.TryGetProperty("error", out var error), error.ToString());
+                return document.RootElement.GetProperty("result").Clone();
+            }
         }
     }
 }

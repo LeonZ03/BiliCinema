@@ -75,7 +75,7 @@
                                                    Foreground="{DynamicResource BrushTextSecondary}" />
                                         <TextBlock Text="房间内观影进度由房主统一控制。" TextWrapping="Wrap"
                                                    Foreground="{DynamicResource BrushTextSecondary}" />
-                                        <TextBlock Text="全屏下鼠标移至右侧呼出聊天框。" TextWrapping="Wrap"
+                                        <TextBlock Text="鼠标移至视频右侧呼出聊天框，Alt 收起。" TextWrapping="Wrap"
                                                    Foreground="{DynamicResource BrushTextSecondary}" />
                                     </StackPanel>
                                     <Border IsVisible="{Binding IsInRoom}" Padding="9,4" HorizontalAlignment="Left"
@@ -167,8 +167,14 @@
                 <Grid RowDefinitions="Auto,*" RowSpacing="12">
                     <StackPanel Grid.Row="0" Spacing="4">
                         <TextBlock Text="下载影片" FontSize="24" FontWeight="SemiBold" />
-                        <TextBlock Text="下载功能源自开源项目 DownKyi Core。" FontSize="12" TextWrapping="Wrap"
-                                   Foreground="{DynamicResource BrushTextSecondary}" />
+                        <StackPanel Orientation="Horizontal" Spacing="5">
+                            <TextBlock Text="下载功能源自开源项目" FontSize="12" VerticalAlignment="Center"
+                                       Foreground="{DynamicResource BrushTextSecondary}" />
+                            <Image Source="/Resources/downkyi-mark.png" Width="16" Height="16"
+                                   VerticalAlignment="Center" AutomationProperties.Name="DownKyi 标志" />
+                            <TextBlock Text="DownKyi Core。" FontSize="12" VerticalAlignment="Center"
+                                       Foreground="{DynamicResource BrushTextSecondary}" />
+                        </StackPanel>
                     </StackPanel>
                     <ContentControl Grid.Row="1" Content="{Binding DownloadContent.MainContent}" />
                 </Grid>

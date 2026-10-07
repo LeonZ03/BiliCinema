@@ -1,0 +1,129 @@
+<!doctype html>
+<meta charset="utf-8">
+<style>
+    html, body { margin: 0; }
+    .bpx-player-container { width: 100vw; height: 100vh; position: relative; }
+    .bpx-player-video-area, video { width: 100%; height: 100%; }
+    .bpx-player-control-wrap { position: absolute; bottom: 0; width: 100%; height: 64px; }
+    .bpx-player-progress-wrap { position: absolute; top: 0; width: 100%; height: 8px; }
+    .bpx-player-ctrl-play { position: absolute; bottom: 0; left: 10px; width: 30px; height: 30px; }
+</style>
+<div class="bpx-player-container"><div class="bpx-player-video-area"><video></video>
+    <div class="bpx-player-control-wrap"><div class="bpx-player-progress-wrap"></div>
+        <button class="bpx-player-ctrl-play">Pause</button></div>
+</div></div><pre id="result">RUNNING</pre>
+<script>
+    const check = (condition, message) => { if (!condition) throw Error(message); };
+    const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
+    const waitFor = async (condition, message) => {
+        for (let attempt = 0; attempt < 80; attempt++) {
+            if (condition()) return;
+            await delay(50);
+        }
+        throw Error(message);
+    };
+    const input = (method, params) => new Promise(resolve => {
+        window.completeInput = () => {
+            document.querySelector('#result').textContent = 'RUNNING';
+            resolve();
+        };
+        document.querySelector('#result').textContent = 'INPUT:' + JSON.stringify({method, params});
+    });
+    const move = (x, y = 100) => input('Input.dispatchMouseEvent', {type:'mouseMoved', x, y});
+    const key = async (key, windowsVirtualKeyCode) => {
+        await input('Input.dispatchKeyEvent', {type:'keyDown', key, windowsVirtualKeyCode});
+        await input('Input.dispatchKeyEvent', {type:'keyUp', key, windowsVirtualKeyCode});
+    };
+    const click = async (x, y) => {
+        await input('Input.dispatchMouseEvent', {type:'mousePressed', x, y, button:'left', clickCount:1});
+        await input('Input.dispatchMouseEvent', {type:'mouseReleased', x, y, button:'left', clickCount:1});
+    };
+    const events = [];
+    window.invokeCSharpAction = message => events.push(JSON.parse(message));
+    const renderWindowed = () => { /* WINDOWED_OVERLAY */ };
+    (async () => {
+        /* PLAYER_SCRIPT */
+        await waitFor(() => window.__biliCinemaLayoutReady, 'Player did not mount');
+        /* CHAT_OVERLAY */
+        const ui = window.__biliCinemaChatUi;
+        const isOpen = () => ui.host.classList.contains('bc-open');
+        let probes = 0;
+        document.querySelector('.bpx-player-video-area').addEventListener('mousemove', event => {
+            if (!event.isTrusted) probes++;
+        });
+        // Open with the real pointer while a layout probe is pending.
+        window.__biliCinemaCheckPlayerLayout(true);
+        await move(innerWidth - 2);
+        check(isOpen() && document.activeElement === ui.input, 'Edge did not open/focus input');
+        const probesAtOpen = probes;
+        await delay(450);
+        check(probes === probesAtOpen, 'Pending player probe interfered with chat');
+        window.__biliCinemaCheckPlayerLayout(true);
+        await delay(450);
+        check(probes === probesAtOpen, 'Player probe ran while chatting');
+        window.dispatchEvent(new PointerEvent('pointermove', {clientX:20, clientY:100}));
+        await delay(400);
+        check(isOpen(), 'Synthetic movement dismissed panel');
+        // Hover-only panels still dismiss, and a quick re-entry cancels dismissal.
+        await move(20);
+        await move(innerWidth - 2);
+        await delay(400);
+        check(isOpen(), 'Re-entry did not cancel hover dismissal');
+        await move(20);
+        await delay(650);
+        check(!isOpen(), 'Hover-only panel did not dismiss');
+        await waitFor(() => window.__biliCinemaCheckPlayerLayout(), 'Player checks did not resume');
+        check(probes > probesAtOpen, 'Deferred player probe never resumed');
+        await move(innerWidth - 2);
+        await input('Input.insertText', {text:'一起看电影'});
+        await move(20);
+        window.dispatchEvent(new Event('blur'));
+        await delay(450);
+        check(isOpen() && document.activeElement === ui.input && ui.input.value === '一起看电影',
+            'Pointer/blur interrupted typing');
+        // Real composition must neither send nor collapse while selecting text.
+        await input('Input.imeSetComposition', {text:'ni', selectionStart:2, selectionEnd:2});
+        window.dispatchEvent(new Event('blur'));
+        await delay(450);
+        check(isOpen() && ui.composing, 'IME lost panel ownership');
+        await input('Input.insertText', {text:'你'});
+        let playerKeys = 0;
+        let playerClicks = 0;
+        document.addEventListener('keydown', () => { playerKeys++; });
+        window.__biliCinemaPlayerRoot.addEventListener('click', () => { playerClicks++; });
+        await key('Alt', 18);
+        check(!isOpen() && ui.input.value === '一起看电影你', 'Explicit dismissal lost draft');
+        check(playerKeys === 0 && playerClicks === 0, 'Alt dismissal triggered player controls');
+        await move(innerWidth - 2);
+        await key('Enter', 13);
+        check(events.some(event => event.type === 'send' && event.text === '一起看电影你'), 'Message not sent');
+        check(isOpen() && ui.input.value === '' && document.activeElement === ui.input, 'Send lost focus');
+        await move(20);
+        await delay(450);
+        check(isOpen(), 'Conversation collapsed immediately after sending');
+        await key('Alt', 18);
+        check(!isOpen() && events.at(-1).type === 'panelState' && !events.at(-1).open,
+            'Alt did not dismiss and restore player shortcuts');
+        check(ui.host.querySelector('.bc-hint').textContent === 'Shift+Enter 换行 · Alt 收起',
+            'Chat shortcut hint is outdated');
+        renderWindowed();
+        await move(innerWidth - 2);
+        await delay(250);
+        const panelBox = ui.panel.getBoundingClientRect();
+        check(isOpen() && panelBox.right <= innerWidth && panelBox.left < innerWidth
+            && getComputedStyle(ui.panel).pointerEvents === 'auto', 'Windowed chat did not open visibly');
+        await input('Input.insertText', {text:'窗口聊天'});
+        await move(20);
+        await delay(650);
+        check(isOpen() && ui.input.value === '窗口聊天', 'Windowed typing was interrupted');
+        await key('Alt', 18);
+        check(!isOpen() && ui.input.value === '窗口聊天', 'Windowed Alt dismissal lost draft');
+        // Clicking the movie retains its normal semantics and is never a chat-close trigger.
+        await move(innerWidth - 2);
+        await click(20, 100);
+        check(isOpen(), 'Video click still dismissed chat');
+        await key('Alt', 18);
+        check(scrollX === 0 && scrollY === 0, 'Chat focus scrolled the player');
+        document.querySelector('#result').textContent = 'PASS';
+    })().catch(error => { document.querySelector('#result').textContent = `FAIL: ${error.message}`; });
+</script>

@@ -62,6 +62,7 @@ internal static class RoomChatOverlayScript
         let ui = window.__biliCinemaChatUi;
         if (!ui || !ui.host.isConnected) {
             ui?.listenerAbort?.abort();
+            clearTimeout(ui?.closeTimer);
             const host = document.createElement('div');
             host.id = 'bc-room-chat';
             const css = document.createElement('style');
@@ -78,8 +79,7 @@ internal static class RoomChatOverlayScript
                     border-left:1px solid rgba(255,255,255,.16); box-shadow:-14px 0 34px rgba(0,0,0,.14);
                     transform:translateX(102%); opacity:0; pointer-events:none;
                     transition:transform .18s ease,opacity .18s ease; }
-                #bc-room-chat.bc-fullscreen.bc-open .bc-panel { transform:none; opacity:1; pointer-events:auto; }
-                #bc-room-chat:not(.bc-fullscreen) .bc-edge { display:none; }
+                #bc-room-chat.bc-open .bc-panel { transform:none; opacity:1; pointer-events:auto; }
                 #bc-room-chat .bc-head { display:flex; align-items:center; justify-content:space-between;
                     min-height:62px; padding:17px 18px; border-bottom:1px solid rgba(255,255,255,.15); }
                 #bc-room-chat .bc-title { font-size:16px; font-weight:650; }
@@ -158,7 +158,7 @@ internal static class RoomChatOverlayScript
             input.maxLength = 500; input.placeholder = '说点什么…';
             input.setAttribute('aria-label', '聊天消息');
             const actions = make('div', 'bc-actions');
-            const hint = make('span', 'bc-hint'); hint.textContent = 'Enter 发送 · Shift+Enter 换行';
+            const hint = make('span', 'bc-hint'); hint.textContent = 'Shift+Enter 换行 · Alt 收起';
             const sendButton = make('button', 'bc-send');
             sendButton.type = 'button'; sendButton.textContent = '发送';
             actions.append(hint, sendButton); compose.append(input, actions);
@@ -173,6 +173,7 @@ internal static class RoomChatOverlayScript
             ui = { host, edge, panel, list, input, count, toast, toastName, toastBody,
                 actionToasts, revision:-1, toastSequence:-1, actionSequence:-1,
                 fullscreen:false, inRoom:false, toastTimer:null, actionTimers:[],
+                closeTimer:null, editing:false, composing:false, altDismissed:false,
                 listenerAbort:new AbortController() };
             window.__biliCinemaChatUi = ui;
             const send = () => {
@@ -181,30 +182,60 @@ internal static class RoomChatOverlayScript
                 if (typeof invokeCSharpAction === 'function') {
                     invokeCSharpAction(JSON.stringify({source:'biliCinemaChat',type:'send',text}));
                     ui.input.value = '';
-                    ui.input.focus();
+                    ui.input.focus({preventScroll:true});
                 }
             };
             sendButton.addEventListener('click', send);
             ui.input.addEventListener('keydown', event => {
-                if (event.key === 'Enter' && !event.shiftKey && !event.isComposing) {
+                if (event.key === 'Enter' && !event.shiftKey && !event.isComposing
+                    && !ui.composing && event.keyCode !== 229) {
                     event.preventDefault(); send();
                 }
             });
-            for (const type of ['click','dblclick','pointerdown','pointerup','keydown','keyup','wheel']) {
+            for (const type of ['click','dblclick','pointerdown','pointerup','pointermove',
+                'mousedown','mouseup','mousemove','keydown','keyup','wheel']) {
                 host.addEventListener(type, event => event.stopPropagation());
             }
             const setOpen = (open, focusInput) => {
+                clearTimeout(ui.closeTimer);
+                ui.closeTimer = null;
                 const wasOpen = ui.host.classList.contains('bc-open');
                 ui.host.classList.toggle('bc-open', open);
                 ui.edge.setAttribute('aria-expanded', open ? 'true' : 'false');
-                if (!open) ui.input.blur();
-                else if (!wasOpen && focusInput) ui.input.focus();
+                if (!open) {
+                    ui.editing = false;
+                    ui.composing = false;
+                    ui.input.blur();
+                } else if (!wasOpen && focusInput) ui.input.focus({preventScroll:true});
                 if (wasOpen !== open && typeof invokeCSharpAction === 'function') {
                     invokeCSharpAction(JSON.stringify({source:'biliCinemaChat',
                         type:'panelState',open}));
                 }
             };
             const close = () => setOpen(false, false);
+            ui.closePanel = close;
+            // Hover opens the panel, but an active conversation owns focus until
+            // explicitly dismissed. IME candidate windows can cause blur/leave.
+            const keepOpen = () => ui.editing || ui.composing || ui.input.value.length > 0;
+            const deferClose = () => {
+                if (keepOpen() || ui.closeTimer !== null) return;
+                ui.closeTimer = setTimeout(() => {
+                    ui.closeTimer = null;
+                    if (!keepOpen()) close();
+                }, 500);
+            };
+            const beginEditing = () => {
+                ui.editing = true;
+                clearTimeout(ui.closeTimer);
+                ui.closeTimer = null;
+            };
+            ui.input.addEventListener('pointerdown', beginEditing);
+            ui.input.addEventListener('input', beginEditing);
+            ui.input.addEventListener('compositionstart', () => {
+                ui.composing = true;
+                beginEditing();
+            });
+            ui.input.addEventListener('compositionend', () => { ui.composing = false; });
             edge.addEventListener('keydown', event => {
                 if (event.key === 'Enter' || event.key === ' ') {
                     event.preventDefault();
@@ -212,20 +243,40 @@ internal static class RoomChatOverlayScript
                 }
             });
             ui.input.addEventListener('keydown', event => {
-                if (event.key === 'Escape') { event.preventDefault(); close(); }
+                if (event.isComposing || ui.composing || event.keyCode === 229) return;
+                beginEditing();
             });
+            // Alt is independent of playback/fullscreen. Capture both halves so
+            // dismissing chat cannot trigger the player's keyboard handling.
+            window.addEventListener('keydown', event => {
+                if (event.key === 'Alt' && !event.ctrlKey && !event.shiftKey && !event.metaKey
+                    && ui.host.classList.contains('bc-open')) {
+                    event.preventDefault();
+                    event.stopImmediatePropagation();
+                    ui.altDismissed = true;
+                    close();
+                }
+            }, {capture:true, signal:ui.listenerAbort.signal});
+            window.addEventListener('keyup', event => {
+                if (event.key === 'Alt' && ui.altDismissed) {
+                    event.preventDefault();
+                    event.stopImmediatePropagation();
+                    ui.altDismissed = false;
+                }
+            }, {capture:true, signal:ui.listenerAbort.signal});
             window.addEventListener('pointermove', event => {
-                if (!ui.fullscreen || !ui.inRoom) return;
+                if (!event.isTrusted || !ui.inRoom) return;
                 const panelLeft = window.innerWidth - ui.panel.getBoundingClientRect().width;
                 const overPanel = ui.host.classList.contains('bc-open') && event.clientX >= panelLeft;
                 if (event.clientX >= window.innerWidth - 18 || overPanel) {
                     setOpen(true, true);
                 } else {
-                    close();
+                    deferClose();
                 }
             }, {capture:true, signal:ui.listenerAbort.signal});
-            document.addEventListener('mouseleave', close, {signal:ui.listenerAbort.signal});
-            window.addEventListener('blur', close, {signal:ui.listenerAbort.signal});
+            document.addEventListener('mouseleave', event => {
+                if (event.isTrusted) deferClose();
+            }, {signal:ui.listenerAbort.signal});
         }
         const fullElement = document.fullscreenElement;
         const mount = fullElement && player.contains(fullElement)
@@ -235,7 +286,11 @@ internal static class RoomChatOverlayScript
         ui.inRoom = state.inRoom;
         ui.host.style.display = state.inRoom ? 'block' : 'none';
         ui.host.classList.toggle('bc-fullscreen', state.fullscreen && state.inRoom);
-        if (!state.fullscreen || !state.inRoom) {
+        if (!state.inRoom) {
+            clearTimeout(ui.closeTimer);
+            ui.closeTimer = null;
+            ui.editing = false;
+            ui.composing = false;
             ui.host.classList.remove('bc-open');
             ui.edge.setAttribute('aria-expanded', 'false');
             ui.input.blur();

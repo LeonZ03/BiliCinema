@@ -30,6 +30,7 @@
     <Using Include="Xunit" />
     <EmbeddedResource Include="Fixtures\player-surface.html" />
     <EmbeddedResource Include="Fixtures\room-overlay.html" />
+    <EmbeddedResource Include="Fixtures\chat-focus.html" />
   </ItemGroup>
 
   <ItemGroup>

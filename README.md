@@ -4,6 +4,8 @@
 
 BiliCinema 是一款 Windows 桌面应用，基于 [DownKyi Core](https://github.com/crazysmile-PhD/downkyicore)，可以播放哔哩哔哩视频、与好友同步观影，也可以下载影片。每个房间最多 **5 人（1 位房主 + 4 位访客）**。
 
+支持 **多人在各自电脑上登录同一个 B 站账号**，进入同一房间同步观看，也可以各自使用不同账号。
+
 ## 下载
 
 前往 [GitHub Releases](https://github.com/LeonZ03/BiliCinema/releases)，下载最新版本中的 `BiliCinema.exe`，保存到电脑后双击运行。程序以 Windows x64 单文件形式发布，不需要另外安装 .NET。播放视频需要安装 Microsoft Edge WebView2 Runtime；大多数 Windows 电脑已自带该组件。
@@ -23,7 +25,7 @@ BiliCinema 是一款 Windows 桌面应用，基于 [DownKyi Core](https://github
 ## 观看与聊天
 
 - **F** 进入或退出全屏，**D** 开关弹幕；聊天输入期间暂停播放快捷键。
-- 全屏时鼠标移到右边缘呼出聊天，移出面板后收起。新消息在画面右侧显示 5 秒。
+- 窗口和全屏都可将鼠标移到视频右边缘呼出聊天。未输入时移出面板后延迟收起；输入期间保持展开，按 **Alt** 收起并保留草稿。Enter 发送，Shift+Enter 换行；新消息在画面右侧显示 5 秒。
 - “我的昵称”会记住上次保存的内容，不公开 B 站账号信息。
 - 房间最多 **5 人，包含房主**；满员时会提示加入失败。所有成员请使用同一版本。
 - 新成员加入或有人缓冲时，会等待在线成员准备好再同步播放。访客断线不阻塞其他人；房主退出程序后，房间服务和临时邀请地址随之关闭。

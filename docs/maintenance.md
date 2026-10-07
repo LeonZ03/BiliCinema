@@ -214,6 +214,9 @@ cross-platform stress proof，不得移除。
 `Resources/bilicinema-mark.png` 供侧栏、下载首页、二维码分享卡片和 README 共同使用；
 `Resources/favicon.ico` 供 Windows exe、窗口和托盘使用。
 
+下载页的 DownKyi 来源标识为 `Resources/downkyi-mark.png`，直接沿用原项目的
+`script/pupnet/icons/logo.64.png`；外围透明，只用于来源署名，保留内部白色图案。
+
 ## 固定名稱
 
 - FFmpeg namespace：`DownKyi.Core.FFmpeg`。

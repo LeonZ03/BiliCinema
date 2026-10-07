@@ -245,6 +245,23 @@ internal sealed partial class WatchWindow : Window
 
     protected override async void OnKeyDown(KeyEventArgs args)
     {
+        if (_viewModel.ChatPanelOpen && args.Key is Key.LeftAlt or Key.RightAlt
+            && (args.KeyModifiers & (KeyModifiers.Control | KeyModifiers.Shift | KeyModifiers.Meta)) == 0)
+        {
+            args.Handled = true;
+            try
+            {
+                await CurrentBrowser.InvokeScript("window.__biliCinemaChatUi?.closePanel?.()")
+                    .ConfigureAwait(true);
+            }
+            catch (Exception error) when (error is InvalidOperationException
+                or ObjectDisposedException or System.Runtime.InteropServices.COMException)
+            {
+                // Navigation can replace the old chat overlay before key delivery.
+            }
+            return;
+        }
+
         var shortcutAvailable = _viewModel.ShowRoom && _viewModel.PlayerReady
             && args.KeyModifiers == KeyModifiers.None
             && FocusManager?.GetFocusedElement() is not TextBox

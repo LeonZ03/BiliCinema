@@ -330,8 +330,16 @@ internal sealed class BilibiliWebPlaybackSession : IDisposable
                 });
                 window.__biliCinemaResizeObserver.observe(player);
             }
+            const chatIsOpen = () => window.__biliCinemaChatUi?.host.isConnected
+                && window.__biliCinemaChatUi.host.classList.contains('bc-open');
             window.__biliCinemaCheckPlayerLayout = (force = false) => {
                 if (!player.isConnected || !video.isConnected) return false;
+                // Probing the player's hover state while typing can disturb its
+                // mouse/focus handling. Resume checks after chat is dismissed.
+                if (chatIsOpen()) {
+                    clearTimeout(window.__biliCinemaLayoutTimer);
+                    return window.__biliCinemaLayoutReady === true;
+                }
                 const normal = window.__biliCinemaEnsureNormalPlayer(player);
                 const box = player.getBoundingClientRect();
                 const controls = player.querySelector('.bpx-player-control-wrap, .bilibili-player-video-control');
@@ -367,7 +375,7 @@ internal sealed class BilibiliWebPlaybackSession : IDisposable
                     // update and hover transition, not just after two paint frames.
                     window.dispatchEvent(new Event('resize'));
                     window.__biliCinemaLayoutTimer = setTimeout(() => {
-                        if (window.__biliCinemaPlayerRoot !== player || !player.isConnected) return;
+                        if (window.__biliCinemaPlayerRoot !== player || !player.isConnected || chatIsOpen()) return;
                         const area = video.closest('.bpx-player-video-area') || video;
                         const rect = area.getBoundingClientRect();
                         player.dispatchEvent(new MouseEvent('mouseenter'));
@@ -375,7 +383,7 @@ internal sealed class BilibiliWebPlaybackSession : IDisposable
                             clientX: rect.left + rect.width / 2, clientY: rect.bottom - 40 }));
                         window.__biliCinemaLayoutTimer = setTimeout(() => {
                             if (window.__biliCinemaPlayerRoot !== player
-                                || window.__biliCinemaLayoutSignature !== signature) return;
+                                || window.__biliCinemaLayoutSignature !== signature || chatIsOpen()) return;
                             const rect = button?.getBoundingClientRect();
                             const hit = rect && document.elementFromPoint(rect.left + rect.width / 2,
                                 rect.top + rect.height / 2);
