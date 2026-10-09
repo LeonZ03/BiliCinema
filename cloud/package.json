@@ -1,0 +1,14 @@
+{
+  "name": "bilicinema-cloud-router",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "test": "node --test tests/*.test.mjs"
+  },
+  "devDependencies": {
+    "wrangler": "4.149.0"
+  }
+}

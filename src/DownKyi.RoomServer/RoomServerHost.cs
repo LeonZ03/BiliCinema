@@ -1,5 +1,7 @@
 using System.Net;
 using System.Net.WebSockets;
+using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json;
 
 [assembly: System.Runtime.CompilerServices.InternalsVisibleTo("DownKyi.Desktop")]
@@ -18,12 +20,29 @@ internal static class RoomServerHost
         builder.Services.AddHostedService(serviceProvider => serviceProvider.GetRequiredService<RoomCoordinator>());
 
         WebApplication app = builder.Build();
+        string? gatewayRouteKey = builder.Configuration["RoomServer:GatewayRouteKey"];
+        bool IsAuthorized(HttpContext context)
+        {
+            if (string.IsNullOrWhiteSpace(gatewayRouteKey))
+            {
+                return context.Request.IsHttps
+                    || context.Connection.RemoteIpAddress is { } address && IPAddress.IsLoopback(address);
+            }
+
+            string supplied = context.Request.Headers["X-BiliCinema-Route-Key"].ToString();
+            if (string.IsNullOrEmpty(supplied)) return false;
+            byte[] expected = Encoding.UTF8.GetBytes(gatewayRouteKey);
+            byte[] actual = Encoding.UTF8.GetBytes(supplied);
+            return expected.Length == actual.Length
+                && CryptographicOperations.FixedTimeEquals(expected, actual);
+        }
+
         app.UseWebSockets(new WebSocketOptions { KeepAliveInterval = TimeSpan.FromSeconds(20) });
-        app.MapGet("/health", () => Results.Ok(new { status = "ok" }));
+        app.MapGet("/health", (HttpContext context) =>
+            IsAuthorized(context) ? Results.Ok(new { status = "ok" }) : Results.StatusCode(StatusCodes.Status403Forbidden));
         app.Map("/ws", async (HttpContext context, RoomCoordinator rooms) =>
         {
-            IPAddress? remote = context.Connection.RemoteIpAddress;
-            if (!context.Request.IsHttps && (remote is null || !IPAddress.IsLoopback(remote)))
+            if (!IsAuthorized(context))
             {
                 context.Response.StatusCode = StatusCodes.Status403Forbidden;
                 return;

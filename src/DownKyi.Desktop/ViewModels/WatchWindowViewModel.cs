@@ -38,7 +38,7 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
     private readonly MainWindowViewModel _downloadContent;
     private readonly WatchRoomClient _room = new();
     private readonly List<WatchRoomChatMessage> _chatMessages = [];
-    private readonly QuickRoomTunnel _quickTunnel = new();
+    private readonly RoomGatewayTunnel _roomGateway = new();
     private readonly CancellationTokenSource _lifetime = new();
     private readonly SemaphoreSlim _snapshotGate = new(1, 1);
     private readonly SemaphoreSlim _roomOperationGate = new(1, 1);
@@ -1247,9 +1247,9 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
                 {
                     ReportRoomCreationProgress(new(55, "本机房间已创建，重新准备公网邀请"));
                     var retryProgress = new Progress<RoomCreationProgress>(ReportRoomCreationProgress);
-                    ServiceAddress = await _quickTunnel.StartAsync(retryProgress, _lifetime.Token)
+                    ServiceAddress = await _roomGateway.StartAsync(_room.RoomCode!, retryProgress, _lifetime.Token)
                         .ConfigureAwait(true);
-                    _hostInviteUrl = $"{ServiceAddress}#room={_room.RoomCode}";
+                    _hostInviteUrl = _roomGateway.InviteAddress;
                     RoomState = "房间已创建，可复制邀请给好友。";
                     ReportRoomCreationProgress(new(100, "公网邀请已准备好"));
                 }
@@ -1295,16 +1295,17 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
             _connectAddress = "ws://127.0.0.1:5077/ws";
             ReportRoomCreationProgress(new(35, "创建本机房间"));
             var snapshot = await _room.ConnectAsync(_connectAddress, create: true, null,
-                _lifetime.Token).ConfigureAwait(true);
+                _lifetime.Token, _roomGateway.LocalRouteKey).ConfigureAwait(true);
             ClearRoomChat();
             _lastVersion = -1;
             UpdateRoomMemberCount(snapshot);
             RoomState = "房间已创建，正在准备公网邀请…";
             ReportRoomCreationProgress(new(45, "本机房间已创建，准备公网邀请"));
             var progress = new Progress<RoomCreationProgress>(ReportRoomCreationProgress);
-            ServiceAddress = await _quickTunnel.StartAsync(progress, _lifetime.Token).ConfigureAwait(true);
+            ServiceAddress = await _roomGateway.StartAsync(_room.RoomCode!, progress, _lifetime.Token)
+                .ConfigureAwait(true);
             _startWhenReady = resumePlaying;
-            _hostInviteUrl = $"{ServiceAddress}#room={_room.RoomCode}";
+            _hostInviteUrl = _roomGateway.InviteAddress;
             InviteText = string.Empty;
             RoomState = selectedPage == null
                 ? "空房间已创建，等待房主选择影片。"
@@ -1365,7 +1366,9 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
 
             await BeginRoomSessionAsync().ConfigureAwait(true);
             var (address, code) = ParseInvite(InviteText, ServiceAddress);
-            ServiceAddress = address;
+            ServiceAddress = Uri.TryCreate(address, UriKind.Absolute, out var parsedAddress)
+                ? parsedAddress.GetLeftPart(UriPartial.Path)
+                : address;
             _connectAddress = address;
             RoomState = "正在加入房间…";
             var snapshot = await _room.ConnectAsync(address, create: false, code,
@@ -1401,7 +1404,9 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
         using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(2) };
         try
         {
-            using var response = await client.GetAsync(new Uri("http://127.0.0.1:5077/health"), cancellationToken)
+            using var request = new HttpRequestMessage(HttpMethod.Get, new Uri("http://127.0.0.1:5077/health"));
+            request.Headers.TryAddWithoutValidation("X-BiliCinema-Route-Key", _roomGateway.LocalRouteKey);
+            using var response = await client.SendAsync(request, cancellationToken)
                 .ConfigureAwait(true);
             if (response.IsSuccessStatusCode)
             {
@@ -1417,18 +1422,32 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
             // The short health probe timed out; start the embedded host below.
         }
 
-        _localServer = RoomServerHost.Build();
+        _localServer = RoomServerHost.Build(["--RoomServer:GatewayRouteKey", _roomGateway.LocalRouteKey]);
         await _localServer.StartAsync(cancellationToken).ConfigureAwait(true);
     }
 
     private static (string Address, string Code) ParseInvite(string invite, string defaultAddress)
     {
-        if (Uri.TryCreate(invite, UriKind.Absolute, out var uri) && uri.Fragment.StartsWith("#room=", StringComparison.Ordinal))
+        if (Uri.TryCreate(invite, UriKind.Absolute, out var uri))
         {
-            return (uri.GetLeftPart(UriPartial.Path), Uri.UnescapeDataString(uri.Fragment[6..]));
+            var queryRoom = uri.Query.TrimStart('?').Split('&', StringSplitOptions.RemoveEmptyEntries)
+                .Select(part => part.Split('=', 2))
+                .FirstOrDefault(part => part.Length == 2 && string.Equals(part[0], "room", StringComparison.OrdinalIgnoreCase));
+            if (queryRoom is { Length: 2 })
+            {
+                return (uri.GetLeftPart(UriPartial.Path) + $"?room={Uri.EscapeDataString(Uri.UnescapeDataString(queryRoom[1]))}",
+                    Uri.UnescapeDataString(queryRoom[1]));
+            }
+
+            if (uri.Fragment.StartsWith("#room=", StringComparison.Ordinal))
+            {
+                var code = Uri.UnescapeDataString(uri.Fragment[6..]);
+                return (uri.GetLeftPart(UriPartial.Path) + $"?room={Uri.EscapeDataString(code)}", code);
+            }
         }
 
-        return (defaultAddress, invite.Trim());
+        return (string.IsNullOrWhiteSpace(defaultAddress) ? RoomGatewayTunnel.ServiceAddress : defaultAddress,
+            invite.Trim());
     }
 
     private async Task CopyInviteAsync()
@@ -1448,6 +1467,8 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
     {
         if (_roomSessionCancellation is { } session)
             await session.CancelAsync().ConfigureAwait(true);
+        var roomCode = _room.RoomCode;
+        var wasHost = _room.IsHost;
         if (_room.Connected)
         {
             try
@@ -1461,12 +1482,16 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
             }
         }
 
+        if (wasHost && roomCode != null)
+        {
+            await _roomGateway.UnregisterRoomAsync(roomCode).ConfigureAwait(true);
+        }
         await _room.LeaveAsync().ConfigureAwait(true);
         // The invitation route belongs to this room, not the application lifetime.
         try { await StopLocalServerAsync().ConfigureAwait(true); }
         finally
         {
-            try { await _quickTunnel.StopAsync().ConfigureAwait(true); }
+            try { await _roomGateway.StopAsync().ConfigureAwait(true); }
             finally { ResetRoomState(); }
         }
     }
@@ -1775,11 +1800,19 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
                     await _roomPlayer.SetPausedAsync(true, reconnect.Token).ConfigureAwait(true);
                 }
 
-                if (ServiceAddress == _quickTunnel.ServiceAddress && !_quickTunnel.IsRunning)
+                if (_room.IsHost && !_roomGateway.IsRunning)
                 {
-                    InviteText = string.Empty;
-                    RoomState = "Cloudflare 地址已失效；请重新创建房间并分享新邀请。";
-                    return;
+                    try
+                    {
+                        var retryProgress = new Progress<RoomCreationProgress>(ReportRoomCreationProgress);
+                        ServiceAddress = await _roomGateway.StartAsync(code, retryProgress, reconnect.Token)
+                            .ConfigureAwait(true);
+                        _hostInviteUrl = _roomGateway.InviteAddress;
+                    }
+                    catch (Exception error) when (IsRoutineError(error))
+                    {
+                        RoomState = "房主公网通道暂时不可用，正在等待恢复。";
+                    }
                 }
 
                 for (var attempt = 1; attempt <= 3; attempt++)
@@ -1788,7 +1821,8 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
                     {
                         await Task.Delay(TimeSpan.FromSeconds(attempt), reconnect.Token).ConfigureAwait(true);
                         var snapshot = await _room.ConnectAsync(_connectAddress, create: false, code,
-                            reconnect.Token).ConfigureAwait(true);
+                            reconnect.Token, _room.IsHost ? _roomGateway.LocalRouteKey : null)
+                            .ConfigureAwait(true);
                         _lastVersion = -1;
                         OnPropertyChanged(nameof(IsInRoom));
                         OnPropertyChanged(nameof(RoomRoleText));
@@ -2042,7 +2076,7 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
             {
                 try
                 {
-                    await _quickTunnel.DisposeAsync().ConfigureAwait(true);
+                    await _roomGateway.DisposeAsync().ConfigureAwait(true);
                 }
                 finally
                 {

@@ -20,7 +20,7 @@ PR 修正文件。
 | CI、timeout、TRX、zero tests、cleanup | `DownKyi.CentralTestRunner` + OS test project | TRX + failure recorder | [Test／CI 卡](#test-ci) |
 | SQLite、migration、history、persistence | Domain task + Application service + SQLite store | transition／migration tests | [下載資料卡](#download-persistence) |
 | queue、retry、resume、media selection、aria2、FFmpeg | selection／media contract + coordinator + backend | focused runtime regression | [傳輸與媒體卡](#transfer-media) |
-| 觀影、多人同步、聊天、邀請、WebView2 | WatchWindow／RoomCoordinator／QuickRoomTunnel | desktop room tests + WebSocket smoke | [觀影說明](watch-together.md)、[房間協定](../src/DownKyi.RoomServer/README.md) |
+| 觀影、多人同步、聊天、邀請、WebView2 | WatchWindow／RoomCoordinator／RoomGatewayTunnel／cloud Worker | desktop room tests + cloud registry tests + WebSocket smoke | [觀影說明](watch-together.md)、[房間協定](../src/DownKyi.RoomServer/README.md)、[雲端部署](../cloud/DEPLOYMENT.md) |
 | settings、schema、invalid file、flush | `ISettingsStore`／`SettingsSchemaMigrator` | settings + architecture + Host tests | [Settings 卡](#settings) |
 | logging、redaction、export、retention | `ApplicationLogProvider` + Infrastructure logging owners | provider stress + Host tests | [Logging 卡](#logging) |
 | Desktop、DI、Host、theme、XAML | Desktop composition + design tokens | architecture + XAML + packaged smoke | [Desktop／Host 卡](#desktop-host) |

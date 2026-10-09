@@ -14,9 +14,7 @@ public sealed partial class AriaServerWindowsTests
     public async Task LifetimeJobTerminatesTheAssignedProcessWhenReleased()
     {
         using var process = StartLongRunningProcess();
-        var processJob = WindowsProcessJob.TryCreateAndAssign(
-            process,
-            NullLogger.Instance);
+        var processJob = WindowsProcessJob.CreateAndAssign(process);
 
         Assert.NotNull(processJob);
         processJob.Dispose();

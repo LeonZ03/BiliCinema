@@ -16,9 +16,9 @@ pwsh -File src/DownKyi.RoomServer/smoke.ps1
 
 ## Private internet deployment
 
-For temporary remote viewing, the BiliCinema EXE creates the local room first, then starts its bundled `cloudflared` client and verifies the public WebSocket upgrade used by guests. The host connects locally while the invitation route is preparing; a failed route can be retried without recreating the local room. Ending or leaving a hosted room closes the owned local service and Tunnel; application shutdown does the same. Creation waits for prior teardown and always starts a fresh Tunnel. Old invitations cannot join the new room. Quick Tunnels are intended for temporary use and have no uptime guarantee.
+For remote viewing, the BiliCinema EXE creates the local room first, then registers a host session through the fixed BiliCinema gateway and starts its bundled `cloudflared` client with a session-scoped remotely managed Tunnel token. The host connects locally while the gateway route is preparing; a failed route can be retried without recreating the local room. Each host session can carry multiple room routes, while different host computers use different Tunnel instances. Ending or leaving a hosted room removes its route; application shutdown stops the connector. The gateway keeps a bounded two-minute heartbeat window and removes stale routes and Tunnel resources after an abnormal exit. Invitations use `wss://bilicinema.leonz03.dpdns.org/ws?room=...`; the room code is only a routing hint, and the first WebSocket JSON message still authenticates the room member.
 
-For a stable hostname, set up a named Cloudflare Tunnel or run the service on a host you control with a TLS reverse proxy. Keep the default loopback listener. For example, a Caddy site can use:
+For local development, keep the default loopback listener. Production gateway resources are configured under `cloud/`; Cloudflare API credentials remain Worker Secrets and never enter the EXE. A standalone local deployment can still use a named Cloudflare Tunnel or a TLS reverse proxy on a host you control. Keep the listener loopback-only. For example, a Caddy site can use:
 
 ```caddyfile
 room.example.com {

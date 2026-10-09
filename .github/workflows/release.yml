@@ -41,6 +41,11 @@ jobs:
       - name: Verify formatting
         shell: pwsh
         run: ./script/verify-format.ps1
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+      - name: Cloud room router regression
+        run: node --test cloud/tests/router-registry.test.mjs
       - name: Full Windows regression
         timeout-minutes: 10
         shell: pwsh

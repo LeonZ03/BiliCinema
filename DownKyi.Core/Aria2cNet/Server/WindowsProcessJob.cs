@@ -7,7 +7,7 @@ using Microsoft.Win32.SafeHandles;
 
 namespace DownKyi.Core.Aria2cNet.Server;
 
-internal sealed partial class WindowsProcessJob : IDisposable
+public sealed partial class WindowsProcessJob : IDisposable
 {
     private readonly SafeFileHandle _handle;
 
@@ -25,6 +25,27 @@ internal sealed partial class WindowsProcessJob : IDisposable
         if (!OperatingSystem.IsWindows())
         {
             return null;
+        }
+
+        try
+        {
+            return CreateAndAssign(process);
+        }
+        catch (Win32Exception e)
+        {
+            logger.LogWarningMessage(
+                "aria2 could not be attached to a Windows lifetime job; parent-process monitoring remains enabled.",
+                e);
+            return null;
+        }
+    }
+
+    public static WindowsProcessJob CreateAndAssign(Process process)
+    {
+        ArgumentNullException.ThrowIfNull(process);
+        if (!OperatingSystem.IsWindows())
+        {
+            throw new PlatformNotSupportedException("Process lifetime jobs require Windows.");
         }
 
         SafeFileHandle? handle = null;
@@ -59,13 +80,10 @@ internal sealed partial class WindowsProcessJob : IDisposable
 
             return new WindowsProcessJob(handle);
         }
-        catch (Win32Exception e)
+        catch
         {
             handle?.Dispose();
-            logger.LogWarningMessage(
-                "aria2 could not be attached to a Windows lifetime job; parent-process monitoring remains enabled.",
-                e);
-            return null;
+            throw;
         }
     }
 

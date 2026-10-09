@@ -1,0 +1,32 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "bilicinema-router",
+  "main": "src/worker.mjs",
+  "compatibility_date": "2026-10-08",
+  "compatibility_flags": ["global_fetch_strictly_public"],
+  "workers_dev": false,
+  "preview_urls": false,
+  "routes": [
+    { "pattern": "bilicinema.leonz03.dpdns.org", "custom_domain": true }
+  ],
+  "vars": {
+    "PUBLIC_ORIGIN": "https://bilicinema.leonz03.dpdns.org",
+    "ORIGIN_ZONE": "leonz03.dpdns.org",
+    "MAX_HOST_SESSIONS": "64",
+    "CREATE_RATE_LIMIT": "10",
+    "CREATE_RATE_WINDOW_MS": "600000",
+    "HOST_STALE_MS": "60000",
+    "HOST_EXPIRY_MS": "120000"
+  },
+  "durable_objects": {
+    "bindings": [
+      { "name": "REGISTRY", "class_name": "RoomRouteRegistry" }
+    ]
+  },
+  "migrations": [
+    { "tag": "router-v1", "new_sqlite_classes": ["RoomRouteRegistry"] }
+  ],
+  "triggers": { "crons": ["*/5 * * * *"] },
+  "observability": { "enabled": false },
+  "send_metrics": false
+}

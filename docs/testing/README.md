@@ -36,9 +36,9 @@ repository entry。
 房间网络验证使用完整类名 `DownKyi.Desktop.Tests.RoomTransportTests`：默认仅跑本机
 WebSocket 握手、关闭重建和网关拒绝场景。在线 Cloudflare 场景仅在
 `BILICINEMA_LIVE_TUNNEL_TEST=1` 时运行，CI 默认跳过。在线验证需要空闲的 5077 端口，
-以及构建清单中的 cloudflared 位于 PATH（源码构建缓存为
-`src/DownKyi.Desktop/EmbeddedTools`）；它创建两条临时隧道并验证访客加入，结束时释放
-服务和进程，不使用 B 站账号。
+以及完成部署的固定域名网关；cloudflared 使用应用内置资源。在线场景经过正式
+`RoomGatewayTunnel` 创建两次房间并验证访客通过固定域名加入，结束时清理路由、
+Tunnel、服务和进程，不使用 B 站账号。
 
 ```powershell
 pwsh ./script/test-project.ps1 -ProjectPath tests/DownKyi.Desktop.Tests/DownKyi.Desktop.Tests.csproj `

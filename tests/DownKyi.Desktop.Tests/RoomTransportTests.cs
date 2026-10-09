@@ -81,6 +81,35 @@ public sealed class RoomTransportTests
     }
 
     [Fact]
+    public async Task GatewayRouteKeyProtectsEmbeddedRoomServer()
+    {
+        const string routeKey = "test-route-key-for-bilicinema-room-server";
+        var app = RoomServerHost.Build([
+            "--RoomServer:ListenUrl", "http://127.0.0.1:0",
+            "--RoomServer:GatewayRouteKey", routeKey,
+            "--Logging:LogLevel:Default", "None"]);
+        await using (app.ConfigureAwait(false))
+        {
+            await app.StartAsync(TestContext.Current.CancellationToken);
+            using var http = new HttpClient();
+            using var rejected = await http.GetAsync(new Uri(new Uri(app.Urls.Single()), "/health"),
+                TestContext.Current.CancellationToken);
+            Assert.Equal(HttpStatusCode.Forbidden, rejected.StatusCode);
+            using var request = new HttpRequestMessage(HttpMethod.Get,
+                new Uri(new Uri(app.Urls.Single()), "/health"));
+            request.Headers.TryAddWithoutValidation("X-BiliCinema-Route-Key", routeKey);
+            using var accepted = await http.SendAsync(request, TestContext.Current.CancellationToken);
+            Assert.Equal(HttpStatusCode.OK, accepted.StatusCode);
+
+            var client = new WatchRoomClient();
+            await using var clientLifetime = client.ConfigureAwait(true);
+            var snapshot = await client.ConnectAsync(WebSocketAddress(app), true, null,
+                TestContext.Current.CancellationToken, routeKey);
+            Assert.Equal(1, snapshot.MemberCount);
+        }
+    }
+
+    [Fact]
     public async Task SlowWebSocketRouteIsAllowedToCompleteReadinessCheck()
     {
         var app = CreateServer();
@@ -93,8 +122,7 @@ public sealed class RoomTransportTests
         await using (app.ConfigureAwait(false))
         {
             await app.StartAsync(TestContext.Current.CancellationToken);
-            using var http = new HttpClient { Timeout = Timeout.InfiniteTimeSpan };
-            await QuickRoomTunnel.ProbePublicRouteAsync(http, new Uri(app.Urls.Single()),
+            await RoomGatewayTunnel.ProbePublicRouteAsync(new Uri(app.Urls.Single()),
                 TestContext.Current.CancellationToken);
         }
     }
@@ -117,9 +145,9 @@ public sealed class RoomTransportTests
         {
             await app.StartAsync(TestContext.Current.CancellationToken);
             var baseAddress = new Uri(app.Urls.Single());
-            using var http = new HttpClient();
-            await Assert.ThrowsAsync<WebSocketException>(() =>
-                QuickRoomTunnel.ProbePublicRouteAsync(http, baseAddress, TestContext.Current.CancellationToken));
+            var probeError = await Assert.ThrowsAsync<HttpRequestException>(() =>
+                RoomGatewayTunnel.ProbePublicRouteAsync(baseAddress, TestContext.Current.CancellationToken));
+            Assert.Equal(HttpStatusCode.ServiceUnavailable, probeError.StatusCode);
             var client = new WatchRoomClient();
             await using var clientLifetime = client.ConfigureAwait(true);
             var error = await Assert.ThrowsAsync<InvalidOperationException>(() =>
@@ -127,66 +155,69 @@ public sealed class RoomTransportTests
             Assert.Contains("HTTP 503", error.Message, StringComparison.Ordinal);
             Assert.False(client.Connected);
             rejectUpgrade = false;
-            await QuickRoomTunnel.ProbePublicRouteAsync(http, baseAddress, TestContext.Current.CancellationToken);
+            await RoomGatewayTunnel.ProbePublicRouteAsync(baseAddress, TestContext.Current.CancellationToken);
             await client.ConnectAsync(WebSocketAddress(app), true, null, TestContext.Current.CancellationToken);
             Assert.True(client.Connected);
         }
     }
 
     [Fact(SkipUnless = nameof(LiveTunnelEnabled), Skip = "Requires explicit live Cloudflare Tunnel investigation.")]
-    public async Task LiveTunnelStartsFreshRoutesAndGuestsJoinBothRooms()
+    public async Task LiveFixedGatewayRoutesGuestsToRecreatedRooms()
     {
-        var app = CreateServer("http://127.0.0.1:5077");
-        var websocketRequests = 0;
-        var originRequests = 0;
-        var lastWebSocketStatus = 0;
-        app.Use(async (context, next) =>
+        using var deadline = CancellationTokenSource.CreateLinkedTokenSource(TestContext.Current.CancellationToken);
+        deadline.CancelAfter(TimeSpan.FromMinutes(5));
+        var tunnel = new RoomGatewayTunnel();
+        await using var tunnelLifetime = tunnel.ConfigureAwait(true);
+        string? previousRoom = null;
+        for (var cycle = 0; cycle < 2; cycle++)
         {
-            if (context.Request.Path == "/ws")
-            {
-                Interlocked.Increment(ref websocketRequests);
-                if (context.Request.Headers.ContainsKey("Origin")) Interlocked.Increment(ref originRequests);
-            }
-            await next(context).ConfigureAwait(false);
-            if (context.Request.Path == "/ws") lastWebSocketStatus = context.Response.StatusCode;
-        });
-        await using (app.ConfigureAwait(false))
-        {
-            using var deadline = CancellationTokenSource.CreateLinkedTokenSource(TestContext.Current.CancellationToken);
-            deadline.CancelAfter(TimeSpan.FromMinutes(5));
+            var app = RoomServerHost.Build([
+                "--RoomServer:ListenUrl", "http://127.0.0.1:5077",
+                "--RoomServer:GatewayRouteKey", tunnel.LocalRouteKey,
+                "--Logging:LogLevel:Default", "None"]);
+            await using var appLifetime = app.ConfigureAwait(true);
             await app.StartAsync(deadline.Token);
-            var tunnel = new QuickRoomTunnel();
-            await using var tunnelLifetime = tunnel.ConfigureAwait(true);
             var host = new WatchRoomClient();
             await using var hostLifetime = host.ConfigureAwait(true);
             var guest = new WatchRoomClient();
             await using var guestLifetime = guest.ConfigureAwait(true);
-            string firstAddress;
             var progress = new CreationProgressRecorder();
-            try { firstAddress = await tunnel.StartAsync(progress, deadline.Token); }
-            catch (InvalidOperationException error)
+            await host.ConnectAsync(WebSocketAddress(app), true, null, deadline.Token, tunnel.LocalRouteKey);
+            Assert.NotEqual(previousRoom, host.RoomCode);
+            string address;
+            try
             {
-                throw new InvalidOperationException($"{error.Message} 本机收到 WebSocket 请求 {websocketRequests} 次，Origin 请求 {originRequests} 次，"
-                    + $"WebSocket 最后状态 {lastWebSocketStatus}。", error);
+                address = await tunnel.StartAsync(host.RoomCode!, progress, deadline.Token);
             }
-            Assert.Contains(progress.Values, value => value.Percentage == 40);
+            catch (TimeoutException error)
+            {
+                HttpStatusCode status;
+                using (var http = new HttpClient { Timeout = TimeSpan.FromSeconds(15) })
+                using (var request = new HttpRequestMessage(HttpMethod.Get, $"https://{tunnel.OriginHost}/health"))
+                {
+                    request.Headers.TryAddWithoutValidation("X-BiliCinema-Route-Key", tunnel.LocalRouteKey);
+                    using var response = await http.SendAsync(request, deadline.Token);
+                    status = response.StatusCode;
+                }
+                throw new InvalidOperationException($"Direct origin HTTP {(int)status}. {error.Message}", error);
+            }
             Assert.Contains(progress.Values, value => value.Percentage == 70);
             Assert.Equal(85, progress.Values[^1].Percentage);
-            await host.ConnectAsync(WebSocketAddress(app), true, null, deadline.Token);
-            var first = await guest.ConnectAsync(firstAddress, false, host.RoomCode, deadline.Token);
-            Assert.Equal(2, first.MemberCount);
+            Assert.Equal(RoomGatewayTunnel.ServiceAddress, address);
+            Assert.Contains(host.RoomCode!, tunnel.InviteAddress, StringComparison.Ordinal);
+            var joined = await guest.ConnectAsync(tunnel.InviteAddress!, false, host.RoomCode, deadline.Token);
+            Assert.Equal(2, joined.MemberCount);
+            previousRoom = host.RoomCode;
             await host.CloseRoomAsync(deadline.Token);
             await guest.LeaveAsync();
             await host.LeaveAsync();
             await tunnel.StopAsync();
             Assert.False(tunnel.IsRunning);
-            Assert.Null(tunnel.ServiceAddress);
-            var secondAddress = await tunnel.StartAsync(deadline.Token);
-            Assert.False(string.Equals(firstAddress, secondAddress, StringComparison.Ordinal),
-                "Recreation reused the old public route.");
-            await host.ConnectAsync(WebSocketAddress(app), true, null, deadline.Token);
-            var second = await guest.ConnectAsync(secondAddress, false, host.RoomCode, deadline.Token);
-            Assert.Equal(2, second.MemberCount);
+            Assert.Null(tunnel.InviteAddress);
+            var ended = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+                guest.ConnectAsync(address, false, previousRoom, deadline.Token));
+            Assert.Contains("房间已结束", ended.Message, StringComparison.Ordinal);
+            await app.StopAsync(deadline.Token);
         }
     }
 

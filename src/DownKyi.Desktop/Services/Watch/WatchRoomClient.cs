@@ -41,7 +41,8 @@ internal sealed class WatchRoomClient : IAsyncDisposable
         string serviceAddress,
         bool create,
         string? roomCode,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        string? routeKey = null)
     {
         if (!Uri.TryCreate(serviceAddress, UriKind.Absolute, out var uri)
             || !((uri.Scheme == "wss") || (uri.Scheme == "ws" && uri.IsLoopback))
@@ -49,6 +50,9 @@ internal sealed class WatchRoomClient : IAsyncDisposable
         {
             throw new InvalidOperationException("房间地址须为 wss://…/ws；仅本机可使用 ws://127.0.0.1:端口/ws。");
         }
+
+        if (!create && !string.IsNullOrWhiteSpace(roomCode))
+            uri = new UriBuilder(uri) { Query = $"room={Uri.EscapeDataString(roomCode)}" }.Uri;
 
         var reconnectClientId = !create && string.Equals(roomCode, RoomCode, StringComparison.Ordinal)
             ? ClientId
@@ -58,6 +62,10 @@ internal sealed class WatchRoomClient : IAsyncDisposable
         var socket = new ClientWebSocket();
         socket.Options.KeepAliveInterval = TimeSpan.FromSeconds(15);
         socket.Options.CollectHttpResponseDetails = true;
+        if (!string.IsNullOrWhiteSpace(routeKey))
+        {
+            socket.Options.SetRequestHeader("X-BiliCinema-Route-Key", routeKey);
+        }
         _socket = socket;
         using var deadline = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         deadline.CancelAfter(TimeSpan.FromSeconds(20));
@@ -127,6 +135,8 @@ internal sealed class WatchRoomClient : IAsyncDisposable
             await CloseSocketAsync().ConfigureAwait(false);
             throw new InvalidOperationException(status switch
             {
+                HttpStatusCode.NotFound
+                    => "房间已结束或邀请已失效，请向房主获取新邀请。",
                 HttpStatusCode.BadGateway or HttpStatusCode.ServiceUnavailable or HttpStatusCode.GatewayTimeout
                     => $"房间公网通道暂不可用（HTTP {(int)status}），请房主重新创建房间并分享新邀请。",
                 HttpStatusCode.Forbidden or HttpStatusCode.Unauthorized

@@ -107,6 +107,11 @@ jobs:
           -TrxName targeted-resource-forensics.trx
           -Filter FullyQualifiedName=DownKyi.Windows.Tests.TargetedResourceForensicsWindowsTests.ControlledDirectoryOwnerProducesCorrelatedLifecycleArtifact
           -EvidenceDirectory ./artifacts/test-flight-recorder
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+      - name: Cloud room router regression
+        run: node --test cloud/tests/router-registry.test.mjs
       - name: Test
         shell: pwsh
         run: >
