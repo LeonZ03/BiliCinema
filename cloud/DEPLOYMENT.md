@@ -1,46 +1,57 @@
-# BiliCinema 固定域名路由部署
+# Cloudflare 云端房间部署
 
-这部分部署只操作 `bilicinema.leonz03.dpdns.org` 和
-`bilicinema-h-<session>.leonz03.dpdns.org`，不修改 Whisper 的 Worker、D1、
-Durable Objects 或 `whisper.leonz03.dpdns.org`。
+生产入口为 `wss://bilicinema.leonz03.dpdns.org/v2/ws`，Worker 名称仍为
+`bilicinema-router`。本配置只拥有 BiliCinema 的 Worker、Durable Objects 和
+既有域名，不应修改其他应用。
 
-## 一次性准备
+## 本地验证与部署
 
-确认 `leonz03.dpdns.org` 是当前 Cloudflare 账户的 Active Zone，并准备：
-
-- 账户 ID；
-- Zone ID；
-- 仅包含 Cloudflare Tunnel Edit 和该 Zone DNS Edit 的 API Token。
-
-API Token 只配置为 Worker Secret：
+使用 Node.js 24，在 `cloud/` 执行：
 
 ```powershell
-cd cloud
+npm ci
+npm test
+npx wrangler deploy --dry-run
 npx wrangler login
-npm install
-npx wrangler secret put CLOUDFLARE_API_TOKEN
-npx wrangler secret put CLOUDFLARE_ACCOUNT_ID
-npx wrangler secret put CLOUDFLARE_ZONE_ID
 npx wrangler deploy
 ```
 
-部署前先用 `npx wrangler dev` 和本地合成 Tunnel 测试路由、过期清理和
-WebSocket 代理。不要把 `.dev.vars`、Token、Tunnel token 或测试 URL 提交到 Git。
+检查 `/health` 返回 `ok: true`、`version: "2"`；再做真实 WSS 建房、加入、
+结束及旧邀请失效检查。HTTP health 不代表 WebSocket 协议已通过。
+SQLite Durable Objects 可用免费方案；实际可用性受账户共享额度限制。
+`CLOUD_CREATE_RATE_LIMIT` 默认每来源 10 分钟 10 次，`CLOUD_DAILY_ROOM_LIMIT`
+默认整个服务每天 512 次建房尝试。公开服务遭到限流或额度耗尽时应显示错误并稍后重试。
 
-## 运行时行为
+`wrangler.jsonc` 的 `router-v1` 迁移保持不变，`router-v2` 添加 CloudRoom。
+不要删除仍有旧客户端使用的 registry、旧迁移或旧管理 secrets。新房间不创建
+Tunnel/DNS，只使用 ROOMS 绑定；原 registry 继续负责旧资源清理和建房限流。
 
-- Worker 为每个活跃主机会话创建一个远程 Tunnel；同一主机上的多个房间共用它。
-- Tunnel 的 DNS 记录使用 `bilicinema-h-<session>.leonz03.dpdns.org`，保持一级子域名以使用免费证书，不会放进邀请地址。
-- 房间邀请使用 `wss://bilicinema.leonz03.dpdns.org/ws?room=<room-code>`。
-- 主机每 20 秒发送心跳；60 秒后新加入请求进入离线状态，120 秒后删除房间映射、DNS 记录和 Tunnel。
-- 显式结束房间会立即删除该房间路由；删除失败由 Durable Object alarm 和 Worker cron 重试。
-- 创建资源前先持久记录主机会话；部分创建失败或删除中断时保留清理记录，逐项删除后再移除会话。
-- Tunnel 主机名保持一级子域名；`global_fetch_strictly_public` 让同一区域的转发走正常公网入口。
-- WebSocket 两端显式设置 `binaryType="arraybuffer"`，保留文本及二进制消息内容。
-- 客户端等待 Tunnel 注册后再验证入口；管理请求的连接复用时间有上限，避免一次早期失败锁住后续探测。公网邀请还会验证实际 WebSocket 升级。
-- 短暂网络超时不会停止心跳任务；云端会话已过期时，房主用同一本机房间重新申请通道并注册路由。结束或退出可取消正在恢复的通道。
-- WebSocket 异常断开时将保留关闭码转换为可发送的关闭码，释放另一端连接，避免空探测连接悬挂。
-- Windows 将 Tunnel 子进程绑定到主程序生命周期，强制结束 exe 时也会终止子进程。云端清理会先撤销旧 Tunnel 凭据、断开残留连接，再删除 Tunnel，避免残留连接反复重连阻止回收。
-- 同一次申请重试复用原会话，不重复消耗创建限额。并发会话上限与限流参数以 `wrangler.jsonc` 为准；实际可用量还受账户共享免费额度限制。
+## GitHub 自动部署
 
-云端尚未配置或运行时令牌权限不足时，exe 仍可以创建本地房间，但公网邀请准备会失败并保留本地房间供重试。正常使用者只需安装 exe，无须登录 Cloudflare。
+`.github/workflows/cloud-rooms.yml` 在 cloud 目录变更时运行真实运行时测试和
+Wrangler dry-run，main 通过后部署到既有域名。仓库/环境 secrets 需配置：
+
+- `CLOUDFLARE_API_TOKEN`：仅部署该 Worker、Durable Objects 及既有域名所需权限。
+- `CLOUDFLARE_ACCOUNT_ID`：对应账户。
+
+不要复制本机短期 OAuth token 到 CI；使用适当范围的 CI API token。不得把 secrets
+放入源码、日志、PR 或聊天。生产部署 job 使用 `cloudflare-production` environment。
+
+也可在 Cloudflare Worker Settings → Builds 连接 `LeonZ03/BiliCinema`，生产分支
+main，root directory 为 `cloud`，build command 为 `npm ci && npm test`，deploy
+command 为 `npx wrangler deploy`。选择 GitHub Actions 或 Workers Builds 一个部署
+owner，避免两条流水线并发部署。若采用 Workers Builds，应停用 Actions deploy job。
+
+## 回滚
+
+使用 Worker deployment history 或 `npx wrangler rollback` 回滚代码。涉及新增 DO
+类的首次迁移不能当成普通无状态回滚；保留 binding 和迁移历史，优先修复或回滚到
+同一迁移之后的兼容版本。不要删除房间存储或替换旧迁移来强行回滚。
+
+## 客户端发布身份
+
+Windows 和 Android 从同一 `bilicinema-v<version>` Release 更新。发版工作流先验证
+.NET、CodeQL、Windows 单文件和 Android 单测/lint/签名，再上传 EXE、APK 与统一
+SHA256SUMS.txt。Android CI 使用 `ANDROID_KEYSTORE_BASE64`、`ANDROID_KEY_ALIAS`、
+`ANDROID_KEYSTORE_PASSWORD`、`ANDROID_KEY_PASSWORD`；必须导入首次发布所用的同一个
+签名身份，不能每次重新生成。密钥仅在 runner 临时目录解码，打包后删除。

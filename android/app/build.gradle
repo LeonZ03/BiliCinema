@@ -1,0 +1,55 @@
+plugins { id 'com.android.application' }
+
+def releaseVersion = file('../../version.txt').text.trim()
+def versionParts = releaseVersion.tokenize('.').collect { it.toInteger() }
+
+android {
+    namespace 'com.leonz03.bilicinema'
+    compileSdk 35
+
+    defaultConfig {
+        applicationId 'com.leonz03.bilicinema'
+        minSdk 26
+        targetSdk 35
+        versionCode versionParts[0] * 1000000 + versionParts[1] * 1000 + versionParts[2]
+        versionName releaseVersion
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+
+    signingConfigs {
+        release {
+            def store = System.getenv('BILICINEMA_KEYSTORE')
+            def alias = System.getenv('BILICINEMA_KEY_ALIAS')
+            def password = System.getenv('BILICINEMA_KEYSTORE_PASSWORD')
+            def releaseKeyPassword = System.getenv('BILICINEMA_KEY_PASSWORD')
+            if (store && alias && password && releaseKeyPassword) {
+                storeFile file(store)
+                storePassword password
+                keyAlias alias
+                keyPassword releaseKeyPassword
+            }
+        }
+    }
+
+    buildTypes {
+        debug { applicationIdSuffix '.debug' }
+        release {
+            minifyEnabled false
+            shrinkResources false
+            signingConfig signingConfigs.release
+        }
+    }
+
+    buildFeatures { buildConfig true }
+}
+
+dependencies {
+    implementation 'androidx.webkit:webkit:1.12.1'
+    implementation 'com.squareup.okhttp3:okhttp:4.12.0'
+    testImplementation 'junit:junit:4.13.2'
+    testImplementation 'org.json:json:20240303'
+}

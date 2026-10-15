@@ -1,0 +1,56 @@
+name: Cloud rooms
+
+on:
+  pull_request:
+    paths: ['cloud/**', 'script/test-cloud-rooms.mjs', '.github/workflows/cloud-rooms.yml']
+  push:
+    branches: [main]
+    paths: ['cloud/**', 'script/test-cloud-rooms.mjs', '.github/workflows/cloud-rooms.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cloud-rooms-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: cloud/package-lock.json
+      - run: npm ci
+        working-directory: cloud
+      - run: npm test
+        working-directory: cloud
+      - run: npx wrangler deploy --dry-run
+        working-directory: cloud
+
+  deploy:
+    needs: verify
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    environment: cloudflare-production
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+      - run: npm ci
+        working-directory: cloud
+      - name: Deploy verified rooms to the existing domain
+        working-directory: cloud
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          test -n "$CLOUDFLARE_API_TOKEN" && test -n "$CLOUDFLARE_ACCOUNT_ID"
+          npx wrangler deploy
+      - name: Verify deployed service
+        run: node script/test-cloud-rooms.mjs

@@ -17,11 +17,16 @@ do not use an upstream repository's workboard for this fork.
   but do not grow an unmerged release stack beyond roughly two or three layers
   or material divergence from `main`. Consolidate accepted semantics onto one
   clean current-main integration branch and validate that exact head.
-- BiliCinema ships one Windows x64 executable. Publish only from one clean
+- BiliCinema ships one Windows x64 executable and a signed Android APK. Publish only from one clean
   final commit after strict quality, CodeQL, the Windows test selection and
   single-executable package validation pass for that exact commit. The inherited
   Linux/macOS package formats are not BiliCinema release artifacts; shared-code
   platform tests remain in the pull-request quality workflow.
+- Android release unit tests, lint and signed assembly must pass for the same
+  commit. Reuse the existing release signing identity; never create an ephemeral
+  CI signing key. Publish both packages with one SHA256SUMS.txt. App updates must
+  verify the release origin and digest; Android also verifies package identity,
+  version and signer before opening the system installer.
 - Preserve settings JSON, legacy SQLite, unfinished tasks, GID, partial-file
   maps, completed keys and resume fixtures unless an approved migration with
   rollback evidence explicitly changes them.

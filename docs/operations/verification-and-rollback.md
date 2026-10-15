@@ -79,7 +79,7 @@ Get-ChildItem ./artifacts/BiliCinema-win-x64 -File
 `BiliCinema Release` 工作流在 main 的 `version.txt` 或工作流本身變更時執行，
 也可手動執行。它對同一提交完成格式、嚴格建置、Windows 完整回歸、CodeQL、
 單文件打包與實際 aria2 TLS 測試後，才建立 `bilicinema-v<version>` Release，
-上傳 `BiliCinema.exe` 與 SHA-256 校驗檔。現有 Release 不會被覆寫。
+並完成 Android release 單測、lint 和簽名 APK 後，上傳 `BiliCinema.exe`、APK 與統一的 SHA-256 校驗檔。現有 Release 不會被覆寫。
 一般 main 程式碼提交仍不會觸發 Strict PR CI。
 
 登入態 API audit 只能由明確授權的 operator 執行：
@@ -131,3 +131,14 @@ git revert <commit-sha>
 5. 未完成下載與 resume state 驗證。
 
 XAML/rename PR 回滾時應 revert 整個 rename commit，避免只還原 class 而留下 resource URI、DI 或 route references。
+
+## Android 與雲端房間
+
+Android 開發環境使用 JDK 17、SDK 35 與 repository Gradle wrapper：
+`pwsh ./script/build-android.ps1` 執行 release unit tests、lint、簽名打包並輸出 APK 和 checksum。
+首次簽名身份須安全備份並導入 CI secrets；後續版本必須使用同一身份。
+裝置驗收包括手機／平板、旋轉、QR 登入、會員內容、分 P、背景恢復、五人互通與系統更新安裝。
+
+雲端在 `cloud/` 執行 `npm ci`、`npm test`、`npx wrangler deploy --dry-run`。
+回歸使用真實 Miniflare/workerd SQLite 和 WebSocket；部署後仍須測試正式域名的建房、
+加入、結束及失效邀請。生產設定、GitHub secrets 和 DO migration 回滾限制見 `cloud/DEPLOYMENT.md`。

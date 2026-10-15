@@ -21,6 +21,7 @@ using DownKyi.Services.Media;
 using DownKyi.Services.Migration;
 using DownKyi.Services.Settings;
 using DownKyi.Services.Toolbox;
+using DownKyi.Services.Updates;
 using DownKyi.Services.UserSpace;
 using DownKyi.Services.Video;
 using DownKyi.ViewModels;
@@ -64,6 +65,13 @@ internal static class DesktopComposition
             client.DefaultRequestHeaders.UserAgent.ParseAdd("downkyi");
             client.Timeout = TimeSpan.FromSeconds(3);
         });
+        services.AddHttpClient<WindowsUpdateService>(client =>
+        {
+            client.DefaultRequestHeaders.UserAgent.ParseAdd("BiliCinema");
+            client.Timeout = TimeSpan.FromMinutes(15);
+        });
+        services.AddSingleton<IWindowsUpdateService>(provider =>
+            provider.GetRequiredService<WindowsUpdateService>());
         services.AddSingleton<IAsyncImageLoader>(provider =>
             new DiskCachedWebImageLoader(
                 provider.GetRequiredService<IHttpClientFactory>().CreateClient("DownKyi.Images"),

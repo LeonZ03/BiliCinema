@@ -69,7 +69,7 @@
             BorderBrush="{DynamicResource BrushPrimary}"
             BorderThickness="1">
         
-        <Grid RowDefinitions="auto,*,auto" Margin="16">
+        <Grid RowDefinitions="auto,*,auto,auto" Margin="16">
             <Grid Grid.Row="0"
                   Margin="0 0 0 16"
                   WindowDecorationProperties.ElementRole="TitleBar">
@@ -89,6 +89,7 @@
                         ToolTip.Tip="{DynamicResource Close}"
                         Theme="{StaticResource ImageBtnStyle}"
                         WindowDecorationProperties.ElementRole="User"
+                        IsEnabled="{Binding !IsUpdating}"
                         Command="{Binding CloseCommand}">
                     <PathIcon    
                         Data="{Binding CloseIcon.Data}"
@@ -106,7 +107,14 @@
             </ScrollViewer>
             
     
-            <StackPanel Grid.Row="2" 
+            <StackPanel Grid.Row="2" Spacing="6" Margin="0,8,0,0">
+                <TextBlock Text="{Binding StatusMessage}" TextWrapping="Wrap"
+                           Foreground="{DynamicResource BrushTextPrimary}" />
+                <ProgressBar Minimum="0" Maximum="100" Value="{Binding DownloadPercentage}"
+                             IsVisible="{Binding IsUpdating}" />
+            </StackPanel>
+
+            <StackPanel Grid.Row="3"
                         Orientation="Horizontal" 
                         HorizontalAlignment="Right"
                         Spacing="12"
@@ -116,6 +124,9 @@
                         IsVisible="{Binding EnableSkipVersionOnLaunch}"
                         Command="{Binding SkipCurrentVersionCommand}"
                         MinWidth="100"/>
+
+                <Button Content="取消更新" IsVisible="{Binding IsUpdating}"
+                        Command="{Binding CancelUpdateCommand}" MinWidth="100" />
                 
                 <Button Content="{DynamicResource ActionUpdate}"
                         Command="{Binding AllowCommand}"

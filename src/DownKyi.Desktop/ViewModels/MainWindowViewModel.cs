@@ -38,6 +38,8 @@ internal sealed class MainWindowViewModel : ObservableObject, IDisposable
     private CancellationTokenSource? _messageCancellation;
     private CancellationTokenSource? _clipboardDebounceCancellation;
     private Task? _startupDialogsTask;
+    private readonly object _updateCheckSync = new();
+    private Task? _updateCheckTask;
 
     private object? _mainContent;
 
@@ -357,7 +359,15 @@ internal sealed class MainWindowViewModel : ObservableObject, IDisposable
         }
     }
 
-    private async Task CheckForUpdatesAsync()
+    internal Task CheckForUpdatesAsync()
+    {
+        lock (_updateCheckSync)
+        {
+            return _updateCheckTask ??= CheckForUpdatesCoreAsync();
+        }
+    }
+
+    private async Task CheckForUpdatesCoreAsync()
     {
         try
         {
@@ -390,7 +400,8 @@ internal sealed class MainWindowViewModel : ObservableObject, IDisposable
             _logger.LogWarningMessage("Automatic update check timed out.");
         }
         catch (Exception ex) when (ex is System.Net.Http.HttpRequestException or InvalidOperationException
-            or System.Text.Json.JsonException)
+            or System.Text.Json.JsonException or NotSupportedException
+            or System.IO.IOException or System.Security.Authentication.AuthenticationException)
         {
             _logger.LogErrorMessage("Automatic update check failed.", ex);
         }

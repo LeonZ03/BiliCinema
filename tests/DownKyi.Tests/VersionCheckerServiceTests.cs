@@ -76,6 +76,8 @@ public class VersionCheckerServiceTests
     [InlineData("1.1.1-rc.1", "1.1.1", false)]
     [InlineData("1.1.1-alpha", "1.1.1-ALPHA", true)]
     [InlineData("1.1.1+build.2", "1.1.1+build.1", false)]
+    [InlineData("bilicinema-v1.5.0", "1.4.0", true)]
+    [InlineData("bilicinema-v1.4.0", "1.4.0", false)]
     public void VersionAvailabilityUsesFullSemverPrecedence(
         string latest,
         string current,

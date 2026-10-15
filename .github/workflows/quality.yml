@@ -111,7 +111,9 @@ jobs:
         with:
           node-version: '24'
       - name: Cloud room router regression
-        run: node --test cloud/tests/router-registry.test.mjs
+        working-directory: cloud
+        shell: bash
+        run: npm ci && npm test
       - name: Test
         shell: pwsh
         run: >

@@ -1,4 +1,6 @@
 using Avalonia.Media.Imaging;
+using DownKyi.Application.Bilibili;
+using DownKyi.Application.Desktop;
 using DownKyi.Core.BiliApi.Login.Models;
 using DownKyi.Core.Storage;
 using DownKyi.Services.Account;
@@ -10,6 +12,33 @@ namespace DownKyi.Tests;
 
 public sealed class ViewLoginViewModelTests
 {
+    [Theory]
+    [InlineData(BilibiliHttpFailureKind.UnsupportedProtocol)]
+    [InlineData(BilibiliHttpFailureKind.NameResolution)]
+    [InlineData(BilibiliHttpFailureKind.SecureConnection)]
+    [InlineData(BilibiliHttpFailureKind.Proxy)]
+    public async Task QrInitializationNetworkFailureIsVisibleAndKeepsLoginPageAlive(BilibiliHttpFailureKind kind)
+    {
+        var notification = new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var interactions = new TestDesktopInteractionContext();
+        interactions.Notifications.NotificationRaised += (_, e) => notification.TrySetResult(e.Message);
+        var failure = new BilibiliHttpRequestException("Fixture login transport failure.", kind);
+        using var coordinator = new StubLoginCoordinator
+        {
+            LoginUrlHandler = _ => Task.FromException<LoginUrlOrigin?>(failure)
+        };
+        using var viewModel = new ViewLoginViewModel(interactions, coordinator,
+            new StubLoginQrCodeRenderer(), NullLogger<ViewLoginViewModel>.Instance);
+
+        viewModel.OnNavigatedTo(new AppNavigationContext(AppNavigationRegion.Main, AppRoute.Login,
+            AppRoute.Index, null, new AppNavigationParameters()));
+
+        var message = await notification.Task.WaitAsync(TestContext.Current.CancellationToken);
+        Assert.Equal(LoginFailureMessage.FromException(failure), message);
+        Assert.Null(viewModel.LoginQrCode);
+        Assert.True(viewModel.BrowserCookieLoginCommand.CanExecute(null));
+    }
+
     [Fact]
     public async Task TransportCancellationShowsLoginFailureWhenLoginTokenIsActive()
     {
@@ -63,6 +92,7 @@ public sealed class ViewLoginViewModelTests
 
     private sealed class StubLoginCoordinator : ILoginCoordinator
     {
+        public Func<CancellationToken, Task<LoginUrlOrigin?>>? LoginUrlHandler { get; init; }
         public Func<IReadOnlyList<DownKyiCookie>, CancellationToken, Task<bool>>? CommitHandler
         {
             get;
@@ -71,7 +101,7 @@ public sealed class ViewLoginViewModelTests
 
         public Task<LoginUrlOrigin?> RequestLoginUrlAsync(CancellationToken cancellationToken)
         {
-            throw new NotSupportedException();
+            return LoginUrlHandler?.Invoke(cancellationToken) ?? throw new NotSupportedException();
         }
 
         public Task<LoginStatusResult?> GetLoginStatusAsync(

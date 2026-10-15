@@ -38,11 +38,13 @@ Prism、DryIoc、EventAggregator、RegionManager、ContainerLocator、第二個 
 
 ## BiliCinema 產品邊界
 
-- 發布產品為 Windows x64 單一 exe，主介面為登入、觀影房間、下載影片。`DownKyi` 命名空間、資料路徑與下載模型保留相容性；名稱不是未使用程式碼的判斷依據。
+- 發布產品包含 Windows x64 單一 exe 與 Android 簽名 APK；兩端共用雲端房間協定。Windows 主介面為登入、觀影房間、下載影片，`DownKyi` 命名空間、資料路徑與下載模型保留相容性；名稱不是未使用程式碼的判斷依據。
 - `WatchWindow`／`WatchWindowViewModel` 組合觀影介面；`BilibiliWebPlaybackSession` 使用 WebView2 載入 B 站播放器、同步登入態並維持播放器版面。網站導覽是遠端頁面內容，由播放器隔離邏輯處理。
 - `RoomCoordinator` 是房間狀態的唯一權威，最多 5 人（房主 + 4 位訪客）；只有房主可選片、換集及控制播放。每位在線成員有獨立的就緒／緩衝狀態，離線成員不阻塞其他人。
 - `WatchRoomClient` 接收狀態與控制事件；每台電腦各自向 B 站取流。公開 `memberId` 與私有重連 `clientId` 分離，後者不進入聊天或狀態廣播。
-- `RoomGatewayTunnel` 管理房主的 Named Tunnel，`cloud/` Worker 以固定域名將房間路由到各房主電腦；只轉發控制與聊天，不轉發影片。`RoomCoordinator` 仍是播放狀態權威。房主程序擁有本機服務，雲端 registry 擁有路由、DNS 與 Tunnel 清理，管理 Token 僅存於 Worker Secret。重連期限與協定以 [房間服務文件](src/DownKyi.RoomServer/README.md) 和 [雲端部署文件](cloud/DEPLOYMENT.md) 為準。
+- `cloud/src/cloud-room.mjs` 的 SQLite Durable Object 是 v2 房間狀態唯一權威；Windows 與 `android/` 原生客戶端直接連接固定域名 `/v2/ws`。狀態按時間錨點推算，不設常駐 tick；連線使用 WebSocket hibernation，身份附著於 socket，重建時讀 durable state。房主離線 2 分鐘結束、訪客保留 5 分鐘、房間最長 24 小時；alarm 擁有過期清理。帳號 Cookie、播放 URL 與影音不得進入房間協定。
+- `RoomGatewayTunnel`、本機 `RoomCoordinator` 與 Worker 的 `/ws` 僅保留舊版相容與協定測試；新客戶端不啟動本機房間服務或 Tunnel。Registry 仍擁有舊資源清理及建房限流，不複製 v2 房間狀態。詳見[雲端部署文件](cloud/DEPLOYMENT.md)。
+- Windows 更新沿用版本檢查、typed dialog 和應用生命週期；下載更新先持久登記 staging paths，校驗後正常停止下載和設定，再由獨立 helper 原子替換與失敗回滾。Android 更新核對同包名、較高版本及相同簽名，交由系統安裝器確認；簽名身份必須跨 Release 保持一致。
 - 下載沿用共用 runtime；跨平台原生測試、打包驗證腳本仍驗證繼承的共用元件，不代表 BiliCinema 提供 Linux／macOS 發行版。
 
 ## Composition 與外部協定

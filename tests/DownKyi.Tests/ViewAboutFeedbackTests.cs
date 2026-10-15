@@ -40,7 +40,7 @@ public sealed class ViewAboutFeedbackTests
         await viewModel.ExecuteFeedbackCommand();
 
         Assert.Equal("github.com", launcher.Uri?.Host);
-        Assert.Equal("/crazysmile-PhD/downkyicore/issues/new", launcher.Uri?.AbsolutePath);
+        Assert.Equal("/LeonZ03/BiliCinema/issues/new", launcher.Uri?.AbsolutePath);
         Assert.Equal("[Bug] 用户反馈", GetQueryValue(launcher.Uri!, "title"));
         var body = GetQueryValue(launcher.Uri!, "body");
         Assert.Equal(2, CountOccurrences(body, "## "));

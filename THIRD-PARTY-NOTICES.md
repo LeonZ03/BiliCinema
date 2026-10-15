@@ -1,6 +1,18 @@
 
 # Third-Party Notices
 
+## Android client
+
+The Android client uses AndroidX WebKit 1.12.1 and its AndroidX dependencies
+([AndroidX source](https://android.googlesource.com/platform/frameworks/support/)),
+OkHttp 4.12.0 ([source and license](https://github.com/square/okhttp/tree/parent-4.12.0)),
+and their Okio/Kotlin runtime dependencies. These libraries use the Apache License
+2.0; their upstream distributions contain the corresponding copyright notices.
+The checked-in Gradle wrapper is a build tool from the
+[Gradle project](https://github.com/gradle/gradle/tree/v8.9.0), also under Apache 2.0.
+Android System WebView and Bilibili's player are supplied by the device/platform
+and Bilibili respectively, rather than bundled as client source.
+
 ## Bundled Windows tools
 
 The Windows single-file build embeds cloudflared 2026.9.0 from

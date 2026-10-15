@@ -6,6 +6,70 @@ namespace DownKyi.Infrastructure.Tests;
 
 public sealed class BilibiliHttpTransportTests
 {
+    [Theory]
+    [InlineData(HttpRequestError.NameResolutionError, BilibiliHttpFailureKind.NameResolution)]
+    [InlineData(HttpRequestError.SecureConnectionError, BilibiliHttpFailureKind.SecureConnection)]
+    [InlineData(HttpRequestError.ProxyTunnelError, BilibiliHttpFailureKind.Proxy)]
+    [InlineData(HttpRequestError.VersionNegotiationError, BilibiliHttpFailureKind.UnsupportedProtocol)]
+    public async Task HttpFailuresRetainActionableNetworkCategory(HttpRequestError error, BilibiliHttpFailureKind expected)
+    {
+        using var factory = CreateFactory((_, _) =>
+            Task.FromException<HttpResponseMessage>(new HttpRequestException(error, "Fixture transport failure.")));
+        var transport = CreateTransport(factory);
+
+        var textError = await Assert.ThrowsAsync<BilibiliHttpRequestException>(() =>
+            transport.GetStringAsync(CreateRequest, 1, TestContext.Current.CancellationToken));
+        var streamError = await Assert.ThrowsAsync<BilibiliHttpRequestException>(() =>
+            transport.OpenReadAsync(CreateRequest, 1, TestContext.Current.CancellationToken));
+
+        Assert.Equal(expected, textError.FailureKind);
+        Assert.Equal(expected, streamError.FailureKind);
+    }
+
+    [Fact]
+    public async Task UnsupportedNetworkProtocolIsTypedAndNotRetried()
+    {
+        var calls = 0;
+        using var factory = CreateFactory((_, _) =>
+        {
+            calls++;
+            throw new NotSupportedException("Fixture unsupported proxy protocol.");
+        });
+        var transport = CreateTransport(factory);
+
+        var exception = await Assert.ThrowsAsync<BilibiliHttpRequestException>(() =>
+            transport.GetStringAsync(CreateRequest, 3, TestContext.Current.CancellationToken));
+
+        Assert.Equal(BilibiliHttpFailureKind.UnsupportedProtocol, exception.FailureKind);
+        Assert.Equal(1, calls);
+    }
+
+    [Fact]
+    public async Task TransportTimeoutIsTypedWhileCallerCancellationRemainsCancellation()
+    {
+        using var factory = CreateFactory((_, _) =>
+            Task.FromException<HttpResponseMessage>(new TaskCanceledException("Fixture timeout.")));
+        var transport = CreateTransport(factory);
+
+        var exception = await Assert.ThrowsAsync<BilibiliHttpRequestException>(() =>
+            transport.GetStringAsync(CreateRequest, 3, TestContext.Current.CancellationToken));
+        Assert.Equal(BilibiliHttpFailureKind.Timeout, exception.FailureKind);
+
+        using var cancellation = new CancellationTokenSource();
+        await cancellation.CancelAsync();
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            transport.GetStringAsync(CreateRequest, 3, cancellation.Token));
+    }
+
+    [Fact]
+    public void LoginClientConstructionClassifiesUnsupportedSystemProxy()
+    {
+        var factory = new BilibiliLoginSessionFactory(new UnsupportedClientFactory());
+        var exception = Assert.Throws<BilibiliHttpRequestException>(() => factory.Create());
+
+        Assert.Equal(BilibiliHttpFailureKind.UnsupportedProtocol, exception.FailureKind);
+    }
+
     [Fact]
     public async Task TextResponsePreservesAllSetCookieHeaders()
     {
@@ -211,5 +275,10 @@ public sealed class BilibiliHttpTransportTests
             base.Dispose(disposing);
         }
 
+    }
+
+    private sealed class UnsupportedClientFactory : IHttpClientFactory
+    {
+        public HttpClient CreateClient(string name) => throw new NotSupportedException("Fixture system proxy protocol.");
     }
 }

@@ -1,23 +1,36 @@
-# BiliCinema Cloud Router
+# BiliCinema Cloud Rooms
 
-This Worker is the fixed-domain gateway for BiliCinema rooms. It routes each
-room WebSocket to the Named Tunnel owned by the host computer while leaving
-room playback state in the local `DownKyi.RoomServer` process.
+The fixed domain serves v2 rooms at `/v2/ws`. Each room is a SQLite Durable Object;
+its hibernating WebSockets retain private membership attachments while inactive.
+Playback advances from a persisted position/time/rate anchor, without a ticking
+server loop or per-second writes. Devices fetch video directly from Bilibili.
+The Worker never receives Bilibili cookies or playback URLs.
 
-The Worker requires these secrets, configured with Wrangler and never shipped
-inside BiliCinema.exe:
+Connect without a room query and send `{"type":"create"}`. The welcome returns a
+128-bit invitation code and a private reconnect `clientId`. Join with
+`/v2/ws?room=CODE` and `{"type":"join","roomCode":"CODE"}`; reconnect includes the
+saved `clientId`. Public snapshots/chat use a distinct `memberId`.
 
-- `CLOUDFLARE_API_TOKEN`: account-scoped Tunnel edit and zone DNS edit token.
-- `CLOUDFLARE_ACCOUNT_ID`: the Cloudflare account containing the Tunnel.
-- `CLOUDFLARE_ZONE_ID`: the `leonz03.dpdns.org` zone ID.
+One host and four guests share host-only selection/play/pause/seek/rate controls.
+A joining or buffering member pauses the ready barrier; offline guests do not
+block the other members. Host loss pauses playback and retains a two-minute
+reconnect window. Guest credentials expire after five minutes offline; an offline
+guest may yield its seat to a new member when full. Host leave/close ends the room;
+an alarm expires abandoned rooms and the 24-hour maximum lifetime. Chat is never
+persisted or replayed. Only public media identifiers enter selection messages.
 
-The Worker creates one remotely managed Tunnel per active host session. Its
-public origin hostname uses `bilicinema-h-<session>.leonz03.dpdns.org`
-and is never placed in the invitation URL. The main invitation remains under
-`bilicinema.leonz03.dpdns.org`.
+The service accepts text JSON up to 4096 UTF-8 bytes with command-specific fields,
+limits messages per socket and applies shared creation admission limits. Per-IP
+admission keys are daily salted hashes, not raw IP addresses. Limits are a cost
+containment boundary, not a guarantee of availability under abuse or exhausted
+account quotas.
 
-Hostnames stay one level below the zone so the free Universal SSL certificate
-covers them without requiring Advanced Certificate Manager.
+`npm ci && npm test` runs legacy routing regressions and real Miniflare/workerd
+SQLite + WebSocket tests, including restart recovery and expiration. See
+[deployment](DEPLOYMENT.md) for automatic deployment and configuration.
 
-Deploy only after verifying the Zone and permissions in Cloudflare. The
-Worker does not read or store Bilibili cookies, media URLs, video or audio.
+The legacy `/ws` and `/api/v1/hosts` endpoints remain available for released v1
+clients. They route to a host-owned Named Tunnel and require the legacy Tunnel/DNS
+management secrets. New v2 clients do not use these endpoints or require those
+management secrets. The original `router-v1` migration must remain immutable;
+`router-v2` adds the separate cloud room class.

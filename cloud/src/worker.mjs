@@ -1,3 +1,5 @@
+import { CloudRoom } from "./cloud-room.mjs";
+
 const jsonHeaders = {
   "content-type": "application/json; charset=utf-8",
   "cache-control": "no-store",
@@ -316,7 +318,7 @@ export default {
     try {
       const url = new URL(request.url);
       if (url.pathname === "/health" && request.method === "GET") {
-        return response({ ok: true, service: "bilicinema-router", version: "1" });
+        return response({ ok: true, service: "bilicinema-rooms", version: "2" });
       }
       if (url.pathname.startsWith("/api/")) return await handleApi(request, env);
       if (url.pathname === "/ws" && request.method === "GET"
@@ -328,6 +330,29 @@ export default {
           return failure(503, "房主通道暂时离线，请等待房主恢复。", "host_offline");
         }
         return await proxyWebSocket(request, routeResponse);
+      }
+      if (url.pathname === "/v2/ws" && request.method === "GET"
+          && request.headers.get("upgrade")?.toLowerCase() === "websocket") {
+        const suppliedRoom = url.searchParams.get("room");
+        const origin = request.headers.get("origin");
+        if (origin && origin !== (env.PUBLIC_ORIGIN || "https://bilicinema.leonz03.dpdns.org")) {
+          return failure(403, "不允许此网页连接房间。", "origin_forbidden");
+        }
+        const roomCode = suppliedRoom || randomToken(16);
+        if (!roomCodePattern.test(roomCode) || roomCode.length !== 22) {
+          return failure(400, "房间号格式无效。", "invalid_room");
+        }
+        if (!suppliedRoom) {
+          const admitted = await registryFetch(env, "/cloud-create", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ ipHash: await digest(`${Math.floor(now() / 86400000)}:${request.headers.get("cf-connecting-ip") || "local"}`) }),
+          });
+          if (!admitted.ok) return admitted;
+        }
+        const id = env.ROOMS.idFromName(roomCode);
+        const stub = env.ROOMS.get(id);
+        return await stub.fetch(new Request(`https://room.internal/ws?room=${encodeURIComponent(roomCode)}${suppliedRoom ? "" : "&create=1"}`, request));
       }
       return failure(404, "页面或接口不存在。", "not_found");
     } catch (error) {
@@ -380,6 +405,9 @@ export class RoomRouteRegistry {
   async fetch(request) {
     const url = new URL(request.url);
     try {
+      if (url.pathname === "/cloud-create" && request.method === "POST") {
+        return this.admitCloudRoom(await request.json());
+      }
       if (url.pathname === "/sessions/create" && request.method === "POST") {
         return await this.createSession(await request.json());
       }
@@ -401,6 +429,34 @@ export class RoomRouteRegistry {
       if (error instanceof RouterError) return failure(error.status, error.message, error.code);
       return failure(500, "registry failure", "registry_failure");
     }
+  }
+
+  admitCloudRoom(body) {
+    if (typeof body.ipHash !== "string" || !/^[a-f0-9]{64}$/.test(body.ipHash)) {
+      throw new RouterError(400, "请求标识无效。", "invalid_request");
+    }
+    const current = now();
+    // Admission uses the existing rate-limit owner. No room identity or live
+    // playback state is duplicated in the registry.
+    const limits = [
+      { key: `cloud-ip:${body.ipHash}`, window: 600000, max: envNumber(this.env, "CLOUD_CREATE_RATE_LIMIT", 10) },
+      { key: "cloud-daily", window: 86400000, max: envNumber(this.env, "CLOUD_DAILY_ROOM_LIMIT", 512) },
+    ];
+    for (const limit of limits) {
+      const row = this.sql.exec("SELECT window_started,count FROM create_limits WHERE ip_hash=?", limit.key).toArray()[0];
+      if (row && current - Number(row.window_started) < limit.window && Number(row.count) >= limit.max) {
+        throw new RouterError(429, "云端建房请求已达到临时限额，请稍后重试。", "create_rate_limited");
+      }
+    }
+    for (const limit of limits) {
+      const row = this.sql.exec("SELECT window_started,count FROM create_limits WHERE ip_hash=?", limit.key).toArray()[0];
+      if (!row || current - Number(row.window_started) >= limit.window) {
+        this.sql.exec("INSERT OR REPLACE INTO create_limits VALUES(?,?,1)", limit.key, current);
+      } else {
+        this.sql.exec("UPDATE create_limits SET count=count+1 WHERE ip_hash=?", limit.key);
+      }
+    }
+    return response({ ok: true });
   }
 
   async createSession(body) {
@@ -587,7 +643,7 @@ export class RoomRouteRegistry {
       this.sql.exec("UPDATE host_sessions SET cleanup_pending=1 WHERE id=?", row.id);
       await this.cleanupTunnel(row).catch(() => {});
     }
-    for (const row of this.sql.exec("SELECT ip_hash FROM create_limits WHERE window_started<?", current - envNumber(this.env, "CREATE_RATE_WINDOW_MS", 600000)).toArray()) {
+    for (const row of this.sql.exec("SELECT ip_hash FROM create_limits WHERE window_started<?", current - 86400000).toArray()) {
       this.sql.exec("DELETE FROM create_limits WHERE ip_hash=?", row.ip_hash);
     }
     await this.scheduleNextAlarm();
@@ -637,3 +693,5 @@ export class RoomRouteRegistry {
 
   async alarm() { await this.cleanupExpired(); }
 }
+
+export { CloudRoom };

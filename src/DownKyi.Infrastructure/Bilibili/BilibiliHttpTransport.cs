@@ -99,15 +99,18 @@ internal sealed class BilibiliHttpTransport
                     response.StatusCode,
                     response.Headers.Location);
             }
+            catch (OperationCanceledException exception) when (!cancellationToken.IsCancellationRequested)
+            {
+                throw BilibiliNetworkFailure.Wrap(exception);
+            }
             catch (OperationCanceledException)
             {
                 throw;
             }
-            catch (Exception exception) when (exception is HttpRequestException or IOException
-                or InvalidOperationException)
+            catch (Exception exception) when (BilibiliNetworkFailure.IsTransportException(exception))
             {
-                lastError = exception;
-                if (!IsRetryableException(exception) || attempt == attempts)
+                lastError = BilibiliNetworkFailure.Wrap(exception);
+                if (!IsRetryableException(lastError) || attempt == attempts)
                 {
                     break;
                 }
@@ -164,19 +167,24 @@ internal sealed class BilibiliHttpTransport
                 request = null;
                 return responseStream;
             }
+            catch (OperationCanceledException exception) when (!cancellationToken.IsCancellationRequested)
+            {
+                response?.Dispose();
+                request?.Dispose();
+                throw BilibiliNetworkFailure.Wrap(exception);
+            }
             catch (OperationCanceledException)
             {
                 response?.Dispose();
                 request?.Dispose();
                 throw;
             }
-            catch (Exception exception) when (exception is HttpRequestException or IOException
-                or InvalidOperationException)
+            catch (Exception exception) when (BilibiliNetworkFailure.IsTransportException(exception))
             {
                 response?.Dispose();
                 request?.Dispose();
-                lastError = exception;
-                if (!IsRetryableException(exception) || attempt == attempts)
+                lastError = BilibiliNetworkFailure.Wrap(exception);
+                if (!IsRetryableException(lastError) || attempt == attempts)
                 {
                     break;
                 }
@@ -240,6 +248,8 @@ internal sealed class BilibiliHttpTransport
         return exception is not BilibiliHttpRequestException
         {
             FailureKind: BilibiliHttpFailureKind.Authentication or BilibiliHttpFailureKind.HttpStatus
+                or BilibiliHttpFailureKind.UnsupportedProtocol or BilibiliHttpFailureKind.Proxy
+                or BilibiliHttpFailureKind.SecureConnection or BilibiliHttpFailureKind.Timeout
         };
     }
 
