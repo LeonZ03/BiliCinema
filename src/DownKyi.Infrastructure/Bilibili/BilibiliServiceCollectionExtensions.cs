@@ -72,6 +72,18 @@ public static class BilibiliServiceCollectionExtensions
     internal static SocketsHttpHandler CreateHandler(BilibiliNetworkOptions options)
     {
         ArgumentNullException.ThrowIfNull(options);
+        Uri? customProxy = null;
+        if (options.UseProxy && !string.IsNullOrWhiteSpace(options.ProxyAddress)
+            && (!Uri.TryCreate(options.ProxyAddress, UriKind.Absolute, out customProxy)
+                || (customProxy.Scheme != "http" && customProxy.Scheme != "https"
+                    && customProxy.Scheme != "socks4" && customProxy.Scheme != "socks4a"
+                    && customProxy.Scheme != "socks5")))
+        {
+            throw new BilibiliHttpRequestException(
+                "The configured Bilibili proxy address or protocol is unsupported.",
+                BilibiliHttpFailureKind.Proxy);
+        }
+
         var handler = new SocketsHttpHandler
         {
             PooledConnectionLifetime = TimeSpan.FromMinutes(10),
@@ -88,14 +100,9 @@ public static class BilibiliServiceCollectionExtensions
         {
             handler.Proxy = HttpClient.DefaultProxy;
         }
-        else if (Uri.TryCreate(options.ProxyAddress, UriKind.Absolute, out var proxyUri))
+        else if (customProxy != null)
         {
-            handler.Proxy = new WebProxy(proxyUri);
-        }
-        else
-        {
-            handler.UseProxy = false;
-            handler.Proxy = null;
+            handler.Proxy = new WebProxy(customProxy);
         }
 
         return handler;

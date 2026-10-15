@@ -36,7 +36,7 @@ public sealed class DownloadRuntimeFailureDialogViewModelTests
         Assert.Contains("[redacted]", viewModel.DiagnosticText, StringComparison.Ordinal);
         Assert.DoesNotContain("secret-path", viewModel.DiagnosticText, StringComparison.Ordinal);
         Assert.Equal("github.com", launcher.Uri?.Host);
-        Assert.Equal("/crazysmile-PhD/downkyicore/issues/new", launcher.Uri?.AbsolutePath);
+        Assert.Equal("/LeonZ03/BiliCinema/issues/new", launcher.Uri?.AbsolutePath);
         Assert.Equal("Download system failed to initialize", GetQueryValue(launcher.Uri!, "title"));
         Assert.Equal(viewModel.DiagnosticText, GetQueryValue(launcher.Uri!, "body"));
         Assert.Single(notifications.Messages);

@@ -6,5 +6,10 @@ public enum BilibiliHttpFailureKind
     RateLimited,
     HttpStatus,
     EmptyResponse,
-    Transport
+    Transport,
+    Timeout,
+    NameResolution,
+    SecureConnection,
+    Proxy,
+    UnsupportedProtocol
 }

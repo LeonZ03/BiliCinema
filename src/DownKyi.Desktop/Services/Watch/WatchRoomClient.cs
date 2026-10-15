@@ -46,9 +46,9 @@ internal sealed class WatchRoomClient : IAsyncDisposable
     {
         if (!Uri.TryCreate(serviceAddress, UriKind.Absolute, out var uri)
             || !((uri.Scheme == "wss") || (uri.Scheme == "ws" && uri.IsLoopback))
-            || uri.AbsolutePath != "/ws")
+            || uri.AbsolutePath is not ("/ws" or "/v2/ws"))
         {
-            throw new InvalidOperationException("房间地址须为 wss://…/ws；仅本机可使用 ws://127.0.0.1:端口/ws。");
+            throw new InvalidOperationException("房间地址须为 wss://…/v2/ws；本机测试可使用 ws://127.0.0.1:端口/ws。");
         }
 
         if (!create && !string.IsNullOrWhiteSpace(roomCode))
@@ -60,7 +60,8 @@ internal sealed class WatchRoomClient : IAsyncDisposable
         await CloseSocketAsync().ConfigureAwait(false);
         _receiveEnded = true;
         var socket = new ClientWebSocket();
-        socket.Options.KeepAliveInterval = TimeSpan.FromSeconds(15);
+        socket.Options.KeepAliveInterval = TimeSpan.FromSeconds(30);
+        socket.Options.KeepAliveTimeout = TimeSpan.FromSeconds(15);
         socket.Options.CollectHttpResponseDetails = true;
         if (!string.IsNullOrWhiteSpace(routeKey))
         {
@@ -122,12 +123,13 @@ internal sealed class WatchRoomClient : IAsyncDisposable
                            ?? throw new InvalidDataException("房间状态为空。");
             _receiveEnded = false;
             _receiveTask = ReceiveLoopAsync(_receiveCancellation.Token);
+            await PingAsync(deadline.Token).ConfigureAwait(false);
             return snapshot;
         }
         catch (OperationCanceledException error) when (!cancellationToken.IsCancellationRequested)
         {
             await CloseSocketAsync().ConfigureAwait(false);
-            throw new InvalidOperationException("连接房间超时，请检查网络或让房主重新创建房间并分享新邀请。", error);
+            throw new InvalidOperationException("连接房间超时，请检查网络或代理设置后重试。", error);
         }
         catch (WebSocketException error)
         {
@@ -138,11 +140,18 @@ internal sealed class WatchRoomClient : IAsyncDisposable
                 HttpStatusCode.NotFound
                     => "房间已结束或邀请已失效，请向房主获取新邀请。",
                 HttpStatusCode.BadGateway or HttpStatusCode.ServiceUnavailable or HttpStatusCode.GatewayTimeout
-                    => $"房间公网通道暂不可用（HTTP {(int)status}），请房主重新创建房间并分享新邀请。",
+                    => $"云端房间暂不可用（HTTP {(int)status}），请稍后重试。",
+                HttpStatusCode.TooManyRequests
+                    => "云端房间请求达到临时限额，请稍后重试。",
                 HttpStatusCode.Forbidden or HttpStatusCode.Unauthorized
                     => $"房间连接被拒绝（HTTP {(int)status}），请检查双方的网络或代理设置。",
-                _ => "无法连接房间通道，请检查网络和邀请地址；若持续失败，请房主重新创建房间。"
+                _ => "无法连接云端房间，请检查网络、代理和邀请地址后重试。"
             }, error);
+        }
+        catch (NotSupportedException error)
+        {
+            await CloseSocketAsync().ConfigureAwait(false);
+            throw new InvalidOperationException("当前网络或代理不支持房间连接，请更换网络或检查代理设置。", error);
         }
         catch
         {
@@ -199,7 +208,7 @@ internal sealed class WatchRoomClient : IAsyncDisposable
         }
         catch (OperationCanceledException error) when (!cancellationToken.IsCancellationRequested)
         {
-            throw new InvalidOperationException("房间关闭确认超时，将释放本机房间服务。", error);
+            throw new InvalidOperationException("房间关闭确认超时；断开后云端会在重连窗口结束时清理。", error);
         }
     }
 
@@ -279,7 +288,8 @@ internal sealed class WatchRoomClient : IAsyncDisposable
             }
         }
         catch (Exception error) when (error is OperationCanceledException or WebSocketException
-            or IOException or InvalidDataException or JsonException or ObjectDisposedException)
+            or IOException or InvalidDataException or JsonException or ObjectDisposedException
+            or InvalidOperationException or FormatException or KeyNotFoundException or NotSupportedException)
         {
             // The view model reports a reconnect state without exposing message contents.
         }

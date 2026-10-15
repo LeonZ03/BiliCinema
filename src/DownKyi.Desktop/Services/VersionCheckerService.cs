@@ -55,27 +55,34 @@ internal sealed class VersionCheckerService
             var releases = JsonSerializer.Deserialize(
                 responseJson,
                 GitHubJsonContext.Default.GitHubReleaseArray);
-            return releases?.FirstOrDefault(release => !IsExcluded(
-                release.TagName,
-                excludedVersion));
+            return releases?.FirstOrDefault(release => !release.Draft
+                && !IsExcluded(release.TagName, excludedVersion));
         }
 
         var latestRelease = JsonSerializer.Deserialize(
             responseJson,
             GitHubJsonContext.Default.GitHubRelease);
-        return latestRelease != null && !IsExcluded(latestRelease.TagName, excludedVersion)
+        return latestRelease != null && !latestRelease.Draft
+            && !IsExcluded(latestRelease.TagName, excludedVersion)
             ? latestRelease
             : null;
     }
 
     public bool IsNewVersionAvailable(string latestVersion)
     {
-        return SemanticVersionPolicy.IsNewer(latestVersion, _currentVersion);
+        return SemanticVersionPolicy.IsNewer(NormalizeReleaseTag(latestVersion), _currentVersion);
     }
+
+    internal static string NormalizeReleaseTag(string tag) =>
+        tag.StartsWith("bilicinema-v", StringComparison.OrdinalIgnoreCase)
+            ? tag["bilicinema-v".Length..]
+            : tag;
 
     private static bool IsExcluded(string releaseVersion, string? excludedVersion)
     {
         return !string.IsNullOrWhiteSpace(excludedVersion) &&
-               SemanticVersionPolicy.HasSamePrecedence(releaseVersion, excludedVersion);
+               SemanticVersionPolicy.HasSamePrecedence(
+                   NormalizeReleaseTag(releaseVersion),
+                   NormalizeReleaseTag(excludedVersion));
     }
 }

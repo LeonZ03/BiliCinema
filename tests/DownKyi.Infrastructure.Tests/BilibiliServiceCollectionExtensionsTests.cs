@@ -41,16 +41,18 @@ public sealed class BilibiliServiceCollectionExtensionsTests
         Assert.Equal(new Uri("http://127.0.0.1:18080"), proxy.Address);
     }
 
-    [Fact]
-    public void InvalidCustomProxyFallsBackToDirectConnection()
+    [Theory]
+    [InlineData("not-an-address")]
+    [InlineData("ftp://127.0.0.1:18080")]
+    public void InvalidCustomProxyReturnsVisibleTypedFailure(string address)
     {
-        using var handler = BilibiliServiceCollectionExtensions.CreateHandler(
+        var exception = Assert.Throws<BilibiliHttpRequestException>(() =>
+            BilibiliServiceCollectionExtensions.CreateHandler(
             new BilibiliNetworkOptions(
                 "DownKyi-Test-Agent",
                 UseProxy: true,
-                ProxyAddress: "not-an-address"));
+                ProxyAddress: address)));
 
-        Assert.False(handler.UseProxy);
-        Assert.Null(handler.Proxy);
+        Assert.Equal(BilibiliHttpFailureKind.Proxy, exception.FailureKind);
     }
 }

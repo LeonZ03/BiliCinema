@@ -53,6 +53,7 @@ public sealed class StartupDialogOrderingTests
 
         dialogs.CompleteLegacyDialog();
         await startup.ConfigureAwait(true);
+        await Task.WhenAll(viewModel.CheckForUpdatesAsync(), viewModel.CheckForUpdatesAsync()).ConfigureAwait(true);
 
         Assert.Equal(
             [AppDialog.LegacyUpgrade, AppDialog.NewVersionAvailable],

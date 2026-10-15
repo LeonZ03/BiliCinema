@@ -13,7 +13,7 @@ public sealed class ManualUpdateDialogContractTests
     public void SkipCommandMatchesExplicitDialogMode(bool enableSkipVersion)
     {
         using var settings = new TestSettingsStore();
-        var viewModel = CreateViewModel(settings);
+        using var viewModel = CreateViewModel(settings);
         var closeRequested = false;
         viewModel.CloseRequested += (_, _) => closeRequested = true;
 
@@ -34,7 +34,7 @@ public sealed class ManualUpdateDialogContractTests
     public void MissingDialogModeFailsClosed()
     {
         using var settings = new TestSettingsStore();
-        var viewModel = CreateViewModel(settings);
+        using var viewModel = CreateViewModel(settings);
         var request = new AppDialogRequest(
             AppDialog.NewVersionAvailable,
             new Dictionary<string, object?> { ["release"] = CreateRelease() });

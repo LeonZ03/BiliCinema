@@ -109,12 +109,13 @@ internal class ViewLoginViewModel : ViewModelBase
                 .ConfigureAwait(true);
             if (loginUrl == null)
             {
+                Notifications.Show(DictionaryResource.GetString("GetLoginUrlFailed"));
                 return;
             }
 
             if (loginUrl.Code != 0)
             {
-                ExecuteBackSpace();
+                Notifications.Show(DictionaryResource.GetString("GetLoginUrlFailed"));
                 return;
             }
 
@@ -130,7 +131,9 @@ internal class ViewLoginViewModel : ViewModelBase
                 return;
             }
 
-            PropertyChangeAsync(() => { LoginQrCode = _loginQrCodeRenderer.Render(loginUri); });
+            // Rendering is part of the observed login operation. A dispatched callback
+            // would let renderer/platform errors escape this exception boundary.
+            LoginQrCode = _loginQrCodeRenderer.Render(loginUri);
 
             await GetLoginStatusAsync(loginUrl.Data.QrcodeKey, cancellationToken).ConfigureAwait(true);
         }
@@ -139,9 +142,12 @@ internal class ViewLoginViewModel : ViewModelBase
             return;
         }
         catch (Exception e) when (e is System.Net.Http.HttpRequestException or InvalidOperationException or ArgumentException
-            or FormatException or Newtonsoft.Json.JsonException)
+            or FormatException or Newtonsoft.Json.JsonException or NotSupportedException
+            or System.Security.Authentication.AuthenticationException or System.Net.Sockets.SocketException
+            or OperationCanceledException or System.IO.IOException)
         {
             _logger.LogErrorMessage("Login initialization failed.", e);
+            Notifications.Show(LoginFailureMessage.FromException(e));
         }
     }
 
@@ -264,7 +270,9 @@ internal class ViewLoginViewModel : ViewModelBase
         }
         catch (Exception e) when (e is System.IO.IOException or UnauthorizedAccessException
             or System.Net.Http.HttpRequestException or InvalidOperationException
-            or ArgumentException or FormatException or Newtonsoft.Json.JsonException)
+            or ArgumentException or FormatException or Newtonsoft.Json.JsonException
+            or NotSupportedException or System.Security.Authentication.AuthenticationException
+            or System.Net.Sockets.SocketException)
         {
             _logger.LogErrorMessage("Login cookie persistence failed.", e);
         }

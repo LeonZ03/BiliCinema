@@ -17,9 +17,17 @@ internal sealed class BilibiliLoginSessionFactory : IBilibiliLoginSessionFactory
     public IBilibiliLoginSession Create(
         IReadOnlyList<BilibiliLoginCookie>? initialCookies = null)
     {
-        var lifetime = new OwnedHttpClientLifetime(
-            _httpClientFactory.CreateClient(
-                BilibiliServiceCollectionExtensions.LoginHttpClientName));
+        OwnedHttpClientLifetime lifetime;
+        try
+        {
+            lifetime = new OwnedHttpClientLifetime(
+                _httpClientFactory.CreateClient(
+                    BilibiliServiceCollectionExtensions.LoginHttpClientName));
+        }
+        catch (Exception exception) when (BilibiliNetworkFailure.IsTransportException(exception))
+        {
+            throw BilibiliNetworkFailure.Wrap(exception);
+        }
         try
         {
             var transport = new BilibiliHttpTransport(lifetime, TimeProvider.System);
