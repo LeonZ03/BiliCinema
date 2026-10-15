@@ -59,11 +59,13 @@ public sealed class WindowsUpdateHelperTests(ITestOutputHelper output)
     }
 
     [Theory]
-    [InlineData(0, "completed")]
-    [InlineData(17, "rolled-back")]
-    public async Task FastApplicationExitRollsBackOnlyWhenExitCodeIndicatesFailure(int exitCode, string expectedPhase)
+    [InlineData(0, "completed", "BiliCinema.exe")]
+    [InlineData(17, "rolled-back", "BiliCinema.exe")]
+    [InlineData(0, "completed", "BiliCinema-1.5.1-win-x64.exe")]
+    [InlineData(17, "rolled-back", "BiliCinema-1.5.1-win-x64.exe")]
+    public async Task FastApplicationExitRollsBackOnlyWhenExitCodeIndicatesFailure(int exitCode, string expectedPhase, string targetName)
     {
-        var fixture = await UpdateFixture.CreateAsync();
+        var fixture = await UpdateFixture.CreateAsync(targetName);
         await using var fixtureLifetime = fixture.ConfigureAwait(true);
         await fixture.PrepareExecutablePairAsync(exitCode);
         var previous = await File.ReadAllBytesAsync(fixture.State.TargetPath, TestContext.Current.CancellationToken);
@@ -192,7 +194,7 @@ public sealed class WindowsUpdateHelperTests(ITestOutputHelper output)
             }
         }
 
-        internal static async Task<UpdateFixture> CreateAsync()
+        internal static async Task<UpdateFixture> CreateAsync(string targetName = "BiliCinema.exe")
         {
             var fixture = new UpdateFixture();
             try
@@ -201,7 +203,7 @@ public sealed class WindowsUpdateHelperTests(ITestOutputHelper output)
                 Directory.CreateDirectory(staging);
                 var state = fixture.State;
                 state.ParentProcessId = Environment.ProcessId;
-                state.TargetPath = Path.Combine(fixture._directory, "BiliCinema.exe");
+                state.TargetPath = Path.Combine(fixture._directory, targetName);
                 state.PackagePath = Path.Combine(staging, "BiliCinema.exe");
                 state.BackupPath = Path.Combine(staging, "previous.exe");
                 state.HelperPath = Path.Combine(staging, "install.ps1");

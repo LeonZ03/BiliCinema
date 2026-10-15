@@ -27,6 +27,12 @@ do not use an upstream repository's workboard for this fork.
   CI signing key. Publish both packages with one SHA256SUMS.txt. App updates must
   verify the release origin and digest; Android also verifies package identity,
   version and signer before opening the system installer.
+- Package names are `BiliCinema-<version>-win-x64.exe` and
+  `BiliCinema-<version>-android-universal.apk`, using the sole version source
+  `version.txt`. Local output belongs under `artifacts/releases/<version>/<platform>/`;
+  intermediate Windows publish output belongs under `artifacts/publish/`.
+  The Windows updater preserves the installed executable path, including existing
+  shortcuts, and accepts the versioned package name for the selected release.
 - Preserve settings JSON, legacy SQLite, unfinished tasks, GID, partial-file
   maps, completed keys and resume fixtures unless an approved migration with
   rollback evidence explicitly changes them.

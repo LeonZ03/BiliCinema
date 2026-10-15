@@ -8,13 +8,13 @@ BiliCinema 提供 Windows 桌面端和 Android 客户端，可以播放哔哩哔
 
 ## 下载
 
-前往 [GitHub Releases](https://github.com/LeonZ03/BiliCinema/releases)，下载最新版本中的 `BiliCinema.exe`，保存到电脑后双击运行。程序以 Windows x64 单文件形式发布，不需要另外安装 .NET。播放视频需要安装 Microsoft Edge WebView2 Runtime；大多数 Windows 电脑已自带该组件。
+前往 [GitHub Releases](https://github.com/LeonZ03/BiliCinema/releases)，下载最新版本中的 `BiliCinema-<版本>-win-x64.exe`，保存到电脑后双击运行。程序以 Windows x64 单文件形式发布，不需要另外安装 .NET。播放视频需要安装 Microsoft Edge WebView2 Runtime；大多数 Windows 电脑已自带该组件。
 
 首次启动需要解压内置组件，请稍候；登录和下载数据默认保存在 `%APPDATA%\DownKyi`。
 
 Android 8 及以上设备下载同一 Release 的 `BiliCinema-<版本>-android-universal.apk`，使用系统安装器安装；播放依赖 Android System WebView。安卓端提供登录、观影、房间和聊天，不包含 Windows 下载器。手机与平板应在实际网络中验证 B 站登录和内容权限，见 [Android 说明](android/README.md)。
 
-两个客户端均检查本仓库的新版本并提示更新。Windows 下载并校验后保存任务、退出和替换程序，保留旧版以供恢复；Android 校验安装包和签名后打开系统安装器，需要用户确认安装。更新失败会保留现有版本。首次从旧 Windows 版升级需手动下载本版，此后可在应用内更新。
+两个客户端均检查本仓库的新版本并提示更新。Windows 下载并校验后保存任务、退出和替换程序，保留旧版以供恢复；Android 校验安装包和签名后打开系统安装器，需要用户确认安装。更新失败会保留现有版本。Windows 1.5.0 及更早版本需手动升级至 1.5.1，之后支持带版本号安装包的应用内更新。
 
 ## 快速开始
 
@@ -45,9 +45,11 @@ Android 8 及以上设备下载同一 Release 的 `BiliCinema-<版本>-android-u
 - [测试说明](docs/testing/README.md)
 - [验证与回滚](docs/operations/verification-and-rollback.md)
 - [云端房间部署](cloud/DEPLOYMENT.md)
-- [构建脚本](Build-BiliCinema.cmd)
+- [构建脚本](build-windows.cmd)
 
-Windows x64 开发电脑可运行 `Build-BiliCinema.cmd` 构建单文件程序；构建需要 .NET 10 SDK。源码也可通过 `dotnet run --project DownKyi/DownKyi.csproj` 运行。
+Windows x64 开发电脑可运行 `build-windows.cmd` 构建单文件程序；构建需要 .NET 10 SDK。源码也可通过 `dotnet run --project DownKyi/DownKyi.csproj` 运行。
+
+Windows 和 Android 安装包统一输出到 `artifacts/releases/<版本>/<平台>/`，各自附带 `SHA256SUMS.txt`。构建中间文件位于 `artifacts/publish/`。版本只修改根目录 `version.txt`；普通脚本和文档使用小写短横线命名，.NET 项目、类型及标准入口文件保留各自平台约定。
 
 ## 项目与许可
 

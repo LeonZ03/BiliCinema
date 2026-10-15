@@ -2,9 +2,12 @@ namespace DownKyi.Services.Updates;
 
 internal static class WindowsUpdateHelper
 {
-    // No user text is interpolated into executable script. Paths are read as data
-    // from the operation journal; replacement uses atomic same-volume File.Replace.
-    internal const string Script = """
+    // Only the fixed executable-name validation pattern is inserted into the script.
+    // Paths are journal data; replacement uses atomic same-volume File.Replace.
+    internal static readonly string Script = Template.Replace(
+        "__EXECUTABLE_NAME_PATTERN__", WindowsUpdateService.PublishedExecutableNamePattern,
+        System.StringComparison.Ordinal);
+    private const string Template = """
         param([Parameter(Mandatory=$true)][string]$Journal)
         $ErrorActionPreference = 'Stop'
         $state = Get-Content -LiteralPath $Journal -Raw | ConvertFrom-Json
@@ -20,7 +23,7 @@ internal static class WindowsUpdateHelper
             $directory = [System.IO.Path]::GetFullPath([System.IO.Path]::GetDirectoryName($Journal))
             $target = [System.IO.Path]::GetFullPath($state.TargetPath)
             $targetDirectory = [System.IO.Path]::GetFullPath([System.IO.Path]::GetDirectoryName($target))
-            if ([System.IO.Path]::GetFileName($target) -ne 'BiliCinema.exe' -or
+            if ([System.IO.Path]::GetFileName($target) -notmatch '__EXECUTABLE_NAME_PATTERN__' -or
                 [System.IO.Path]::GetDirectoryName($directory) -ne $targetDirectory -or
                 $state.PackagePath -ne (Join-Path $directory 'BiliCinema.exe') -or
                 $state.BackupPath -ne (Join-Path $directory 'previous.exe') -or

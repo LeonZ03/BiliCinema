@@ -44,6 +44,6 @@
 
 ## 构建与验证
 
-开发电脑运行 `Build-BiliCinema.cmd` 生成单文件 EXE；目标电脑只需复制该 EXE。播放需要 Windows WebView2 Runtime。Android 构建与设备验收见 [Android 说明](../android/README.md)。云端部署见 [Cloudflare 说明](../cloud/DEPLOYMENT.md)；保留的独立 .NET 服务用于本地开发和协议测试，见 [房间协议](../src/DownKyi.RoomServer/README.md)。
+开发电脑运行 `build-windows.cmd` 生成单文件 EXE；目标电脑只需复制该 EXE。播放需要 Windows WebView2 Runtime。Android 构建与设备验收见 [Android 说明](../android/README.md)。云端部署见 [Cloudflare 说明](../cloud/DEPLOYMENT.md)；保留的独立 .NET 服务用于本地开发和协议测试，见 [房间协议](../src/DownKyi.RoomServer/README.md)。
 
 五人房间回归覆盖人数上限、全体广播、缓冲等待、单个成员离开及重连。实际异地网络与 B 站账号权限仍应使用真实设备验证。

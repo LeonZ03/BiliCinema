@@ -7,7 +7,7 @@ public sealed class ReleaseSafetyRegressionTests
     [Fact]
     public void BiliCinemaBuildPublishesOneSelfContainedWindowsExecutable()
     {
-        var build = Read("script/build-bilicinema.ps1");
+        var build = Read("script/build-windows.ps1");
 
         Assert.Contains("'publish'", build, StringComparison.Ordinal);
         Assert.Contains("'-c', 'BiliCinema', '-r', 'win-x64'", build, StringComparison.Ordinal);
@@ -24,7 +24,7 @@ public sealed class ReleaseSafetyRegressionTests
     [Fact]
     public void SingleFileBuildStagesOnlyChecksumVerifiedRuntimeTools()
     {
-        var build = Read("script/build-bilicinema.ps1");
+        var build = Read("script/build-windows.ps1");
 
         Assert.Contains("external-assets.json", build, StringComparison.Ordinal);
         Assert.Contains("Assert-Hash", build, StringComparison.Ordinal);
