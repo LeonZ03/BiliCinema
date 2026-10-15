@@ -1,23 +1,15 @@
-## 下载与运行
+## 下载与更新
 
-在下方 **Assets** 下载 `BiliCinema.exe`，双击运行。适用于 Windows x64，已包含 .NET 和下载工具；播放需要 Microsoft Edge WebView2 Runtime。
+Windows x64 下载 `BiliCinema.exe`；Android 8+ 下载 `BiliCinema-1.5.0-android-universal.apk`。
+所有文件可通过 `SHA256SUMS.txt` 校验。Windows 播放依赖 WebView2，Android 播放依赖 Android System WebView。
 
 ## 本版更新
 
-- 邀请统一使用固定域名，多位房主可以同时创建各自的房间，每间最多 5 人。
-- 替换旧 Quick Tunnel，改善公网建房速度与等待不稳定的问题；公网连接会验证实际 WebSocket 通道。
-- 房主断线可自动恢复；结束后旧邀请立即失效，异常离线的房间和通道会自动回收，失败时重试清理。
-- 强制关闭程序也会终止 Tunnel 子进程；Cloudflare 管理凭据只存于云端，不包含在 exe 中。
+- 房间状态运行在 Cloudflare Durable Objects，Windows、安卓手机和平板直接连接同一域名；不再需要常开电脑或 Tunnel。
+- 最多 5 人，房主统一控制影片与进度；支持缓冲等待、重连与聊天。视频仍由各设备从 B 站独立播放。
+- Windows 登录遇到 DNS、TLS、代理、协议不支持或超时时显示错误提示。
+- Windows 和 Android 检查本仓库的新版本并弹出更新提示。下载后校验 SHA256；Windows 保存任务并退出替换，Android 校验同包同签名后打开系统安装器。
 
-## 功能
+首次从旧 Windows 版升级请手动下载本版；后续版本可在应用内更新。房主离线 2 分钟后结束房间；主动结束后邀请立即失效。会员内容权限取决于各自 B 站账号。
 
-- 扫码登录，支持多人在各自电脑登录同一个 B 站账号，也可分别登录不同账号；支持复制二维码分享卡片。
-- 播放电影、番剧及普通 B 站视频。
-- 创建或加入最多 5 人的观影房间，房主统一控制选片、选集与进度。
-- 自动同步恢复的历史进度，并提供手动同步与播放器检查按钮。
-- 窗口与全屏侧边聊天、新消息提醒与昵称记忆。
-- 下载音视频、弹幕、字幕和封面，显示预计大小。
-
-操作说明见 [README](https://github.com/LeonZ03/BiliCinema#readme)。房主需保持程序运行，建议所有成员使用同一版本；内容权限取决于各自 B 站账号。
-
-v1.4.0 使用新的固定域名邀请，房主和访客请一起升级；旧版临时域名邀请不会转换为新房间。
+Android 使用说明和实际设备验收要求见 [Android 文档](https://github.com/LeonZ03/BiliCinema/blob/main/android/README.md)，其他操作见 [README](https://github.com/LeonZ03/BiliCinema#readme)。

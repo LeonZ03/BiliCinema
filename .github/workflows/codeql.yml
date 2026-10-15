@@ -35,3 +35,15 @@ jobs:
         run: dotnet build ./DownKyi.sln -c Release --no-restore --no-incremental
       - name: Analyze
         uses: github/codeql-action/analyze@v4
+
+  android-cloud:
+    name: Analyze Android and cloud
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - uses: github/codeql-action/init@v4
+        with:
+          languages: java-kotlin,javascript-typescript
+          build-mode: none
+      - uses: github/codeql-action/analyze@v4

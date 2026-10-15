@@ -1,6 +1,8 @@
-# DownKyi private room server
+# BiliCinema room protocol and legacy .NET host
 
-This .NET 10 service relays room selection and playback control state. Each desktop client resolves and plays its own Bilibili media. The server never receives cookies, account IDs, signed media URLs, video, or audio. Room state is held in memory and is lost on restart.
+The current Windows and Android clients use `wss://bilicinema.leonz03.dpdns.org/v2/ws`. The SQLite Durable Object in `cloud/src/cloud-room.mjs` owns each room, persists control state and keeps idle WebSockets connected through hibernation. Each client resolves and plays its own Bilibili media. The service never receives cookies, account IDs, signed media URLs, video, or audio. Deployment and migration details live in [cloud/DEPLOYMENT.md](../../cloud/DEPLOYMENT.md).
+
+The .NET 10 service in this directory remains a standalone development/protocol fixture and supports the legacy v1 implementation. Its in-memory rooms are lost on restart; current clients do not start it when creating a room.
 
 ## Start locally
 
@@ -8,15 +10,15 @@ This .NET 10 service relays room selection and playback control state. Each desk
 dotnet run --project src/DownKyi.RoomServer/DownKyi.RoomServer.csproj -c Release
 ```
 
-The BiliCinema EXE starts this service in-process when the host creates a room, so normal users do not need to start it separately. The default endpoint is `ws://127.0.0.1:5077/ws`; `http://127.0.0.1:5077/health` is a basic process check. For standalone development, override the listening address with `RoomServer__ListenUrl` or `RoomServer:ListenUrl` in configuration. The local smoke test is:
+The standalone default endpoint is `ws://127.0.0.1:5077/ws`; `http://127.0.0.1:5077/health` is a basic process check. For development, override the listening address with `RoomServer__ListenUrl` or `RoomServer:ListenUrl` in configuration. The local smoke test is:
 
 ```powershell
 pwsh -File src/DownKyi.RoomServer/smoke.ps1
 ```
 
-## Private internet deployment
+## Legacy v1 private internet deployment
 
-For remote viewing, the BiliCinema EXE creates the local room first, then registers a host session through the fixed BiliCinema gateway and starts its bundled `cloudflared` client with a session-scoped remotely managed Tunnel token. The host connects locally while the gateway route is preparing; a failed route can be retried without recreating the local room. Each host session can carry multiple room routes, while different host computers use different Tunnel instances. Ending or leaving a hosted room removes its route; application shutdown stops the connector. The gateway keeps a bounded two-minute heartbeat window and removes stale routes and Tunnel resources after an abnormal exit. Invitations use `wss://bilicinema.leonz03.dpdns.org/ws?room=...`; the room code is only a routing hint, and the first WebSocket JSON message still authenticates the room member.
+Versions through 1.4 create the local room first, register a host session through the gateway and start a bundled `cloudflared` connector with a session-scoped managed Tunnel token. Ending a hosted room removes its route; application shutdown stops the connector. The gateway retains the legacy two-minute heartbeat cleanup for these clients. Their invitations use `/ws?room=...`; the first WebSocket JSON message authenticates the room member. Version 1.5 creates v2 cloud rooms directly without this local server or connector.
 
 For local development, keep the default loopback listener. Production gateway resources are configured under `cloud/`; Cloudflare API credentials remain Worker Secrets and never enter the EXE. A standalone local deployment can still use a named Cloudflare Tunnel or a TLS reverse proxy on a host you control. Keep the listener loopback-only. For example, a Caddy site can use:
 
@@ -28,7 +30,7 @@ room.example.com {
 
 Replace the domain with your own, configure DNS and the host firewall for HTTPS, then use `wss://room.example.com/ws` in all clients. The service rejects plain WebSocket connections from non-loopback peers. It also rejects browser `Origin` headers; the intended clients are the DownKyi desktop applications. Do not expose the local HTTP listener directly. No media ports or player IPC need to be publicly reachable.
 
-The server keeps at most 256 rooms, with at most five members per room (one host and four guests). A sixth member is rejected with `room_full`. A disconnected host has two minutes to reconnect. Guest credentials are retained for up to five minutes while their seat is available; a new guest can take the oldest disconnected seat if all four slots are allocated. The host leaving or closing a room ends it immediately. A service restart ends all rooms. Invitation codes and client IDs contain 128 random bits each; share only the invitation code. Keep the returned `clientId` private on its own client and use it to reclaim that slot on reconnect.
+The legacy .NET server keeps at most 256 in-memory rooms. Both implementations allow five members per room (one host and four guests); a sixth member receives `room_full`. A disconnected host has two minutes to reconnect. Guest credentials are retained for up to five minutes while their seat is available; a new guest can take the oldest disconnected seat if all four slots are allocated. Host leave/close ends the room immediately. Cloud rooms also expire after 24 hours and recover persisted state across runtime restarts; deployment may require clients to reconnect. Invitation codes and client IDs contain 128 random bits each; share only the invitation code. Keep each returned `clientId` private on its own client.
 
 ## Wire protocol (JSON over WebSocket)
 
