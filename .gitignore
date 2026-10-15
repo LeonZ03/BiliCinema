@@ -29,3 +29,4 @@ script/macos/*.app
 cloud/node_modules/
 cloud/.wrangler/
 cloud/.dev.vars
+.wrangler/

@@ -20,11 +20,13 @@
   },
   "durable_objects": {
     "bindings": [
-      { "name": "REGISTRY", "class_name": "RoomRouteRegistry" }
+      { "name": "REGISTRY", "class_name": "RoomRouteRegistry" },
+      { "name": "ROOMS", "class_name": "CloudRoom" }
     ]
   },
   "migrations": [
-    { "tag": "router-v1", "new_sqlite_classes": ["RoomRouteRegistry"] }
+    { "tag": "router-v1", "new_sqlite_classes": ["RoomRouteRegistry"] },
+    { "tag": "router-v2", "new_sqlite_classes": ["CloudRoom"] }
   ],
   "triggers": { "crons": ["*/5 * * * *"] },
   "observability": { "enabled": false },
