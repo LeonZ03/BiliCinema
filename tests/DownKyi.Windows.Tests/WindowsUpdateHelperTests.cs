@@ -1,11 +1,15 @@
 using System.Diagnostics;
 using System.Globalization;
+using System.Runtime.Versioning;
 using System.Security.Cryptography;
 using System.Text.Json;
+using DownKyi.CentralTestRunner;
+using DownKyi.ProcessSupervision;
 using DownKyi.Services.Updates;
 
 namespace DownKyi.Windows.Tests;
 
+[SupportedOSPlatform("windows")]
 public sealed class WindowsUpdateHelperTests(ITestOutputHelper output)
 {
     [Fact]
@@ -13,7 +17,7 @@ public sealed class WindowsUpdateHelperTests(ITestOutputHelper output)
     {
         var fixture = await UpdateFixture.CreateAsync();
         await using var fixtureLifetime = fixture.ConfigureAwait(true);
-        fixture.Start();
+        await fixture.StartAsync();
         await fixture.WaitForReadyAsync();
 
         Assert.Equal(UpdateFixture.Original, await File.ReadAllBytesAsync(fixture.State.TargetPath,
@@ -30,7 +34,7 @@ public sealed class WindowsUpdateHelperTests(ITestOutputHelper output)
         fixture.State.ParentProcessId = int.MaxValue;
         fixture.State.ExpectedSha256 = new string('0', 64);
         await fixture.SaveAsync();
-        fixture.Start();
+        await fixture.StartAsync();
         await fixture.WaitForExitAsync();
 
         Assert.Equal(UpdateFixture.Original, await File.ReadAllBytesAsync(fixture.State.TargetPath,
@@ -47,7 +51,7 @@ public sealed class WindowsUpdateHelperTests(ITestOutputHelper output)
         await using var fixtureLifetime = fixture.ConfigureAwait(true);
         fixture.State.ParentProcessId = int.MaxValue;
         await fixture.SaveAsync();
-        fixture.Start();
+        await fixture.StartAsync();
         await fixture.WaitForExitAsync();
 
         Assert.Equal(UpdateFixture.Original, await File.ReadAllBytesAsync(fixture.State.TargetPath,
@@ -70,7 +74,7 @@ public sealed class WindowsUpdateHelperTests(ITestOutputHelper output)
         await fixture.PrepareExecutablePairAsync(exitCode);
         var previous = await File.ReadAllBytesAsync(fixture.State.TargetPath, TestContext.Current.CancellationToken);
         var update = await File.ReadAllBytesAsync(fixture.State.PackagePath, TestContext.Current.CancellationToken);
-        fixture.Start();
+        await fixture.StartAsync();
         await fixture.WaitForExitAsync();
 
         Assert.Equal(expectedPhase, await ReadPhaseWithDiagnosticsAsync(fixture));
@@ -93,6 +97,29 @@ public sealed class WindowsUpdateHelperTests(ITestOutputHelper output)
         }
     }
 
+    [Fact]
+    public async Task FixtureCleanupOwnsRestartedApplicationAfterHelperHasExited()
+    {
+        var fixture = await UpdateFixture.CreateAsync("BiliCinema-1.5.1-win-x64.exe");
+        await using var fixtureLifetime = fixture.ConfigureAwait(true);
+        await fixture.PrepareExecutablePairAsync(17, holdPrevious: true);
+        await fixture.StartAsync();
+        await fixture.WaitForExitAsync();
+        Assert.Equal("rolled-back", await ReadPhaseWithDiagnosticsAsync(fixture));
+
+        var pid = await fixture.WaitForPreviousLaunchAsync(waitForExit: false);
+        using (var previous = Process.GetProcessById(pid))
+        {
+            Assert.False(previous.HasExited);
+            await Assert.ThrowsAsync<DirectoryResourceRundownTimeoutException>(() =>
+                WindowsDirectoryResourceRundown.WaitForDeleteAccessAsync(
+                    fixture.State.TargetPath, TimeSpan.Zero, requireWriteAccess: true));
+        }
+
+        await fixture.DisposeAsync();
+        Assert.False(File.Exists(fixture.State.TargetPath));
+    }
+
     private async Task<string> ReadPhaseWithDiagnosticsAsync(UpdateFixture fixture)
     {
         var phase = await fixture.ReadPhaseAsync().ConfigureAwait(false);
@@ -106,15 +133,16 @@ public sealed class WindowsUpdateHelperTests(ITestOutputHelper output)
         private readonly string _directory = Path.Combine(Path.GetTempPath(), $"bilicinema update's test-{Guid.NewGuid():N}");
         private Task<string>? _output;
         private Task<string>? _error;
+        private OwnedProcessScope? _scope;
         internal WindowsUpdateJournal State { get; } = new();
         internal Process? Helper { get; private set; }
         private string Journal => Path.Combine(_directory, ".bilicinema-update-test", "update.json");
         internal string UpdatedLaunchMarker => Path.Combine(_directory, "updated-launch.txt");
         internal string PreviousLaunchMarker => Path.Combine(_directory, "previous-launch.txt");
 
-        internal async Task PrepareExecutablePairAsync(int updateExitCode)
+        internal async Task PrepareExecutablePairAsync(int updateExitCode, bool holdPrevious = false)
         {
-            await CompileExecutableAsync(State.TargetPath, PreviousLaunchMarker, 0).ConfigureAwait(false);
+            await CompileExecutableAsync(State.TargetPath, PreviousLaunchMarker, 0, holdPrevious).ConfigureAwait(false);
             await CompileExecutableAsync(State.PackagePath, UpdatedLaunchMarker, updateExitCode).ConfigureAwait(false);
             State.ExpectedSha256 = Convert.ToHexString(SHA256.HashData(
                 await File.ReadAllBytesAsync(State.PackagePath, TestContext.Current.CancellationToken).ConfigureAwait(false)));
@@ -122,11 +150,13 @@ public sealed class WindowsUpdateHelperTests(ITestOutputHelper output)
             await SaveAsync().ConfigureAwait(false);
         }
 
-        private static async Task CompileExecutableAsync(string target, string marker, int exitCode)
+        private static async Task CompileExecutableAsync(string target, string marker, int exitCode, bool hold = false)
         {
             var source = target + ".cs";
             var body = "using System.IO; internal static class Program { private static int Main() { using (var process = System.Diagnostics.Process.GetCurrentProcess()) { File.AppendAllText("
-                + JsonSerializer.Serialize(marker) + ", process.Id.ToString(System.Globalization.CultureInfo.InvariantCulture) + \"\\n\"); } return "
+                + JsonSerializer.Serialize(marker) + ", process.Id.ToString(System.Globalization.CultureInfo.InvariantCulture) + \"\\n\"); } "
+                + (hold ? "using (var lifetime = new System.Threading.ManualResetEvent(false)) { lifetime.WaitOne(); } " : string.Empty)
+                + "return "
                 + exitCode.ToString(CultureInfo.InvariantCulture) + "; } }";
             await File.WriteAllTextAsync(source, body, TestContext.Current.CancellationToken).ConfigureAwait(false);
             var compiler = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Windows),
@@ -166,7 +196,7 @@ public sealed class WindowsUpdateHelperTests(ITestOutputHelper output)
             }
         }
 
-        internal async Task WaitForPreviousLaunchAsync()
+        internal async Task<int> WaitForPreviousLaunchAsync(bool waitForExit = true)
         {
             using var timeout = CancellationTokenSource.CreateLinkedTokenSource(TestContext.Current.CancellationToken);
             timeout.CancelAfter(TimeSpan.FromSeconds(10));
@@ -183,6 +213,8 @@ public sealed class WindowsUpdateHelperTests(ITestOutputHelper output)
                 await Task.Delay(50, timeout.Token).ConfigureAwait(false);
             }
 
+            if (!waitForExit) return pid;
+
             try
             {
                 using var previous = Process.GetProcessById(pid);
@@ -192,6 +224,8 @@ public sealed class WindowsUpdateHelperTests(ITestOutputHelper output)
             {
                 // The short-lived previous executable may exit before its handle is opened.
             }
+
+            return pid;
         }
 
         internal static async Task<UpdateFixture> CreateAsync(string targetName = "BiliCinema.exe")
@@ -228,14 +262,17 @@ public sealed class WindowsUpdateHelperTests(ITestOutputHelper output)
             JsonSerializer.Serialize(State, WindowsUpdateJsonContext.Default.WindowsUpdateJournal),
             TestContext.Current.CancellationToken);
 
-        internal void Start()
+        internal async Task StartAsync()
         {
             var info = WindowsUpdateService.CreateHelperStartInfo(State.HelperPath, Journal);
             info.RedirectStandardOutput = true;
             info.RedirectStandardError = true;
-            Helper = Process.Start(info) ?? throw new InvalidOperationException("Fixture helper did not start.");
-            _output = Helper.StandardOutput.ReadToEndAsync();
-            _error = Helper.StandardError.ReadToEndAsync();
+            // The helper may exit while its restarted application is still alive.
+            // The existing OS scope owns that descendant through fixture cleanup.
+            _scope = await OwnedProcessScope.StartAsync(info, TestContext.Current.CancellationToken).ConfigureAwait(false);
+            _output = _scope.Host.StandardOutput.ReadToEndAsync();
+            _error = _scope.Host.StandardError.ReadToEndAsync();
+            Helper = _scope.Host;
         }
 
         internal async Task WaitForReadyAsync()
@@ -269,20 +306,37 @@ public sealed class WindowsUpdateHelperTests(ITestOutputHelper output)
 
         public async ValueTask DisposeAsync()
         {
-            if (Helper != null)
+            var deadline = new CleanupDeadline(TimeSpan.FromSeconds(10));
+            if (_scope != null)
             {
-                if (!Helper.HasExited)
+                try
                 {
-                    Helper.Kill(entireProcessTree: true);
+                    await _scope.TerminateAsync(deadline).ConfigureAwait(false);
+                    await _scope.Host.WaitForExitAsync(CancellationToken.None)
+                        .WaitAsync(deadline.Remaining).ConfigureAwait(false);
+                    if (_output != null) await _output.ConfigureAwait(false);
+                    if (_error != null) await _error.ConfigureAwait(false);
                 }
-
-                await Helper.WaitForExitAsync(CancellationToken.None).ConfigureAwait(false);
-                if (_output != null) await _output.ConfigureAwait(false);
-                if (_error != null) await _error.ConfigureAwait(false);
-                Helper.Dispose();
+                finally
+                {
+                    Helper = null;
+                    _scope.Dispose();
+                    _scope = null;
+                }
             }
 
-            if (Directory.Exists(_directory)) Directory.Delete(_directory, recursive: true);
+            if (Directory.Exists(_directory))
+            {
+                foreach (var executable in new[] { State.TargetPath, State.PackagePath, State.BackupPath })
+                {
+                    await WindowsDirectoryResourceRundown.WaitForDeleteAccessAsync(
+                        executable, deadline.Remaining, requireWriteAccess: true).ConfigureAwait(false);
+                }
+
+                await WindowsDirectoryResourceRundown.WaitForDeleteAccessAsync(_directory, deadline.Remaining)
+                    .ConfigureAwait(false);
+                Directory.Delete(_directory, recursive: true);
+            }
         }
     }
 }

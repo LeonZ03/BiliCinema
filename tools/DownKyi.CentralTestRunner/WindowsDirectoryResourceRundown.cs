@@ -11,6 +11,7 @@ namespace DownKyi.CentralTestRunner;
 internal static class WindowsDirectoryResourceRundown
 {
     private const uint DeleteAccess = 0x00010000;
+    private const uint WriteDataAccess = 0x00000002;
     private const uint ShareRead = 0x00000001;
     private const uint ShareWrite = 0x00000002;
     private const uint ShareDelete = 0x00000004;
@@ -23,7 +24,8 @@ internal static class WindowsDirectoryResourceRundown
 
     internal static async Task WaitForDeleteAccessAsync(
         string resourcePath,
-        TimeSpan timeout)
+        TimeSpan timeout,
+        bool requireWriteAccess = false)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(resourcePath);
         ArgumentOutOfRangeException.ThrowIfLessThan(timeout, TimeSpan.Zero);
@@ -31,7 +33,7 @@ internal static class WindowsDirectoryResourceRundown
         var started = Stopwatch.GetTimestamp();
         while (true)
         {
-            var error = TryAcquireDeleteAccess(resourcePath);
+            var error = TryAcquireDeleteAccess(resourcePath, requireWriteAccess);
             if (error is 0 or ErrorFileNotFound or ErrorPathNotFound)
             {
                 return;
@@ -55,11 +57,14 @@ internal static class WindowsDirectoryResourceRundown
         }
     }
 
-    private static int TryAcquireDeleteAccess(string resourcePath)
+    private static int TryAcquireDeleteAccess(string resourcePath, bool requireWriteAccess)
     {
+        // A directory DELETE handle does not establish that a child's executable
+        // image has been unmapped. FILE_WRITE_DATA also rejects mapped images;
+        // OPEN_EXISTING only probes access and never modifies the file.
         using var handle = NativeMethods.CreateFile(
             resourcePath,
-            DeleteAccess,
+            requireWriteAccess ? DeleteAccess | WriteDataAccess : DeleteAccess,
             ShareRead | ShareWrite | ShareDelete,
             IntPtr.Zero,
             OpenExisting,
