@@ -25,8 +25,14 @@ jobs:
     if: github.ref == 'refs/heads/main'
     runs-on: windows-latest
     timeout-minutes: 20
+    outputs:
+      version: ${{ steps.version.outputs.value }}
     steps:
       - uses: actions/checkout@v7
+      - name: Read package version
+        id: version
+        shell: pwsh
+        run: '"value=$((Get-Content version.txt -Raw).Trim())" >> $env:GITHUB_OUTPUT'
       - uses: actions/setup-dotnet@v5
         with:
           dotnet-version: '10.0.x'
@@ -63,7 +69,7 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Restore Windows runtime and build single executable
         shell: pwsh
-        run: ./script/build-bilicinema.ps1
+        run: ./script/build-windows.ps1
       - name: Verify packaged aria2 security
         shell: pwsh
         env:
@@ -71,16 +77,10 @@ jobs:
           DOWNKYI_ARIA2_RID: win-x64
           DOWNKYI_ARIA2_TLS_REPORT: ${{ github.workspace }}/artifacts/aria2-tls/win-x64
         run: ./script/test-project.ps1 -ProjectPath ./tests/DownKyi.Tests/DownKyi.Tests.csproj -Configuration Release -NoRestore -NoBuild -ClassName DownKyi.Tests.Aria2TlsIntegrationTests
-      - name: Record executable checksum
-        shell: pwsh
-        run: |
-          $folder = 'artifacts/BiliCinema-win-x64'
-          $digest = (Get-FileHash "$folder/BiliCinema.exe" -Algorithm SHA256).Hash.ToLowerInvariant()
-          "$digest  BiliCinema.exe" | Set-Content "$folder/SHA256SUMS.txt" -Encoding ascii
       - uses: actions/upload-artifact@v7
         with:
-          name: BiliCinema-win-x64
-          path: artifacts/BiliCinema-win-x64/
+          name: bilicinema-${{ steps.version.outputs.value }}-win-x64
+          path: artifacts/releases/${{ steps.version.outputs.value }}/win-x64/
           if-no-files-found: error
       - name: Upload test evidence
         if: always()
@@ -99,6 +99,10 @@ jobs:
     timeout-minutes: 25
     steps:
       - uses: actions/checkout@v7
+      - name: Read package version
+        id: version
+        shell: pwsh
+        run: '"value=$((Get-Content version.txt -Raw).Trim())" >> $env:GITHUB_OUTPUT'
       - uses: actions/setup-java@v6
         with:
           distribution: temurin
@@ -132,8 +136,8 @@ jobs:
           if (Test-Path -LiteralPath $keyFile) { Remove-Item -LiteralPath $keyFile -Force }
       - uses: actions/upload-artifact@v7
         with:
-          name: BiliCinema-android
-          path: artifacts/BiliCinema-android/
+          name: bilicinema-${{ steps.version.outputs.value }}-android
+          path: artifacts/releases/${{ steps.version.outputs.value }}/android/
           if-no-files-found: error
       - name: Upload Android verification evidence
         if: always()
@@ -190,11 +194,11 @@ jobs:
       - uses: actions/checkout@v7
       - uses: actions/download-artifact@v8
         with:
-          name: BiliCinema-win-x64
+          name: bilicinema-${{ needs.verify-package.outputs.version }}-win-x64
           path: release-assets
       - uses: actions/download-artifact@v8
         with:
-          name: BiliCinema-android
+          name: bilicinema-${{ needs.verify-package.outputs.version }}-android
           path: android-assets
       - name: Combine verified release packages
         shell: bash
@@ -221,6 +225,7 @@ jobs:
             echo 'This version already has a release. Existing assets will not be replaced.' >&2
             exit 1
           fi
-          gh release create "$tag" release-assets/BiliCinema.exe release-assets/*.apk release-assets/SHA256SUMS.txt \
+          sed "s/{{VERSION}}/${version}/g" docs/releases/bilicinema.md > release-notes.md
+          gh release create "$tag" "release-assets/BiliCinema-${version}-win-x64.exe" release-assets/*.apk release-assets/SHA256SUMS.txt \
             --target "$GITHUB_SHA" --title "BiliCinema v${version}" \
-            --notes-file docs/releases/bilicinema.md --latest
+            --notes-file release-notes.md --latest

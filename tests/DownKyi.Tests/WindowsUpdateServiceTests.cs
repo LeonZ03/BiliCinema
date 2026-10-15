@@ -43,6 +43,11 @@ public sealed class WindowsUpdateServiceTests
     [InlineData("BiliCinema.exe", "BiliCinema.dll", false)]
     [InlineData("testhost.exe", "", false)]
     [InlineData("BiliCinema.exe", "", true)]
+    [InlineData("BiliCinema-1.5.1-win-x64.exe", "", true)]
+    [InlineData("BiliCinema-1.5.1-win-x64.exe", "BiliCinema.dll", false)]
+    [InlineData("BiliCinema-1.5.1-arm64.exe", "", false)]
+    [InlineData("BiliCinema-01.5.1-win-x64.exe", "", false)]
+    [InlineData("BiliCinema-1.5.1-win-x64.exe\n", "", false)]
     public void OnlyPublishedSingleExecutableCanBeReplaced(string processPath, string assemblyPath, bool expected)
     {
         Assert.Equal(expected, WindowsUpdateService.IsPublishedExecutable(processPath, assemblyPath));
@@ -52,10 +57,31 @@ public sealed class WindowsUpdateServiceTests
     public void AssetMustBelongToSameReleaseAndRepository()
     {
         var release = Release(3);
-        var asset = WindowsUpdateService.RequireAsset(release, "BiliCinema.exe");
+        var asset = WindowsUpdateService.RequireExecutableAsset(release);
         Assert.Equal(asset.DownloadUrl, WindowsUpdateService.RequireReleaseAssetUri(release, asset).AbsoluteUri);
-        asset.DownloadUrl = "https://github.com/other/repository/releases/download/bilicinema-v1.5.0/BiliCinema.exe";
+        asset.DownloadUrl = "https://github.com/other/repository/releases/download/bilicinema-v1.5.1/BiliCinema-1.5.1-win-x64.exe";
         Assert.Throws<InvalidDataException>(() => WindowsUpdateService.RequireReleaseAssetUri(release, asset));
+    }
+
+    [Theory]
+    [InlineData("BiliCinema-1.5.1-win-x64.exe")]
+    [InlineData("BiliCinema.exe")]
+    public void ReleaseCanSelectVersionedAndLegacyPackages(string name)
+    {
+        var release = Release(3);
+        release.Assets[0].Name = name;
+        Assert.Same(release.Assets[0], WindowsUpdateService.RequireExecutableAsset(release));
+    }
+
+    [Fact]
+    public void VersionedPackageMustMatchReleaseAndBeUnambiguous()
+    {
+        var release = Release(3);
+        release.Assets[0].Name = "BiliCinema-1.4.0-win-x64.exe";
+        Assert.Throws<InvalidDataException>(() => WindowsUpdateService.RequireExecutableAsset(release));
+        release.Assets[0].Name = "BiliCinema-1.5.1-win-x64.exe";
+        release.Assets = [.. release.Assets, release.Assets[0]];
+        Assert.Throws<InvalidDataException>(() => WindowsUpdateService.RequireExecutableAsset(release));
     }
 
     [Fact]
@@ -70,18 +96,18 @@ public sealed class WindowsUpdateServiceTests
 
     private static GitHubRelease Release(int size) => new()
     {
-        TagName = "bilicinema-v1.5.0",
+        TagName = "bilicinema-v1.5.1",
         Assets =
         [
             new GitHubReleaseAsset
             {
-                Name = "BiliCinema.exe", Size = size,
-                DownloadUrl = "https://github.com/LeonZ03/BiliCinema/releases/download/bilicinema-v1.5.0/BiliCinema.exe"
+                Name = "BiliCinema-1.5.1-win-x64.exe", Size = size,
+                DownloadUrl = "https://github.com/LeonZ03/BiliCinema/releases/download/bilicinema-v1.5.1/BiliCinema-1.5.1-win-x64.exe"
             },
             new GitHubReleaseAsset
             {
                 Name = "SHA256SUMS.txt",
-                DownloadUrl = "https://github.com/LeonZ03/BiliCinema/releases/download/bilicinema-v1.5.0/SHA256SUMS.txt"
+                DownloadUrl = "https://github.com/LeonZ03/BiliCinema/releases/download/bilicinema-v1.5.1/SHA256SUMS.txt"
             }
         ]
     };
@@ -94,7 +120,7 @@ public sealed class WindowsUpdateServiceTests
             return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
             {
                 Content = request.RequestUri!.AbsolutePath.EndsWith("SHA256SUMS.txt", StringComparison.Ordinal)
-                    ? new StringContent($"{digest}  BiliCinema.exe\n")
+                    ? new StringContent($"{digest}  BiliCinema-1.5.1-win-x64.exe\n")
                     : new ByteArrayContent(package)
             });
         }

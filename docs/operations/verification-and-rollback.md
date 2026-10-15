@@ -65,13 +65,13 @@ bounded stdout/stderr 與一次 best-effort final process snapshot；child 未�
 cloudflared，再產生自包含的 Windows x64 單一執行檔：
 
 ```powershell
-pwsh ./script/build-bilicinema.ps1
-Test-Path ./artifacts/BiliCinema-win-x64/BiliCinema.exe
-Get-ChildItem ./artifacts/BiliCinema-win-x64 -File
+pwsh ./script/build-windows.ps1
+Get-ChildItem ./artifacts/releases/*/win-x64/BiliCinema-*-win-x64.exe
+Get-ChildItem ./artifacts/releases -Recurse -File
 ```
 
 `script/assets/external-assets.json` 是外部工具版本與 SHA-256 的唯一清單。
-建置會拒絕雜湊不符的下載，並確認輸出目錄中只有 `BiliCinema.exe`。
+建置會拒絕雜湊不符的下載，並確認中間目錄中只有 `BiliCinema.exe`，再輸出 `artifacts/releases/<version>/win-x64/BiliCinema-<version>-win-x64.exe` 和 `SHA256SUMS.txt`。Android 對應目錄為 `artifacts/releases/<version>/android/`。
 `.github/workflows/quality.yml` 目前僅在 pull request 時執行格式、嚴格建置、
 測試與套件稽核；它不會產生或上傳發行檔案。交付內容是上述 exe，本機建置不需要
 建立壓縮檔或 macOS 安裝包。
@@ -79,7 +79,7 @@ Get-ChildItem ./artifacts/BiliCinema-win-x64 -File
 `BiliCinema Release` 工作流在 main 的 `version.txt` 或工作流本身變更時執行，
 也可手動執行。它對同一提交完成格式、嚴格建置、Windows 完整回歸、CodeQL、
 單文件打包與實際 aria2 TLS 測試後，才建立 `bilicinema-v<version>` Release，
-並完成 Android release 單測、lint 和簽名 APK 後，上傳 `BiliCinema.exe`、APK 與統一的 SHA-256 校驗檔。現有 Release 不會被覆寫。
+並完成 Android release 單測、lint 和簽名 APK 後，上傳 `BiliCinema-<version>-win-x64.exe`、帶版本號的 APK 與統一的 SHA-256 校驗檔。現有 Release 不會被覆寫。
 一般 main 程式碼提交仍不會觸發 Strict PR CI。
 
 登入態 API audit 只能由明確授權的 operator 執行：

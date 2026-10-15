@@ -8,6 +8,7 @@ using System.Reflection;
 using System.Security.Cryptography;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 using DownKyi.Application.Diagnostics;
@@ -27,12 +28,13 @@ internal interface IWindowsUpdateService
         CancellationToken cancellationToken);
 }
 
-internal sealed class WindowsUpdateService(
+internal sealed partial class WindowsUpdateService(
     HttpClient httpClient,
     IApplicationLifecycle lifecycle,
     ILogger<WindowsUpdateService> logger) : IWindowsUpdateService
 {
     internal const long MaximumExecutableBytes = 512L * 1024 * 1024;
+    internal const string PublishedExecutableNamePattern = @"\ABiliCinema(?:-(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)-win-x64)?\.exe\z";
     private static readonly SearchValues<char> HexCharacters = SearchValues.Create("0123456789abcdefABCDEF");
     private readonly HttpClient _httpClient = httpClient ?? throw new ArgumentNullException(nameof(httpClient));
     private readonly IApplicationLifecycle _lifecycle = lifecycle ?? throw new ArgumentNullException(nameof(lifecycle));
@@ -87,7 +89,7 @@ internal sealed class WindowsUpdateService(
             {
                 await SaveJournalAsync(journalPath, journal, cancellationToken).ConfigureAwait(false);
                 progress.Report(new UpdateProgress("正在获取更新校验信息…", 0));
-                var executable = RequireAsset(release, "BiliCinema.exe");
+                var executable = RequireExecutableAsset(release);
                 var sums = RequireAsset(release, "SHA256SUMS.txt");
                 using (var response = await _httpClient.GetAsync(
                            RequireReleaseAssetUri(release, sums),
@@ -208,6 +210,15 @@ internal sealed class WindowsUpdateService(
         }
     }
 
+    internal static GitHubReleaseAsset RequireExecutableAsset(GitHubRelease release)
+    {
+        var version = VersionCheckerService.NormalizeReleaseTag(release.TagName);
+        var name = $"BiliCinema-{version}-win-x64.exe";
+        return release.Assets.Any(asset => asset.Name.Equals(name, StringComparison.Ordinal))
+            ? RequireAsset(release, name)
+            : RequireAsset(release, "BiliCinema.exe");
+    }
+
     internal static GitHubReleaseAsset RequireAsset(GitHubRelease release, string name)
     {
         var assets = release.Assets.Where(asset => asset.Name.Equals(name, StringComparison.Ordinal)).ToArray();
@@ -261,8 +272,11 @@ internal sealed class WindowsUpdateService(
 
     internal static bool IsPublishedExecutable(string? executablePath, string? entryAssemblyPath) =>
         !string.IsNullOrEmpty(executablePath)
-        && Path.GetFileName(executablePath).Equals("BiliCinema.exe", StringComparison.OrdinalIgnoreCase)
+        && PublishedExecutableName().IsMatch(Path.GetFileName(executablePath))
         && string.IsNullOrEmpty(entryAssemblyPath);
+
+    [GeneratedRegex(PublishedExecutableNamePattern, RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
+    private static partial Regex PublishedExecutableName();
 
     private static string GetPublishedExecutable()
     {
@@ -270,7 +284,7 @@ internal sealed class WindowsUpdateService(
         if (!OperatingSystem.IsWindows()
             || !IsPublishedExecutable(path, Assembly.GetEntryAssembly()?.Location))
         {
-            throw new InvalidOperationException("当前为开发运行环境，不能自动替换程序。请使用发布的 BiliCinema.exe 更新。");
+            throw new InvalidOperationException("当前为开发运行环境，不能自动替换程序。请使用发布的 Windows 安装包更新。");
         }
 
         return Path.GetFullPath(path!);

@@ -22,7 +22,7 @@ Use JDK 17, Node.js 18+ (for the built-in test runner), Android SDK 35 and the c
 pwsh -File script/build-android.ps1
 ```
 
-The script runs the player script behavior tests, release unit tests, release lint and release assembly, then writes `artifacts/BiliCinema-android/BiliCinema-<version>-android-universal.apk` and `SHA256SUMS.txt`. `-SkipChecks` skips the Node tests, unit tests and lint together and is intended only for local iteration. The version and Android version code derive from root `version.txt`.
+The script runs the player script behavior tests, release unit tests, release lint and release assembly, then writes `artifacts/releases/<version>/android/BiliCinema-<version>-android-universal.apk` and `SHA256SUMS.txt`. `-SkipChecks` skips the Node tests, unit tests and lint together and is intended only for local iteration. The version and Android version code derive from root `version.txt`.
 
 Both Windows and Linux use the same checked-in wrapper JAR and properties. The Gradle 8.9 binary distribution is pinned to the official SHA-256 `d725d707bfabd4dfdc958c624003b3c80accc03f7037b5122c4b1d0ef15cecab`; the wrapper verifies the downloaded ZIP against it before extraction. Linux CI can run `chmod +x android/gradlew` followed by the commands below and must preserve this checksum property.
 

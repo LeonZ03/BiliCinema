@@ -1,6 +1,6 @@
 [CmdletBinding()]
 param(
-    [string]$OutputDirectory = 'artifacts/BiliCinema-android',
+    [string]$OutputDirectory,
     [switch]$SkipChecks
 )
 $ErrorActionPreference = 'Stop'
@@ -48,7 +48,8 @@ if (-not (Test-Path -LiteralPath $wrapper)) { throw 'Gradle wrapper is missing.'
 $tasks = if ($SkipChecks) { @(':app:assembleRelease') } else { @(':app:testReleaseUnitTest', ':app:lintRelease', ':app:assembleRelease') }
 & $wrapper -p $androidRoot --no-daemon @tasks
 if ($LASTEXITCODE -ne 0) { throw 'Android build or verification failed.' }
-$outputPath = if ([IO.Path]::IsPathRooted($OutputDirectory)) { $OutputDirectory } else { Join-Path $repoRoot $OutputDirectory }
+$outputPath = if ($OutputDirectory) { [IO.Path]::GetFullPath($OutputDirectory, $repoRoot) }
+    else { Join-Path $repoRoot "artifacts/releases/$version/android" }
 New-Item -ItemType Directory -Path $outputPath -Force | Out-Null
 $apkName = "BiliCinema-$version-android-universal.apk"
 $apkPath = Join-Path $outputPath $apkName

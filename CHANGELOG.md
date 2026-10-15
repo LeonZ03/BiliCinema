@@ -1,5 +1,12 @@
 # 更新日志
 
+## [BiliCinema 1.5.1] - 2026-10-15
+
+- Windows 安装包与 Release 附件统一使用带版本号和平台的文件名；更新器同步支持新命名和校验清单。
+- Windows 构建入口统一为 `build-windows.cmd` / `script/build-windows.ps1`，双端安装包按版本和平台归档到 `artifacts/releases/`。
+- 移除已被当前发布流程替代的上游旧标签脚本，清理旧构建包。
+- Windows 1.5.0 及更早版本需手动升级至本版，之后可通过应用内更新安装带版本号的包。
+
 ## [BiliCinema 1.5.0] - 2026-10-15
 
 - 房间控制服务迁至 Cloudflare，电脑、安卓手机和平板连接同一云端房间；房主无需运行本地服务器或隧道。

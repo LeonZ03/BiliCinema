@@ -31,7 +31,7 @@ public sealed partial class TestPlatformOwnershipArchitectureTests
     [Fact]
     public void BiliCinemaBuildTargetsWindowsAndQualityTestsRunOnSupportedHosts()
     {
-        var buildScript = Read("script/build-bilicinema.ps1");
+        var buildScript = Read("script/build-windows.ps1");
         var qualityWorkflow = Read(".github/workflows/quality.yml");
 
         Assert.Contains("'-c', 'BiliCinema', '-r', 'win-x64'", buildScript, StringComparison.Ordinal);

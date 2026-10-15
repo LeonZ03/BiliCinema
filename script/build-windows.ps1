@@ -1,15 +1,19 @@
 [CmdletBinding()]
 param(
-    [string]$OutputDirectory = 'artifacts\BiliCinema-win-x64'
+    [string]$OutputDirectory
 )
 
 $ErrorActionPreference = 'Stop'
 Add-Type -AssemblyName System.IO.Compression.FileSystem
 $root = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
+$version = (Get-Content -LiteralPath (Join-Path $root 'version.txt') -Raw).Trim()
+if ($version -notmatch '^\d+\.\d+\.\d+$') { throw 'version.txt must contain a three-part stable version.' }
 $manifest = Get-Content -LiteralPath (Join-Path $PSScriptRoot 'assets\external-assets.json') -Raw | ConvertFrom-Json
 $downloads = Join-Path $PSScriptRoot 'downloads'
 $stage = Join-Path $root 'src\DownKyi.Desktop\EmbeddedTools'
-$publish = [IO.Path]::GetFullPath($OutputDirectory, $root)
+$publish = Join-Path $root 'artifacts\publish\win-x64'
+$packageDirectory = if ($OutputDirectory) { [IO.Path]::GetFullPath($OutputDirectory, $root) }
+    else { Join-Path $root "artifacts\releases\$version\win-x64" }
 [IO.Directory]::CreateDirectory($downloads) | Out-Null
 [IO.Directory]::CreateDirectory($stage) | Out-Null
 [IO.Directory]::CreateDirectory($publish) | Out-Null
@@ -122,4 +126,10 @@ foreach ($name in @('appsettings.json', 'appsettings.Example.json',
 }
 $extra = Get-ChildItem -LiteralPath $publish -File | Where-Object { $_.Name -ne 'BiliCinema.exe' }
 if ($extra) { throw "Unexpected loose publish files: $($extra.Name -join ', ')" }
-Write-Host "Ready: $exe"
+$packageName = "BiliCinema-$version-win-x64.exe"
+[IO.Directory]::CreateDirectory($packageDirectory) | Out-Null
+$packagePath = Join-Path $packageDirectory $packageName
+Copy-Item -LiteralPath $exe -Destination $packagePath -Force
+$digest = (Get-FileHash -LiteralPath $packagePath -Algorithm SHA256).Hash.ToLowerInvariant()
+"$digest  $packageName" | Set-Content -LiteralPath (Join-Path $packageDirectory 'SHA256SUMS.txt') -Encoding ascii
+Write-Host "Ready: $packagePath"
