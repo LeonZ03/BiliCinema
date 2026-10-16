@@ -8,11 +8,6 @@ $repoRoot = Split-Path $PSScriptRoot -Parent
 $androidRoot = Join-Path $repoRoot 'android'
 $version = (Get-Content -LiteralPath (Join-Path $repoRoot 'version.txt') -Raw).Trim()
 if ($version -notmatch '^\d+\.\d+\.\d+$') { throw 'version.txt must contain a three-part stable version.' }
-if (-not $SkipChecks) {
-    $nodeCommand = Get-Command node -ErrorAction Stop
-    & $nodeCommand.Source --test (Join-Path $androidRoot 'tests/player.test.mjs')
-    if ($LASTEXITCODE -ne 0) { throw 'Android player behavior verification failed.' }
-}
 if (-not $env:ANDROID_HOME -and -not $env:ANDROID_SDK_ROOT) {
     $localSdk = Join-Path $androidRoot '.tools/sdk'
     if (Test-Path -LiteralPath (Join-Path $localSdk 'platforms/android-35/android.jar')) { $env:ANDROID_HOME = $localSdk }

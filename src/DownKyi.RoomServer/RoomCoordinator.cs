@@ -88,8 +88,7 @@ internal sealed class Room(string code, string hostClientId)
         AnchorTimestamp = Stopwatch.GetTimestamp();
     }
 
-    public bool CanRun() => Media is not null && Host.Connection is not null && Host.Ready && !Host.Buffering &&
-        Guests.All(guest => guest.Connection is null || guest is { Ready: true, Buffering: false });
+    public bool CanRun() => Media is not null && Host.Connection is not null && Host.Ready && !Host.Buffering;
 
     public void StartIfReady()
     {
@@ -101,20 +100,23 @@ internal sealed class Room(string code, string hostClientId)
         }
     }
 
+    public void ReconcileHostReadiness()
+    {
+        if (Playing && !CanRun())
+        {
+            Settle();
+            Playing = false;
+            StartRequested = true;
+        }
+
+        StartIfReady();
+    }
+
     public void PauseForDisconnect()
     {
         Settle();
         Playing = false;
         StartRequested = false;
-    }
-
-    public void ContinueWithConnectedMembers()
-    {
-        var resume = Playing || StartRequested;
-        Settle();
-        Playing = false;
-        StartRequested = resume;
-        StartIfReady();
     }
 
     public object Snapshot() => new
@@ -205,7 +207,6 @@ internal sealed class RoomCoordinator : BackgroundService
 
             MemberSlot slot;
             string role;
-            bool preserveWaitingStart = false;
             if (message.ClientId is not null)
             {
                 if (message.ClientId == existing.Host.ClientId)
@@ -243,18 +244,16 @@ internal sealed class RoomCoordinator : BackgroundService
                 role = "guest";
             }
 
-            if (role == "guest")
-            {
-                preserveWaitingStart = existing.StartRequested || existing.Playing;
-            }
             slot.Connection?.Socket.Abort();
             slot.Connection = connection;
             slot.DisconnectedAt = null;
             slot.Ready = false;
             slot.Buffering = false;
             connection.Room = existing;
-            existing.PauseForDisconnect();
-            existing.StartRequested = preserveWaitingStart;
+            if (role == "host")
+            {
+                existing.PauseForDisconnect();
+            }
             existing.Version++;
             Welcome(connection, existing, slot, role);
             existing.Broadcast();
@@ -333,26 +332,12 @@ internal sealed class RoomCoordinator : BackgroundService
                 case "ready":
                     RequireMedia(room);
                     member!.Ready = message.Ready!.Value;
-                    if (!member.Ready && room.Playing)
-                    {
-                        room.Settle();
-                        room.Playing = false;
-                        room.StartRequested = true;
-                    }
-
-                    room.StartIfReady();
+                    if (isHost) room.ReconcileHostReadiness();
                     break;
                 case "buffering":
                     RequireMedia(room);
                     member!.Buffering = message.Buffering!.Value;
-                    if (member.Buffering && room.Playing)
-                    {
-                        room.Settle();
-                        room.Playing = false;
-                        room.StartRequested = true;
-                    }
-
-                    room.StartIfReady();
+                    if (isHost) room.ReconcileHostReadiness();
                     break;
                 default:
                     throw new RoomProtocolException("invalid_command");
@@ -414,10 +399,6 @@ internal sealed class RoomCoordinator : BackgroundService
             {
                 room.PauseForDisconnect();
             }
-            else
-            {
-                room.ContinueWithConnectedMembers();
-            }
             room.Version++;
             room.Broadcast();
         }
@@ -476,7 +457,6 @@ internal sealed class RoomCoordinator : BackgroundService
         slot.Connection?.Complete();
         slot.Connection!.Room = null;
         room.Guests.Remove(slot);
-        room.ContinueWithConnectedMembers();
         room.Version++;
         room.Broadcast();
     }

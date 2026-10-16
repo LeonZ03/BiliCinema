@@ -27,11 +27,13 @@ public sealed class BilibiliPlayerSurfaceTests
     }
 
     [Fact]
-    public async Task MiniModeAndReplacedPlayerRecoverRealControlsWithoutChangingPlayback()
+    public async Task MiniModeAndReplacedPlayerRecoverControlsWithoutEchoingDelayedPlaybackEvents()
     {
         await RunFixtureAsync("player-surface", new Dictionary<string, string>
         {
-            ["/* PLAYER_SCRIPT */"] = BilibiliWebPlaybackSession.FocusPlayerScript
+            ["/* PLAYER_SCRIPT */"] = BilibiliWebPlaybackSession.FocusPlayerScript,
+            ["/* REMOTE_PAUSE */"] = BilibiliWebPlaybackSession.BuildPausedScript(true),
+            ["/* REMOTE_PLAY */"] = BilibiliWebPlaybackSession.BuildPausedScript(false)
         });
     }
 
@@ -51,7 +53,14 @@ public sealed class BilibiliPlayerSurfaceTests
             ["/* SEEK_OVERLAY */"] = Overlay(false, 2, new(1, "房主暂停了播放", 750),
                 new(2, "房主跳转到 00:20:00", 1000)),
             ["/* FULLSCREEN_OVERLAY */"] = Overlay(true, 5, new(3, "房主开始播放", 1000),
-                new(4, "房主调整为 1.5 倍速", 1000), new(5, "房主切换了视频", 1000))
+                new(4, "房主调整为 1.5 倍速", 1000), new(5, "房主切换了视频", 1000)),
+            ["/* CHAT_TOAST */"] = RoomChatOverlayScript.Build([], new WatchRoomChatMessage
+            {
+                Nickname = "观众三",
+                Text = "<b>一起看电影</b>"
+            }, null, fullscreen: false, inRoom: true, memberCount: 5,
+                revision: 0, toastSequence: 1, toastRemainingMilliseconds: 5000,
+                hostActionNotices: [], hostActionToastSequence: 6)
         });
     }
 

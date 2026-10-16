@@ -103,7 +103,7 @@ public sealed class RoomMediaSwitchTests
         using var firstGuestSocket = new TestWebSocket();
         var firstGuest = new ClientConnection(firstGuestSocket);
         Attach(rooms, firstGuest, $$"""{"type":"join","roomCode":"{{room.Code}}"}""");
-        Assert.True(room.StartRequested);
+        Assert.False(room.StartRequested);
         Handle(rooms, firstGuest, """{"type":"ready","ready":true}""");
         Assert.True(room.Playing);
         var firstId = Assert.Single(room.Guests).ClientId;
@@ -118,7 +118,7 @@ public sealed class RoomMediaSwitchTests
         var onlineGuest = Assert.Single(room.Guests, slot => slot.Connection != null);
         Assert.NotEqual(firstId, onlineGuest.ClientId);
         Assert.Same(replacement, onlineGuest.Connection);
-        Assert.True(room.StartRequested);
+        Assert.False(room.StartRequested);
         Handle(rooms, replacement, """{"type":"ready","ready":true}""");
         Assert.True(room.Playing);
     }

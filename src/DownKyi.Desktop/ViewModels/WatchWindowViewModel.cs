@@ -60,6 +60,7 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
     private double _resumeAtSeconds;
     private bool _seekDragging;
     private bool _lastBuffering;
+    private bool _guestNeedsAlignment = true;
     private bool _startWhenReady;
     private bool _playerLoading;
     private int _recoveries;
@@ -408,7 +409,7 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
                 return;
             }
 
-            if (source.GetString() != "biliCinemaPlayer" || _roomPlayer == null)
+            if (source.GetString() != "biliCinemaPlayer" || _roomPlayer == null || _playerLoading)
             {
                 return;
             }
@@ -418,6 +419,7 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
             {
                 if (_room.IsHost)
                 {
+                    if (type.GetString() == "pause") _startWhenReady = false;
                     _ = RunControlSafelyAsync(() => SendHostControlAsync(command));
                 }
                 else
@@ -889,7 +891,8 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
         if (!ReferenceEquals(player, _player) || MediaKey(selected) == MediaKey(current))
             return false;
         var wasPlaying = _lastSnapshot?.Playing == true
-            || !await player.GetPausedAsync(cancellationToken).ConfigureAwait(true);
+            || HostPlaybackIntent(_startWhenReady,
+                !await player.GetPausedAsync(cancellationToken).ConfigureAwait(true), _lastSnapshot);
         StopPlayback();
         _roomPages = resolvedPages;
         _roomVideoTitle = resolvedTitle;
@@ -1003,6 +1006,11 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
         try
         {
             _playerLoading = true;
+            if (_room.Connected)
+            {
+                await _room.SendAsync(new { type = "ready", ready = false }, cancellationToken)
+                    .ConfigureAwait(true);
+            }
             StopPlayback();
             Status = "正在打开 B 站网页播放器…";
             var player = await BilibiliWebPlaybackSession.StartAsync(browser, page,
@@ -1018,15 +1026,7 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
             PlayerOpacity = 1;
             Status = startPaused ? "画面已就绪，可在视频内播放和调整画质。" : "B 站网页在线播放中。";
             _recoveries = 0;
-            if (_room.Connected)
-            {
-                if (_room.IsHost)
-                {
-                    await PublishHostPlaybackAsync(player, cancellationToken).ConfigureAwait(true);
-                }
-                await _room.SendAsync(new { type = "ready", ready = true }, cancellationToken)
-                    .ConfigureAwait(true);
-            }
+            await AnnouncePlayerReadyAsync(player, cancellationToken).ConfigureAwait(true);
         }
         catch (Exception error) when (IsRoutineError(error))
         {
@@ -1036,6 +1036,21 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
         {
             _playerLoading = false;
         }
+    }
+
+    private async Task AnnouncePlayerReadyAsync(BilibiliWebPlaybackSession player,
+        CancellationToken cancellationToken)
+    {
+        if (!_room.Connected) return;
+        _lastBuffering = await player.GetBufferingAsync(cancellationToken).ConfigureAwait(true);
+        await _room.SendAsync(new { type = "buffering", buffering = _lastBuffering }, cancellationToken)
+            .ConfigureAwait(true);
+        if (_room.IsHost)
+        {
+            await PublishHostPlaybackAsync(player, cancellationToken).ConfigureAwait(true);
+            _startWhenReady = false;
+        }
+        await _room.SendAsync(new { type = "ready", ready = true }, cancellationToken).ConfigureAwait(true);
     }
 
     private async Task PublishHostPlaybackAsync(BilibiliWebPlaybackSession player,
@@ -1051,9 +1066,13 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
             media = MediaForPage(page),
             positionSeconds = state.PositionSeconds,
             rate = state.Rate,
-            playing = _startWhenReady || state.Playing
+            playing = HostPlaybackIntent(_startWhenReady, state.Playing, _lastSnapshot)
         }, cancellationToken).ConfigureAwait(true);
     }
+
+    internal static bool HostPlaybackIntent(bool startWhenReady, bool playerPlaying, WatchRoomSnapshot? snapshot)
+        => startWhenReady || playerPlaying
+           || snapshot is { WaitingForReady: true, Host.Online: true };
 
     private async Task SynchronizePlaybackAsync()
     {
@@ -1528,13 +1547,6 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
                 _pendingHostMediaKey = null;
             }
 
-            if (_room.IsHost && _startWhenReady && snapshot.Host is { Ready: true, Buffering: false }
-                && snapshot.AllOnlineGuestsReady)
-            {
-                _startWhenReady = false;
-                await _room.SendAsync(new { type = "play" }, cancellationToken).ConfigureAwait(true);
-            }
-
             if (!await EnsureSnapshotPlayerAsync(media, snapshot, cancellationToken).ConfigureAwait(true))
             {
                 return;
@@ -1558,15 +1570,18 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
         {
             return snapshot.Playing ? "房间内仅你一人，正在播放" : "房间内仅你一人";
         }
-        if (snapshot.WaitingForReady) return "等待所有成员缓冲就绪";
-        if (snapshot.Guests.Any(guest => guest.Online && guest.Buffering) || snapshot.Host.Buffering)
-            return "有成员正在缓冲，等待恢复";
+        if (snapshot.WaitingForReady) return "等待房主缓冲就绪";
+        if (snapshot.Host.Buffering) return "房主正在缓冲，等待恢复";
+        if (snapshot.Guests.Any(guest => guest.Online && (!guest.Ready || guest.Buffering)))
+            return snapshot.Playing ? "房主播放中，部分访客正在准备或缓冲" : "部分访客正在准备或缓冲";
         return "成员在线，已同步";
     }
 
     private async Task<bool> EnsureSnapshotPlayerAsync(WatchRoomMedia media, WatchRoomSnapshot snapshot,
         CancellationToken cancellationToken)
     {
+        if (_playerLoading) return false;
+
         if (!SameMedia(_roomPage, media))
         {
             await ParseInputAsync(MediaUrl(media), cancellationToken, media.Cid).ConfigureAwait(true);
@@ -1614,8 +1629,12 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
         var drift = expected - actual;
         SyncStatus = $"影片时间差 {Math.Abs(drift):0.00} 秒 · 往返延迟 {_room.RoundTripMilliseconds:0} 毫秒";
         var currentRate = await player.GetSpeedAsync(cancellationToken).ConfigureAwait(true);
+        var localMember = snapshot.FindMember(_room.MemberId);
+        var localAvailable = _room.IsHost || (localMember is { Ready: true, Buffering: false } && !_lastBuffering);
+        if (!localAvailable) _guestNeedsAlignment = true;
         var correction = CreatePlaybackCorrection(_room.IsHost, snapshot, drift, currentRate,
-            forceSync || snapshot.SyncRevision > _lastAppliedSyncRevision);
+            forceSync || snapshot.SyncRevision > _lastAppliedSyncRevision || _guestNeedsAlignment,
+            localAvailable);
         if (correction.Seek)
         {
             await player.SeekAsync(expected, cancellationToken).ConfigureAwait(true);
@@ -1631,6 +1650,7 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
             await player.SetPausedAsync(correction.ShouldPause, cancellationToken).ConfigureAwait(true);
         }
         _lastAppliedSyncRevision = snapshot.SyncRevision;
+        if (localAvailable) _guestNeedsAlignment = false;
     }
 
     internal static PlaybackCorrection CreatePlaybackCorrection(
@@ -1638,10 +1658,11 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
         WatchRoomSnapshot snapshot,
         double drift,
         double currentRate,
-        bool forceSync = false)
+        bool forceSync = false,
+        bool localAvailable = true)
     {
         var shouldPause = !snapshot.Playing || snapshot.WaitingForReady
-            || snapshot.Host?.Online != true;
+            || snapshot.Host?.Online != true || !localAvailable;
         var targetRate = snapshot.Rate;
         if (!isHost && !forceSync && !shouldPause && Math.Abs(drift) is > 0.45 and <= 1.5)
         {
@@ -1651,7 +1672,7 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
         }
 
         return new PlaybackCorrection(
-            Seek: !isHost && (forceSync || Math.Abs(drift) > 1.5),
+            Seek: !isHost && localAvailable && (forceSync || Math.Abs(drift) > 1.5),
             SetRate: !isHost && (forceSync || Math.Abs(currentRate - targetRate) > 0.015),
             TargetRate: targetRate,
             ShouldPause: shouldPause);
@@ -1827,6 +1848,7 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
                     if (buffering != _lastBuffering)
                     {
                         _lastBuffering = buffering;
+                        if (buffering) _guestNeedsAlignment = true;
                         Status = buffering ? "播放器正在缓冲音视频…" : "音视频缓冲完成。";
                         if (_room.Connected)
                         {
@@ -1892,6 +1914,11 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
         var browser = _roomBrowser;
         if (page == null || _recoveries >= 2)
         {
+            if (_room.Connected)
+            {
+                await _room.SendAsync(new { type = "ready", ready = false }, cancellationToken)
+                    .ConfigureAwait(true);
+            }
             Status = "播放已结束，或网页播放器恢复失败。可重新播放。";
             StopPlayback();
             return;
@@ -1901,6 +1928,17 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
         Status = "网页播放器连接中断，正在重新打开并恢复进度…";
         try
         {
+            _playerLoading = true;
+            if (_room.Connected)
+            {
+                if (_room.IsHost)
+                {
+                    _startWhenReady = _lastSnapshot?.Playing == true
+                        || HostPlaybackIntent(_startWhenReady, false, _lastSnapshot);
+                }
+                await _room.SendAsync(new { type = "ready", ready = false }, cancellationToken)
+                    .ConfigureAwait(true);
+            }
             if (browser == null)
             {
                 throw new InvalidOperationException("网页播放器不可用。");
@@ -1909,7 +1947,12 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
             var player = await BilibiliWebPlaybackSession.StartAsync(browser, page,
                 startPaused: true, cancellationToken).ConfigureAwait(true);
             _roomPlayer = player;
-            await player.SeekAsync(_lastPosition, cancellationToken).ConfigureAwait(true);
+            if (!_room.Connected || _room.IsHost)
+            {
+                await player.SeekAsync(_lastPosition, cancellationToken).ConfigureAwait(true);
+            }
+            await AnnouncePlayerReadyAsync(player, cancellationToken).ConfigureAwait(true);
+            _playerLoading = false;
             if (_lastSnapshot != null && _room.Connected)
             {
                 await CorrectLatestPlaybackAsync(cancellationToken).ConfigureAwait(true);
@@ -1929,6 +1972,10 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
             _resumeAtSeconds = _lastPosition;
             Status = "网页播放器恢复失败；若登录已过期，请重新扫码后继续。";
         }
+        finally
+        {
+            _playerLoading = false;
+        }
     }
 
     private void StopPlayback()
@@ -1939,6 +1986,7 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
         _roomPlayer?.Dispose();
         _roomPlayer = null;
         _lastBuffering = false;
+        _guestNeedsAlignment = true;
         _lastAppliedSyncRevision = -1;
     }
 

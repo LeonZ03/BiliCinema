@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join as joinPath } from "node:path";
 import { afterEach, beforeEach, test } from "node:test";
 import { Miniflare, convertV4MiniflareOptions } from "miniflare";
+import { CloudRoom } from "../src/cloud-room.mjs";
 
 let mf;
 
@@ -128,7 +129,7 @@ test("only the room creator can create, hosts own playback controls, and capacit
   host.socket.close();
 });
 
-test("play waits for every online member to pass the ready barrier", async () => {
+test("only host readiness and buffering gate playback and explicit pause clears intent", async () => {
   const { host, welcome } = await createRoom();
   const { guest } = await join(welcome.roomCode);
   send(host, { type: "select", media: { aid: 123 } });
@@ -137,12 +138,143 @@ test("play waits for every online member to pass the ready barrier", async () =>
   const waiting = await message(host, value => value.type === "snapshot" && value.snapshot.waitingForReady);
   assert.equal(waiting.snapshot.playing, false);
   send(host, { type: "ready", ready: true });
-  await message(host, value => value.type === "snapshot" && value.snapshot.host.ready);
-  send(guest, { type: "ready", ready: true });
-  const started = await message(host, value => value.type === "snapshot" && value.snapshot.playing);
+  const started = await message(host, value => value.type === "snapshot" && value.snapshot.host.ready);
+  assert.equal(started.snapshot.playing, true);
+  assert.equal(started.snapshot.guests[0].ready, false);
   assert.equal(started.snapshot.waitingForReady, false);
+  let version = started.snapshot.version;
+  const apply = async (peer, command) => {
+    send(peer, command);
+    const result = await message(host, value => value.type === "snapshot" && value.snapshot.version > version);
+    version = result.snapshot.version;
+    return result.snapshot;
+  };
+  let snapshot = await apply(host, { type: "ready", ready: false });
+  assert.equal(snapshot.playing, false);
+  assert.equal(snapshot.waitingForReady, true);
+  send(guest, { type: "ready", ready: true });
+  snapshot = (await message(host, value => value.type === "snapshot" && value.snapshot.version > version)).snapshot;
+  version = snapshot.version;
+  assert.equal(snapshot.playing, false);
+  snapshot = await apply(host, { type: "ready", ready: true });
+  assert.equal(snapshot.playing, true);
+  snapshot = await apply(host, { type: "buffering", buffering: true });
+  assert.equal(snapshot.playing, false);
+  assert.equal(snapshot.waitingForReady, true);
+  snapshot = await apply(guest, { type: "buffering", buffering: false });
+  assert.equal(snapshot.playing, false);
+  assert.equal(snapshot.waitingForReady, true);
+  snapshot = await apply(host, { type: "buffering", buffering: false });
+  assert.equal(snapshot.playing, true);
+  snapshot = await apply(host, { type: "buffering", buffering: true });
+  const pausedPosition = snapshot.positionSeconds;
+  snapshot = await apply(host, { type: "pause" });
+  assert.equal(snapshot.waitingForReady, false);
+  snapshot = await apply(host, { type: "buffering", buffering: false });
+  assert.equal(snapshot.playing, false);
+  assert.equal(snapshot.waitingForReady, false);
+  assert.equal(snapshot.positionSeconds, pausedPosition);
   guest.socket.close();
   host.socket.close();
+});
+
+test("guest join, readiness, buffering, reconnect and departure preserve the advancing host timeline", async () => {
+  await mf.dispose();
+  mf = await createMiniflare({ testClock: true });
+  const { host, welcome } = await createRoom();
+  const rooms = await mf.getDurableObjectNamespace("ROOMS");
+  const room = rooms.get(rooms.idFromName(welcome.roomCode));
+  const baseline = Date.now();
+  const advance = seconds => room.fetch(`https://room.internal/__test/advance?time=${baseline + seconds * 1000}`);
+  await advance(0);
+  let version = welcome.snapshot.version;
+  const apply = async (peer, command) => {
+    send(peer, command);
+    const result = await message(host, value => value.type === "snapshot" && value.snapshot.version > version);
+    version = result.snapshot.version;
+    return result.snapshot;
+  };
+  const check = (snapshot, seconds) => {
+    assert.equal(snapshot.playing, true);
+    assert.equal(snapshot.waitingForReady, false);
+    assert.equal(snapshot.positionSeconds, 40 + seconds * 1.5);
+  };
+  await apply(host, { type: "select", media: { aid: 123 } });
+  await apply(host, { type: "ready", ready: true });
+  check(await apply(host, { type: "sync", media: { aid: 123 }, positionSeconds: 40, rate: 1.5, playing: true }), 0);
+  await advance(2);
+  const { guest, welcome: joined } = await join(welcome.roomCode);
+  check(joined.snapshot, 2);
+  version = joined.snapshot.version;
+  await advance(3);
+  check(await apply(guest, { type: "ready", ready: false }), 3);
+  await advance(4);
+  const buffering = await apply(guest, { type: "buffering", buffering: true });
+  check(buffering, 4);
+  assert.equal(buffering.guests[0].buffering, true);
+  await advance(5);
+  check(await apply(guest, { type: "ready", ready: true }), 5);
+  await advance(6);
+  check(await apply(guest, { type: "buffering", buffering: false }), 6);
+  await advance(7);
+  const { guest: resumed, welcome: rejoined } = await join(welcome.roomCode, joined.clientId);
+  check(rejoined.snapshot, 7);
+  assert.equal(rejoined.memberId, joined.memberId);
+  assert.equal(rejoined.clientId, joined.clientId);
+  assert.equal(rejoined.snapshot.guests[0].ready, false);
+  version = rejoined.snapshot.version;
+  guest.socket.close();
+  await advance(8);
+  resumed.socket.close();
+  const disconnected = await message(host, value => value.type === "snapshot" && value.snapshot.version > version);
+  check(disconnected.snapshot, 8);
+  assert.equal(disconnected.snapshot.guests[0].online, false);
+  await advance(9);
+  const { guest: recovered, welcome: recoveredWelcome } = await join(welcome.roomCode, joined.clientId);
+  check(recoveredWelcome.snapshot, 9);
+  version = recoveredWelcome.snapshot.version;
+  await advance(10);
+  const left = await apply(recovered, { type: "leave" });
+  check(left, 10);
+  assert.equal(left.guests.length, 0);
+  host.socket.close();
+});
+
+test("hibernation reconciliation preserves host anchors and pending intent when only guests disappeared", async () => {
+  for (const playing of [false, true]) {
+    const baseline = Date.now() - 5000;
+    let state = {
+      roomCode: "r".repeat(22), createdAt: baseline, version: 7, media: { aid: 123 },
+      positionSeconds: 40, rate: 1.5, playing, startRequested: !playing, anchorAt: baseline,
+      members: [
+        { role: "host", memberId: "host", socketId: "host-socket", online: true, ready: playing, buffering: false },
+        { role: "guest", memberId: "guest", socketId: "lost-socket", online: true, ready: true, buffering: true },
+      ],
+    };
+    const pending = [];
+    const ctx = {
+      getWebSockets: () => [{ deserializeAttachment: () => ({ memberId: "host", socketId: "host-socket" }) }],
+      blockConcurrencyWhile: action => pending.push(action()),
+      storage: {
+        sql: { exec: (sql, payload) => {
+          if (sql.startsWith("SELECT")) return { toArray: () => [{ payload: JSON.stringify(state) }] };
+          if (payload) state = JSON.parse(payload);
+        } },
+        setAlarm: async () => {},
+      },
+    };
+    new CloudRoom(ctx, {});
+    await Promise.all(pending);
+    assert.equal(state.playing, playing);
+    assert.equal(state.startRequested, !playing);
+    assert.equal(state.anchorAt, baseline);
+    assert.equal(state.positionSeconds, 40);
+    assert.equal(state.members[0].online, true);
+    assert.equal(state.members[1].online, false);
+    assert.equal(state.members[1].ready, false);
+    assert.equal(state.members[1].buffering, false);
+    assert.equal(state.version, 8);
+  }
 });
 
 test("chat is shared only as chat data and protocol fields cannot carry secrets", async () => {
@@ -187,6 +319,33 @@ test("host close ends the room and later joins are unavailable", async () => {
   assert.equal(late.response.status, 404);
 });
 
+test("host reconnect keeps its identity but requires an explicit play after disconnect", async () => {
+  const { host, welcome } = await createRoom();
+  send(host, { type: "select", media: { aid: 123 } });
+  await message(host, value => value.type === "snapshot" && value.snapshot.media?.aid === 123);
+  send(host, { type: "ready", ready: true });
+  await message(host, value => value.type === "snapshot" && value.snapshot.host.ready);
+  send(host, { type: "play" });
+  await message(host, value => value.type === "snapshot" && value.snapshot.playing);
+  const { guest } = await join(welcome.roomCode);
+  host.socket.close();
+  const offline = await message(guest, value => value.type === "snapshot" && !value.snapshot.host.online);
+  assert.equal(offline.snapshot.playing, false);
+  assert.equal(offline.snapshot.waitingForReady, false);
+  const { guest: resumedHost, welcome: resumed } = await join(welcome.roomCode, welcome.clientId);
+  assert.equal(resumed.role, "host");
+  assert.equal(resumed.memberId, welcome.memberId);
+  assert.equal(resumed.clientId, welcome.clientId);
+  send(resumedHost, { type: "ready", ready: true });
+  const ready = await message(resumedHost, value => value.type === "snapshot" && value.snapshot.host.ready);
+  assert.equal(ready.snapshot.playing, false);
+  assert.equal(ready.snapshot.waitingForReady, false);
+  send(resumedHost, { type: "play" });
+  await message(resumedHost, value => value.type === "snapshot" && value.snapshot.playing);
+  guest.socket.close();
+  resumedHost.socket.close();
+});
+
 test("room membership survives a workerd restart and resumes by clientId", async () => {
   const persistencePath = await mkdtemp(joinPath(tmpdir(), "bilicinema-miniflare-"));
   try {
@@ -218,16 +377,30 @@ test("alarm expires disconnected guests without ending the room", async () => {
   mf = await createMiniflare({ testClock: true });
   const { host, welcome } = await createRoom();
   const { guest } = await join(welcome.roomCode);
-  guest.socket.close();
-  await message(host, value => value.type === "snapshot" && value.snapshot.guests[0]?.online === false);
-
   const rooms = await mf.getDurableObjectNamespace("ROOMS");
   const room = rooms.get(rooms.idFromName(welcome.roomCode));
-  const future = Date.now() + 6 * 60 * 1000;
+  const baseline = Date.now();
+  await room.fetch(`https://room.internal/__test/advance?time=${baseline}`);
+  send(host, { type: "select", media: { aid: 123 } });
+  await message(host, value => value.type === "snapshot" && value.snapshot.media?.aid === 123);
+  send(host, { type: "ready", ready: true });
+  await message(host, value => value.type === "snapshot" && value.snapshot.host.ready);
+  send(host, { type: "play" });
+  await message(host, value => value.type === "snapshot" && value.snapshot.playing);
+  guest.socket.close();
+  const disconnected = await message(host, value => value.type === "snapshot" && value.snapshot.guests[0]?.online === false);
+  assert.equal(disconnected.snapshot.playing, true);
+  assert.equal(disconnected.snapshot.waitingForReady, false);
+
+  const future = baseline + 6 * 60 * 1000;
   const alarmResponse = await room.fetch(`https://room.internal/__test/advance?time=${future}&alarm=1`);
   assert.equal(alarmResponse.status, 200);
-  const afterExpiry = await message(host, value => value.type === "snapshot" && value.snapshot.guests.length === 0);
+  const afterExpiry = await message(host, value => value.type === "snapshot"
+    && value.snapshot.version > disconnected.snapshot.version && value.snapshot.guests.length === 0);
   assert.equal(afterExpiry.snapshot.memberCount, 1);
+  assert.equal(afterExpiry.snapshot.playing, true);
+  assert.equal(afterExpiry.snapshot.waitingForReady, false);
+  assert.equal(afterExpiry.snapshot.positionSeconds, 6 * 60);
   host.socket.close();
 });
 

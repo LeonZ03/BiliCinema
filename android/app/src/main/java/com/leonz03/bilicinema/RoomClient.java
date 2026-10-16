@@ -15,7 +15,8 @@ final class RoomClient {
     interface Listener { void message(JSONObject message); void status(String message); void credentials(String room, String client); }
     static final String ENDPOINT = "wss://bilicinema.leonz03.dpdns.org/v2/ws";
     private final Handler main = new Handler(Looper.getMainLooper());
-    private final OkHttpClient http = new OkHttpClient.Builder().connectTimeout(15, TimeUnit.SECONDS).readTimeout(0, TimeUnit.SECONDS).pingInterval(30, TimeUnit.SECONDS).build();
+    private final OkHttpClient http = new OkHttpClient.Builder().connectTimeout(30, TimeUnit.SECONDS).readTimeout(0, TimeUnit.SECONDS).pingInterval(30, TimeUnit.SECONDS).build();
+    private final HttpResourceLifecycle network = new HttpResourceLifecycle(http);
     private final Listener listener;
     private WebSocket socket;
     private String room = "", client = "";
@@ -76,9 +77,10 @@ final class RoomClient {
             });
             main.postDelayed(() -> {
                 if (stopped || current != generation || welcomedGeneration == current) return;
-                if (socket != null) socket.cancel();
+                WebSocket timedOut = socket;
+                if (timedOut != null) network.cancel(timedOut::cancel);
                 lost(current);
-            }, 20_000);
+            }, 45_000);
         } catch (RuntimeException error) { lost(current); }
     }
     private void lost(int current) {
@@ -116,5 +118,10 @@ final class RoomClient {
         stopped = true; generation++;
         if (socket != null) { socket.close(1000, "client leaving"); socket = null; }
     }
-    void destroy() { stop(false); http.dispatcher().executorService().shutdown(); http.connectionPool().evictAll(); }
+    void destroy() {
+        WebSocket previous = socket;
+        stop(false);
+        if (previous != null) network.cancel(previous::cancel);
+        network.close();
+    }
 }

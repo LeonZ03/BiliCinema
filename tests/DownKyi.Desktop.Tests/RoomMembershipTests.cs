@@ -33,28 +33,68 @@ public sealed class RoomMembershipTests
     }
 
     [Fact]
-    public void PlaybackWaitsForEveryOnlineMemberAndResumesAfterBufferingGuestLeaves()
+    public void GuestLifecycleNeverChangesHostTimelineOrPlayIntent()
+    {
+        using var fixture = new RoomFixture();
+        fixture.Send(fixture.Host, """{"type":"select","media":{"episodeId":101}}""");
+        fixture.Ready(fixture.Host);
+        fixture.Send(fixture.Host, """{"type":"play"}""");
+        var anchor = fixture.Room.AnchorTimestamp;
+        var guests = fixture.FillRoom();
+        Assert.All(fixture.Room.Guests, guest => Assert.False(guest.Ready));
+        foreach (var guest in guests)
+        {
+            fixture.Ready(guest);
+            fixture.Send(guest, """{"type":"ready","ready":false}""");
+            fixture.Send(guest, """{"type":"buffering","buffering":true}""");
+        }
+        Assert.All(fixture.Room.Guests, guest => Assert.True(guest.Buffering));
+        RoomCoordinator.Detach(guests[1]);
+        var reconnected = fixture.NewConnection();
+        fixture.Join(reconnected, fixture.Room.Guests[1].ClientId);
+        fixture.Ready(reconnected);
+        fixture.Send(reconnected, """{"type":"buffering","buffering":false}""");
+        fixture.Send(guests[2], """{"type":"leave"}""");
+        Assert.Null(guests[2].Room);
+        Assert.True(fixture.Room.Playing);
+        Assert.False(fixture.Room.StartRequested);
+        Assert.Equal(anchor, fixture.Room.AnchorTimestamp);
+
+        fixture.Send(fixture.Host, """{"type":"buffering","buffering":true}""");
+        Assert.False(fixture.Room.Playing);
+        Assert.True(fixture.Room.StartRequested);
+        fixture.Send(guests[0], """{"type":"leave"}""");
+        RoomCoordinator.Detach(guests[3]);
+        Assert.False(fixture.Room.Playing);
+        Assert.True(fixture.Room.StartRequested);
+        fixture.Send(fixture.Host, """{"type":"buffering","buffering":false}""");
+        Assert.True(fixture.Room.Playing);
+    }
+
+    [Fact]
+    public void OnlyHostReadinessAndBufferingGatePlaybackAndExplicitPauseClearsIntent()
     {
         using var fixture = new RoomFixture();
         var guests = fixture.FillRoom();
         fixture.Send(fixture.Host, """{"type":"select","media":{"episodeId":101}}""");
-        fixture.Ready(fixture.Host);
         fixture.Send(fixture.Host, """{"type":"play"}""");
-        foreach (var guest in guests.Take(3)) fixture.Ready(guest);
+        Assert.True(fixture.Room.StartRequested);
+        foreach (var guest in guests) fixture.Ready(guest);
+        Assert.False(fixture.Room.Playing);
+        fixture.Ready(fixture.Host);
+        Assert.True(fixture.Room.Playing);
+        fixture.Send(fixture.Host, """{"type":"ready","ready":false}""");
         Assert.False(fixture.Room.Playing);
         Assert.True(fixture.Room.StartRequested);
-        fixture.Ready(guests[3]);
+        fixture.Ready(fixture.Host);
         Assert.True(fixture.Room.Playing);
-
-        fixture.Send(guests[1], """{"type":"buffering","buffering":true}""");
-        fixture.Send(guests[2], """{"type":"buffering","buffering":true}""");
+        fixture.Send(fixture.Host, """{"type":"buffering","buffering":true}""");
         Assert.False(fixture.Room.Playing);
-        RoomCoordinator.Detach(guests[1]);
+        Assert.True(fixture.Room.StartRequested);
+        fixture.Send(fixture.Host, """{"type":"pause"}""");
+        fixture.Send(fixture.Host, """{"type":"buffering","buffering":false}""");
         Assert.False(fixture.Room.Playing);
-        fixture.Send(guests[2], """{"type":"leave"}""");
-        Assert.True(fixture.Room.Playing);
-        Assert.Null(guests[2].Room);
-        Assert.Equal(2, fixture.Room.Guests.Count(slot => slot.Connection != null));
+        Assert.False(fixture.Room.StartRequested);
     }
 
     [Fact]
@@ -164,6 +204,8 @@ public sealed class RoomMembershipTests
         var reconnectedHost = fixture.NewConnection();
         fixture.Join(reconnectedHost, fixture.Room.Host.ClientId);
         fixture.Ready(reconnectedHost);
+        Assert.False(fixture.Room.Playing);
+        Assert.False(fixture.Room.StartRequested);
         fixture.Send(reconnectedHost, """{"type":"play"}""");
         Assert.True(fixture.Room.Playing);
         fixture.Send(reconnectedHost, """{"type":"close"}""");

@@ -5,6 +5,44 @@ namespace DownKyi.Desktop.Tests;
 
 public sealed class RoomPlaybackCorrectionTests
 {
+    [Fact]
+    public void UnavailableGuestWaitsLocallyAndRecoveryAlignsOnceToCurrentHost()
+    {
+        var snapshot = new WatchRoomSnapshot
+        {
+            Playing = true,
+            Host = new WatchRoomMember { Online = true, Ready = true },
+            Guests = [new WatchRoomMember { Online = true, Ready = false, Buffering = true }]
+        };
+        var waiting = WatchWindowViewModel.CreatePlaybackCorrection(false, snapshot, drift: 20,
+            currentRate: 1, forceSync: true, localAvailable: false);
+        Assert.True(waiting.ShouldPause);
+        Assert.False(waiting.Seek);
+        var recovered = WatchWindowViewModel.CreatePlaybackCorrection(false, snapshot, drift: 0.2,
+            currentRate: 1, forceSync: true);
+        Assert.True(recovered.Seek);
+        Assert.False(recovered.ShouldPause);
+        var following = WatchWindowViewModel.CreatePlaybackCorrection(false, snapshot, drift: 0.2,
+            currentRate: 1);
+        Assert.False(following.Seek);
+        Assert.False(following.ShouldPause);
+        Assert.False(WatchWindowViewModel.CreatePlaybackCorrection(true, snapshot, 0, 1).ShouldPause);
+    }
+
+    [Fact]
+    public void PhysicalPauseWhileWaitingForHostBufferingPreservesHostIntent()
+    {
+        var snapshot = new WatchRoomSnapshot
+        {
+            WaitingForReady = true,
+            Host = new WatchRoomMember { Online = true, Ready = true, Buffering = true }
+        };
+        Assert.True(WatchWindowViewModel.HostPlaybackIntent(false, false, snapshot));
+        Assert.False(WatchWindowViewModel.HostPlaybackIntent(false, false,
+            snapshot with { WaitingForReady = false }));
+        Assert.True(WatchWindowViewModel.HostPlaybackIntent(true, false, null));
+    }
+
     [Theory]
     [InlineData(false)]
     [InlineData(true)]

@@ -145,10 +145,10 @@ internal sealed class BilibiliWebPlaybackSession : IDisposable
                 video.__biliCinemaBound = true;
                 for (const type of ['play', 'pause', 'seeked', 'ratechange']) {
                     video.addEventListener(type, () => {
-                        const ignored = window.__biliCinemaRemoteEvents?.[type];
-                        if (ignored && performance.now() < ignored.until
+                        const ignored = video.__biliCinemaRemoteEvents?.[type];
+                        if (ignored && (ignored.until == null || performance.now() < ignored.until)
                             && (type !== 'seeked' || Math.abs(video.currentTime - ignored.position) < 0.4)) {
-                            delete window.__biliCinemaRemoteEvents[type];
+                            delete video.__biliCinemaRemoteEvents[type];
                             return;
                         }
                         if (typeof invokeCSharpAction === 'function') {
@@ -535,8 +535,7 @@ internal sealed class BilibiliWebPlaybackSession : IDisposable
                     if (attempt % 20 == 0)
                     {
                         await session.InvokeAsync(FocusPlayerScript, cancellationToken).ConfigureAwait(true);
-                        await session.InvokeAsync($"{Video}?.play().catch(() => {{}})",
-                            cancellationToken).ConfigureAwait(true);
+                        await session.SetPausedAsync(false, cancellationToken).ConfigureAwait(true);
                     }
                 }
                 catch (InvalidOperationException) when (!session._failed)
@@ -667,7 +666,7 @@ internal sealed class BilibiliWebPlaybackSession : IDisposable
 
     public async Task<bool> GetBufferingAsync(CancellationToken cancellationToken)
     {
-        var result = await InvokeAsync($"!!({Video} && !{Video}.paused && ({Video}.seeking || {Video}.readyState < 3))",
+        var result = await InvokeAsync($"(() => {{ const v = {Video}; return !!v && (v.seeking || v.readyState < 3); }})()",
             cancellationToken).ConfigureAwait(true);
         return string.Equals(result.Trim('"'), "true", StringComparison.OrdinalIgnoreCase);
     }
@@ -685,24 +684,31 @@ internal sealed class BilibiliWebPlaybackSession : IDisposable
     {
         if (double.IsFinite(seconds) && seconds >= 0)
         {
-            await InvokeAsync($"if ({Video}) {{ window.__biliCinemaRemoteEvents ||= {{}}; window.__biliCinemaRemoteEvents.seeked = {{ until: performance.now() + 3000, position: {seconds.ToString("R", CultureInfo.InvariantCulture)} }}; {Video}.currentTime = {seconds.ToString("R", CultureInfo.InvariantCulture)}; }}",
+            await InvokeAsync($"if ({Video}) {{ {Video}.__biliCinemaRemoteEvents ||= {{}}; {Video}.__biliCinemaRemoteEvents.seeked = {{ until: performance.now() + 3000, position: {seconds.ToString("R", CultureInfo.InvariantCulture)} }}; {Video}.currentTime = {seconds.ToString("R", CultureInfo.InvariantCulture)}; }}",
                 cancellationToken).ConfigureAwait(true);
         }
     }
 
     public async Task SetPausedAsync(bool paused, CancellationToken cancellationToken)
     {
-        await InvokeAsync(paused
-                ? $"if ({Video} && !{Video}.paused) {{ window.__biliCinemaRemoteEvents ||= {{}}; window.__biliCinemaRemoteEvents.pause = {{ until: performance.now() + 800 }}; {Video}.pause(); }}"
-                : $"if ({Video}?.paused) {{ window.__biliCinemaRemoteEvents ||= {{}}; window.__biliCinemaRemoteEvents.play = {{ until: performance.now() + 800 }}; {Video}.play().catch(() => {{}}); }}", cancellationToken)
-            .ConfigureAwait(true);
+        await InvokeAsync(BuildPausedScript(paused), cancellationToken).ConfigureAwait(true);
     }
+
+    // The native WebView can deliver the resulting event after an arbitrarily
+    // delayed initialization/readiness snapshot. Consume that exact event on
+    // its video element instead of expiring the marker by wall-clock time.
+    internal static string BuildPausedScript(bool paused)
+        => $"(() => {{ const v = {Video}; if (!v) return; v.__biliCinemaRemoteEvents ||= {{}}; "
+           + (paused
+               ? "if (!v.paused) { v.__biliCinemaRemoteEvents.pause = {}; v.pause(); }"
+               : "if (v.paused) { const pending = {}; v.__biliCinemaRemoteEvents.play = pending; v.play().catch(() => { if (v.__biliCinemaRemoteEvents.play === pending) delete v.__biliCinemaRemoteEvents.play; }); }")
+           + " })()";
 
     public async Task SetSpeedAsync(double speed, CancellationToken cancellationToken)
     {
         if (double.IsFinite(speed) && speed is >= 0.25 and <= 3)
         {
-            await InvokeAsync($"if ({Video} && Math.abs({Video}.playbackRate - {speed.ToString("R", CultureInfo.InvariantCulture)}) > 0.005) {{ window.__biliCinemaRemoteEvents ||= {{}}; window.__biliCinemaRemoteEvents.ratechange = {{ until: performance.now() + 800 }}; {Video}.playbackRate = {speed.ToString("R", CultureInfo.InvariantCulture)}; }}",
+            await InvokeAsync($"if ({Video} && Math.abs({Video}.playbackRate - {speed.ToString("R", CultureInfo.InvariantCulture)}) > 0.005) {{ {Video}.__biliCinemaRemoteEvents ||= {{}}; {Video}.__biliCinemaRemoteEvents.ratechange = {{ until: performance.now() + 800 }}; {Video}.playbackRate = {speed.ToString("R", CultureInfo.InvariantCulture)}; }}",
                 cancellationToken).ConfigureAwait(true);
         }
     }

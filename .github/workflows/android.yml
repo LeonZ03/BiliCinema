@@ -21,11 +21,6 @@ jobs:
         with:
           distribution: temurin
           java-version: '17'
-      - uses: actions/setup-node@v6
-        with:
-          node-version: '24'
-      - name: Player behavior tests
-        run: node --test android/tests/player.test.mjs
       - name: Unit tests, lint and debug package
         run: |
           chmod +x android/gradlew

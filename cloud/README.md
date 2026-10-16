@@ -12,9 +12,15 @@ Connect without a room query and send `{"type":"create"}`. The welcome returns a
 saved `clientId`. Public snapshots/chat use a distinct `memberId`.
 
 One host and four guests share host-only selection/play/pause/seek/rate controls.
-A joining or buffering member pauses the ready barrier; offline guests do not
-block the other members. Host loss pauses playback and retains a two-minute
-reconnect window. Guest credentials expire after five minutes offline; an offline
+The host owns the timeline: only an unready or buffering host pauses the room,
+preserving play intent until the host can resume. An explicit host pause clears
+that intent. Guest joins, reconnects, preparation, buffering, backgrounding,
+disconnections and departures do not pause anyone else or reset the host's
+timeline. Guests report their real readiness and align to the current host
+position when they recover.
+Host loss pauses playback, clears pending play intent and retains a two-minute
+reconnect window; the host explicitly starts again after reconnecting.
+Guest credentials expire after five minutes offline; an offline
 guest may yield its seat to a new member when full. Host leave/close ends the room;
 an alarm expires abandoned rooms and the 24-hour maximum lifetime. Chat is never
 persisted or replayed. Only public media identifiers enter selection messages.
