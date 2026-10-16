@@ -1,40 +1,53 @@
 # BiliCinema Android
 
-Native Java Android client (Android 8+). The device's Android System WebView handles Bilibili login and media playback; cookies never enter the room service. The interface follows the existing cinema dark theme, uses native controls with 48dp minimum targets, and retains the player during rotation.
+原生 Java 安卓客户端，支持 Android 8 及以上手机、平板。首页、观影、房间和聊天由原生界面呈现；Media3 播放本机解析的媒体，Android System WebView 只用于独立的 B 站官方登录页。APK 不包含视频下载或离线观看功能。
 
-The room endpoint is `wss://bilicinema.leonz03.dpdns.org/v2/ws`. Creation connects without a room query; joining uses `?room=...`. JSON follows `src/DownKyi.RoomServer/README.md`: one host and four guests, host controls, per-member ready/buffering, transient chat, private reconnect credentials and a bounded reconnect window. Only public media identifiers are sent to the room. On transport or player errors the app shows an actionable message. TLS errors cancel the load; WebView renderer loss is handled with a refresh action.
+## 播放与账号
 
-Enter a BV/av identifier (including `?p=N`) or an `ep` episode link. The official Bilibili view/season API resolves the complete aid/bvid/cid/episode identity locally. Guests map the selected CID back to the exact page; unresolved or inconsistent media never becomes ready. The API refuses redirects so its manually supplied local cookie cannot follow a redirect to another origin.
+粘贴 BV/av 编号、带 p 参数的视频链接或 ep 剧集链接。BilibiliMediaResolver 在本机解析精确 aid/bvid/cid/episode 身份，使用普通视频 WBI 或番剧 v2 播放接口取得当前账号可用的媒体。MediaSession 拥有选择代次、已解析身份和原生源绑定；旧选择、旧请求和旧播放器回调不能发布到新影片。
 
-`MediaSession` owns resolution generations, expected media, actual player verification and readiness. Its states are empty, resolving, loading, verified, changed and error. The WebView bridge uses AndroidX WebKit's origin-restricted message listener and requires the main frame. It accepts only exact HTTPS `www.bilibili.com`/`m.bilibili.com` origins, verifies the page and a positive matching live player CID, and revokes readiness on navigation or a CID change. Older documents and asynchronous resolver results retain their original generation and cannot publish into a new selection. Guest-side unexpected changes restore the selected media through the resolver; the host can explicitly select the new page or restore the room movie. Devices whose WebView lacks secure web messaging receive an update prompt and do not claim readiness.
+当前原生播放支持完整授权的 H.264/AAC DASH 音视频分离流及单段 MP4。DRM、试看、多段 FLV 和仅提供不支持编码的内容会明确提示，不能据此承诺所有会员或番剧内容可播；实际能力还取决于账号、地区、设备解码器与内容权限。失败时可重新登录、重新加载或改选影片，不把未准备的影片标为就绪。
 
-The app opens Bilibili's official desktop HTML5 page and applies room snapshots without echoing programmatic controls. Bilibili's page compatibility, QR login, premium entitlement, device audio/video and background behavior must be verified on actual Android devices before a stable release. No Android device was attached during initial local compilation.
+登录打开 B 站官方网页，保留原版本的本机 CookieManager 会话。点击“我已完成登录”会在本机核验 nav 的 code=0 与 isLogin=true，再返回房间；按钮本身不代表登录成功。TLS 失败取消请求，WebView 进程退出后允许重新加载。Cookie 不进入房间协议，API 禁止重定向；媒体 CDN 只得到 Referer/User-Agent，不接收 API Cookie。错误文案使用固定分类，不展示签名媒体 URL 或原始网络异常。
 
-The WebView currently sends a fixed Windows/Chrome desktop user agent to request Bilibili's desktop HTML5 player. This changes the requested page; it does not add Windows codecs, DRM support or Bilibili app permissions to Android. Playback remains subject to the installed Android System WebView, the device's codecs/DRM capabilities, the logged-in account's membership, content rights and regional restrictions. The client has no separate native media/DRM playback backend. Some videos may require Bilibili's own app or fail in WebView, including premium or protected content. Playback of such content has not been validated on a phone. Login, membership and room transport tests do not establish actual media playback support.
+NativePlaybackAdapter 只拥有真实 Media3 播放器及资源，PlaybackIntentState 唯一拥有原生播放意图与系统抑制状态。远端快照的暂停、跳转和倍速不会重新发成房主操作。短暂缓冲与系统焦点抑制、永久焦点丢失、明确本地点按分别处理。快速换片、返回首页和销毁会取消旧请求并释放旧播放器。
 
-Room readiness also requires the official page's live `player.getCid()` or `bilibiliPlayer.getCid()` API to identify the selected part. If Bilibili changes that API or the player does not expose it on a device, the client keeps readiness false and offers refresh/restore instead of claiming to be synchronized.
+HttpResourceLifecycle 统一跟踪后台网络取消和关闭，TLS 连接池释放不在界面线程执行。操作代次同步失效，取消队列与可能阻塞的 TLS 清理队列分离；页面重建、换片、退出和登录取消沿用同一关闭规则，清理失败只记录固定安全信息。
 
-## Build and signing
+## 房间与同步
 
-Use JDK 17, Node.js 18+ (for the built-in test runner), Android SDK 35 and the checked-in Gradle wrapper:
+客户端直接连接 wss://bilicinema.leonz03.dpdns.org/v2/ws，邀请带 room 查询参数。房间最多五人，只有房主控制选片、进度、播放、暂停和倍速。云端以房主决定的时间轴为权威：
 
-```powershell
-pwsh -File script/build-android.ps1
-```
+- 访客加入、未就绪、缓冲、后台或断线只影响其本机，不暂停房主或其他访客。
+- 访客恢复可播后对齐房主的当前进度，卡顿期间的片段会被跳过。
+- 房主缓冲或未就绪时暂停全房，保留先前播放请求；主动暂停会清除该请求。
+- 房主断线暂停，沿用重连窗口，恢复连接后重新确认播放。
+- 成员就绪状态如实展示。ready=false 不能用来阻塞其他访客，也不能伪装成已就绪。
 
-The script runs the player script behavior tests, release unit tests, release lint and release assembly, then writes `artifacts/releases/<version>/android/BiliCinema-<version>-android-universal.apk` and `SHA256SUMS.txt`. `-SkipChecks` skips the Node tests, unit tests and lint together and is intended only for local iteration. The version and Android version code derive from root `version.txt`.
+MediaIdentity 根据时间锚点与倍速估计当前位置。只有首次绑定、明确同步及足够大的误差才跳转，不能在每次 READY 或每次快照中反复强制 seek。
 
-Both Windows and Linux use the same checked-in wrapper JAR and properties. The Gradle 8.9 binary distribution is pinned to the official SHA-256 `d725d707bfabd4dfdc958c624003b3c80accc03f7037b5122c4b1d0ef15cecab`; the wrapper verifies the downloaded ZIP against it before extraction. Linux CI can run `chmod +x android/gradlew` followed by the commands below and must preserve this checksum property.
+## 界面与聊天
 
-For CI set `BILICINEMA_KEYSTORE`, `BILICINEMA_KEY_ALIAS`, `BILICINEMA_KEYSTORE_PASSWORD` and `BILICINEMA_KEY_PASSWORD`. Local builds with no supplied identity create and reuse an ignored key and credential file under `android/.keys`. Back up this directory securely and import that same key into the repository's signing secrets before publishing the first APK. Replacing it prevents installed APKs from updating. Keys and passwords must never be committed, printed or included in artifacts.
+首页提供选片、创建房间、加入房间和恢复有效房间。手机竖屏以视频和下方聊天为主；横屏支持沉浸全屏，平板采用视频与房间侧栏分栏。设置、昵称、登录与软件更新放入菜单，播放和登录不再共用整页网页。
 
-Updates use GitHub's latest stable `bilicinema-v<version>` release, the exact Android asset name above and `SHA256SUMS.txt`. The app verifies SHA-256, package name, newer version and the installed signing certificate before invoking Android's system installer. `UpdateJournal` synchronously commits both owned output names, hash, version and phase in private SharedPreferences before the first write. Interrupted downloads are removed, interrupted commits and installer launches are revalidated on startup, and completed installations clean up their recorded package. Android requires the user to grant installation permission and confirm installation. Failed downloads leave the installed app intact.
+全屏点击视频右侧空白区域可呼出聊天抽屉，避开系统边缘、进度和播放控件；点击外部一次关闭聊天与键盘，该点击不穿透触发播放操作。打开聊天不自动弹键盘，未发送草稿保留。返回键依次收键盘、关抽屉、退全屏。保留聊天图标和关闭按钮作为可访问入口。
 
-## Checks
+收到其他成员消息时，右侧短暂显示昵称与消息内容，和 Windows 一致；点击预览可打开聊天。预览采用有界队列，不自动展开抽屉，聊天已打开时不重复提示。只支持文字，发送成功才清空输入。房间昵称独立于 B 站账号，不自动公开账号身份。聊天只保存在当前房间内存，离开房间后清除。
 
-```powershell
-android/gradlew.bat -p android :app:testReleaseUnitTest :app:lintRelease :app:assembleRelease
-node --test android/tests/player.test.mjs
-```
+## 构建、签名与更新
 
-Unit regressions cover exact cross-platform media identity, CID/page verification, media session transitions, old generations, readiness withdrawal, buffering, update ownership and crash recovery, numeric version order and exact checksum matching. The player script regressions cover live CID changes, document generations and remote control echo suppression. Device acceptance should cover phone/tablet portrait and landscape, large text, actual login and premium content, five devices, host control, buffering, Wi-Fi loss/recovery, room closure, and updating an installed signed APK.
+使用 JDK 17、Android SDK 35 和仓库内 Gradle wrapper：
+
+    pwsh -File script/build-android.ps1
+
+脚本运行 release unit tests、lint 和签名组装，输出 artifacts/releases/<version>/android/BiliCinema-<version>-android-universal.apk 及 SHA256SUMS.txt。版本与 versionCode 派生自根目录 version.txt。SkipChecks 仅用于本地迭代，不能作为正式发布验收。
+
+CI 使用 BILICINEMA_KEYSTORE、BILICINEMA_KEY_ALIAS、BILICINEMA_KEYSTORE_PASSWORD、BILICINEMA_KEY_PASSWORD。保留首次发布身份；本机 android/.keys 不得重新生成、提交或打印。不同签名不能覆盖现有安装。
+
+更新检查本仓库最新稳定 bilicinema-v<version> Release，校验 SHA-256、包名、更高版本及原签名后交给系统安装器；安装权限与系统确认仍需用户操作。UpdateJournal 在首次写入前持久记录更新文件与阶段，处理中断恢复和已完成安装清理；失败保留原安装与用户设置。
+
+## 验证
+
+    android/gradlew.bat -p android :app:testReleaseUnitTest :app:lintRelease :app:assembleRelease
+
+纯逻辑回归覆盖精确媒体身份、原生源绑定、过期回调、取消、WBI、音视频解析、Cookie 边界、播放抑制恢复、聊天手势、预览与更新所有权。模拟器界面和播放检查不能替代具体手机、平板的编解码、会员内容和官方登录验收。发布前应覆盖 Windows/Android 互通、五人、加载后起播、缓冲恢复、分 P/换集、后台恢复、旋转、大字号、软键盘、断网重连与原签名覆盖更新。

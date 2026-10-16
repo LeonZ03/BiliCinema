@@ -1,4 +1,4 @@
 <resources>
-    <string name="room_label">房间 %1$s</string>
-    <string name="chat_append">%1$s\n%2$s</string>
+    <string name="playback_time">%1$s / %2$s</string>
+    <string name="chat_pane_title">房间聊天</string>
 </resources>

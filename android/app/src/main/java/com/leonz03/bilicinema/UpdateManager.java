@@ -37,6 +37,7 @@ final class UpdateManager {
     private final Handler main = new Handler(Looper.getMainLooper());
     private final ExecutorService work = Executors.newSingleThreadExecutor();
     private final OkHttpClient http = new OkHttpClient.Builder().connectTimeout(15, TimeUnit.SECONDS).readTimeout(45, TimeUnit.SECONDS).callTimeout(5, TimeUnit.MINUTES).build();
+    private final HttpResourceLifecycle network = new HttpResourceLifecycle(http);
     private final UpdateJournal journal;
     private volatile boolean closed;
     private boolean busy;
@@ -192,5 +193,5 @@ final class UpdateManager {
         }
     }
     private void showStatus(String text) { main.post(() -> { if (!closed) status.accept(text); }); }
-    void close() { closed = true; http.dispatcher().cancelAll(); work.shutdownNow(); }
+    void close() { closed = true; work.shutdownNow(); network.close(); }
 }
