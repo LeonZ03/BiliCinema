@@ -62,14 +62,19 @@ Only the host may send the authority commands:
 {"type":"close"}
 ```
 
-The `media` object accepts positive `episodeId`, `aid`, or `cid` integers and/or a 12-character `bvid` starting with `BV`. At least one identifier is required. No URL, title, account name, or extra fields are accepted. Seek position is 0–86400 seconds; rate is 0.25–3. A selection resets every member's ready state and pauses the room. The host may send `play` before all peers are ready: `waitingForReady` then becomes true, and the room starts when the host and every online guest are ready and not buffering. A member reporting buffering pauses the room; playback resumes when all online members are ready and clear buffering. A joining guest also pauses playback until ready. Guest disconnection or departure removes that guest from the readiness barrier, allowing remaining ready members to continue. Host disconnection pauses the room and clears the pending start; the host explicitly starts again after reconnecting.
+The `media` object accepts positive `episodeId`, `aid`, or `cid` integers and/or a 12-character `bvid` starting with `BV`. At least one identifier is required. No URL, title, account name, or extra fields are accepted. Seek position is 0–86400 seconds; rate is 0.25–3. A selection resets every member's ready state and pauses the room.
+
+The host owns the room timeline. A host `play` request starts as soon as the host is online, ready and not buffering, regardless of guest readiness. While play is requested or active, an unready or buffering host pauses the room and makes `waitingForReady` true while preserving play intent. Once the host is ready and buffering clears, playback resumes automatically. An explicit host `pause` clears that intent, so a later readiness or buffering update cannot restart playback.
+
+Guest readiness and buffering remain truthful member state, but never gate the room timeline. Guest joins, reconnects, loading, buffering, backgrounding, disconnections and departures do not pause the host or other guests, reset the playback anchor or clear a pending host start. Each guest waits locally when unavailable and aligns to the current host position when it can play again; ordinary snapshots use drift correction rather than forcing a seek every time. Host disconnection still pauses the room and clears the pending start. The host retains the two-minute reconnect window and must explicitly start again after reconnecting.
 
 `sync` atomically publishes the host player's actual position, rate and play
 intent after page initialization/history restoration, or on a manual sync. Its
 media identity must equal the selected identity; stale-media samples and guest
 commands are rejected. The snapshot's `syncRevision` increases for each accepted
 sample so guests align immediately even when drift is below the normal tolerance.
-Readiness and buffering still gate playback; synchronization cannot bypass them.
+The host's readiness and buffering still gate playback; synchronization cannot
+bypass them. Guest preparation does not delay an accepted host sample.
 
 All members may send:
 

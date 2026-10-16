@@ -119,8 +119,7 @@ function settle(state, timestamp = now()) {
 }
 
 function canRun(state) {
-  return Boolean(state.media) && state.members.some((m) => m.role === "host" && m.online && m.ready && !m.buffering)
-    && state.members.filter((m) => m.role === "guest" && m.online).every((m) => m.ready && !m.buffering);
+  return Boolean(state.media) && state.members.some((m) => m.role === "host" && m.online && m.ready && !m.buffering);
 }
 
 function startIfReady(state, timestamp = now()) {
@@ -144,17 +143,17 @@ export class CloudRoom {
       const missing = state.members.filter((member) => member.online && !connected.has(member.socketId));
       if (!missing.length) return;
       const timestamp = now();
-      const shouldResume = state.playing || state.startRequested;
-      settle(state, timestamp);
       for (const member of missing) {
         member.online = false;
         member.ready = false;
         member.buffering = false;
         member.disconnectedAt = timestamp;
       }
-      state.playing = false;
-      state.startRequested = !missing.some((member) => member.role === "host") && shouldResume;
-      startIfReady(state, timestamp);
+      if (missing.some((member) => member.role === "host")) {
+        settle(state, timestamp);
+        state.playing = false;
+        state.startRequested = false;
+      }
       state.version++;
       await this.save(state);
     });
@@ -251,21 +250,16 @@ export class CloudRoom {
             const previous = this.ctx.getWebSockets().find((candidate) => candidate.deserializeAttachment()?.memberId === member.memberId);
             previous?.close(4001, "replaced");
           }
-          const shouldResume = state.playing || state.startRequested;
           member.socketId = attachment.socketId;
           member.online = true;
           member.disconnectedAt = null;
           member.ready = false;
           member.buffering = false;
-          settle(state);
-          state.playing = false;
-          state.startRequested = member.role === "guest" && shouldResume;
-        }
-        if (member.role === "guest" && state.members.length > 1) {
-          const shouldResume = state.playing || state.startRequested;
-          settle(state);
-          state.playing = false;
-          state.startRequested = shouldResume;
+          if (member.role === "host") {
+            settle(state);
+            state.playing = false;
+            state.startRequested = false;
+          }
         }
         socket.serializeAttachment({ ...attachment, clientId: member.clientId, memberId: member.memberId, createAllowed: false });
         state.version++;
@@ -327,15 +321,19 @@ export class CloudRoom {
           if (!state.media) throw protocolError("media_required");
           if (typeof command.ready !== "boolean") throw protocolError("invalid_boolean");
           member.ready = command.ready;
-          if (!member.ready && state.playing) { settle(state); state.playing = false; state.startRequested = true; }
-          startIfReady(state);
+          if (isHost) {
+            if (!member.ready && state.playing) { settle(state); state.playing = false; state.startRequested = true; }
+            startIfReady(state);
+          }
           break;
         case "buffering":
           if (!state.media) throw protocolError("media_required");
           if (typeof command.buffering !== "boolean") throw protocolError("invalid_boolean");
           member.buffering = command.buffering;
-          if (member.buffering && state.playing) { settle(state); state.playing = false; state.startRequested = true; }
-          else startIfReady(state);
+          if (isHost) {
+            if (member.buffering && state.playing) { settle(state); state.playing = false; state.startRequested = true; }
+            else startIfReady(state);
+          }
           break;
         case "ping":
           socket.send(json({ type: "pong", clientTimeUnixMs: positiveInteger(command.clientTimeUnixMs), serverTimeUnixMs: now(), ...(command.nonce ? { nonce: stringField(command.nonce, 1, 64) } : {}) }));
@@ -349,15 +347,10 @@ export class CloudRoom {
         }
         case "leave":
           if (isHost) { await this.endRoom(state); return; }
-          const shouldResume = state.playing || state.startRequested;
           state.members = state.members.filter((candidate) => candidate !== member);
           socket.send(json({ type: "left" }));
           socket.serializeAttachment({ ...attachment, memberId: null, clientId: null });
           socket.close(1000, "left");
-          settle(state);
-          state.playing = false;
-          state.startRequested = shouldResume;
-          startIfReady(state);
           break;
         case "close":
           if (!isHost) throw protocolError("host_only");
@@ -389,10 +382,7 @@ export class CloudRoom {
     member.disconnectedAt = now();
     member.ready = false;
     member.buffering = false;
-    const shouldResume = state.playing || state.startRequested;
-    settle(state);
-    if (member.role === "host") { state.playing = false; state.startRequested = false; }
-    else { state.playing = false; state.startRequested = shouldResume; startIfReady(state); }
+    if (member.role === "host") { settle(state); state.playing = false; state.startRequested = false; }
     state.version++;
     await this.save(state);
     this.broadcast(state);

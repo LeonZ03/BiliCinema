@@ -80,6 +80,45 @@
         window.__biliCinemaFocusPlayer();
         window.__biliCinemaCheckPlayerLayout(true);
         await waitFor(ready, 'Manual repair did not revalidate controls');
+        const messages = [];
+        window.invokeCSharpAction = value => messages.push(JSON.parse(value));
+        const active = document.querySelector('video');
+        let paused = false;
+        Object.defineProperty(active, 'paused', { get: () => paused });
+        active.pause = () => {
+            paused = true;
+            setTimeout(() => active.dispatchEvent(new Event('pause')), 1000);
+        };
+        active.play = () => {
+            paused = false;
+            setTimeout(() => active.dispatchEvent(new Event('play')), 1000);
+            return Promise.resolve();
+        };
+        const remotePause = () => { /* REMOTE_PAUSE */ };
+        const remotePlay = () => { /* REMOTE_PLAY */ };
+        // WebView event delivery can outlive the former 800ms suppression window.
+        remotePause();
+        await new Promise(resolve => setTimeout(resolve, 1100));
+        check(messages.length === 0, 'Room pause echoed as a host command after readiness');
+        active.dispatchEvent(new Event('pause'));
+        check(messages.length === 1 && messages.pop().type === 'pause', 'User pause was swallowed');
+        remotePlay();
+        await new Promise(resolve => setTimeout(resolve, 1100));
+        check(messages.length === 0, 'Room resume echoed as a host command');
+        active.dispatchEvent(new Event('play'));
+        check(messages.length === 1 && messages.pop().type === 'play', 'User play was swallowed');
+        paused = true;
+        active.play = () => Promise.reject(Error('autoplay blocked'));
+        remotePlay();
+        await Promise.resolve();
+        active.dispatchEvent(new Event('play'));
+        check(messages.length === 1 && messages.pop().type === 'play', 'Failed play left a stale suppression marker');
+        paused = false;
+        remotePause();
+        attach(0);
+        window.__biliCinemaFocusPlayer();
+        document.querySelector('video').dispatchEvent(new Event('pause'));
+        check(messages.length === 1 && messages[0].type === 'pause', 'Old player marker swallowed replacement input');
         document.querySelector('#result').textContent = 'PASS';
     })().catch(error => { document.querySelector('#result').textContent = `FAIL: ${error.message}`; });
 </script>
