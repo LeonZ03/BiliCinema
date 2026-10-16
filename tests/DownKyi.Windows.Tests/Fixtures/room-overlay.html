@@ -37,6 +37,35 @@
     const renderSeek = () => { /* SEEK_OVERLAY */ };
     const renderFullscreen = () => { /* FULLSCREEN_OVERLAY */ };
     const renderChat = () => { /* CHAT_TOAST */ };
+    const observeRenderTimers = render => {
+        const nativeSetTimeout = window.setTimeout;
+        const nativeClearTimeout = window.clearTimeout;
+        const scheduled = [];
+        const cleared = [];
+        window.setTimeout = function(callback, milliseconds, ...args) {
+            let complete;
+            const timer = { milliseconds, fired: false,
+                completed: new Promise(resolve => { complete = resolve; }) };
+            const observed = typeof callback === 'function' ? function(...callbackArgs) {
+                timer.fired = true;
+                try { return callback.apply(this, callbackArgs); }
+                finally { complete(); }
+            } : callback;
+            timer.handle = nativeSetTimeout.call(window, observed, milliseconds, ...args);
+            scheduled.push(timer);
+            return timer.handle;
+        };
+        window.clearTimeout = function(handle) {
+            cleared.push(handle);
+            return nativeClearTimeout.call(window, handle);
+        };
+        try { render(); }
+        finally {
+            window.setTimeout = nativeSetTimeout;
+            window.clearTimeout = nativeClearTimeout;
+        }
+        return { scheduled, cleared };
+    };
     (async () => {
         /* PLAYER_SCRIPT */
         await waitFor(() => window.__biliCinemaLayoutReady, 'Player did not mount');
@@ -59,18 +88,29 @@
         check(rows()[1].getBoundingClientRect().top > rows()[0].getBoundingClientRect().bottom,
             'Consecutive notices did not stack on separate lines');
         await waitFor(() => rows().length === 0, 'Fullscreen notices did not expire');
-        renderChat();
+        // Observe the real expiry owner rather than assuming a delayed test
+        // continuation ran before five seconds elapsed under CI scheduling.
+        const firstChat = observeRenderTimers(renderChat);
+        const expiry = firstChat.scheduled.find(timer => timer.handle === window.__biliCinemaChatUi.toastTimer);
+        check(expiry?.milliseconds === 5000, 'Chat toast did not request a five-second expiry');
         const toast = document.querySelector('.bc-toast');
         await waitFor(() => visible(toast), 'Chat toast did not appear');
         check(visible(toast) && toast.querySelector('.bc-toast-name').textContent === '观众三'
             && toast.querySelector('.bc-toast-body').textContent === '<b>一起看电影</b>'
             && !toast.querySelector('b'), 'Chat toast lost nickname, content or plain-text rendering');
         check(toast.getBoundingClientRect().left > innerWidth / 2, 'Chat toast was not on the right');
-        await delay(1100);
-        renderChat();
-        await delay(3600);
-        check(visible(toast), 'Chat toast expired before five seconds');
-        await waitFor(() => !toast.classList.contains('bc-visible'), 'Chat toast did not expire after five seconds');
+        let hiddenBeforeExpiry = false;
+        const toastVisibility = new MutationObserver(() => {
+            if (!toast.classList.contains('bc-visible') && !expiry.fired) hiddenBeforeExpiry = true;
+        });
+        toastVisibility.observe(toast, { attributes: true, attributeFilter: ['class'] });
+        const repeatedChat = observeRenderTimers(renderChat);
+        check(window.__biliCinemaChatUi.toastTimer === expiry.handle
+            && !repeatedChat.cleared.includes(expiry.handle), 'Same-message redraw replaced or cancelled chat expiry');
+        await expiry.completed;
+        toastVisibility.disconnect();
+        check(!hiddenBeforeExpiry, 'Chat toast disappeared before its expiry callback');
+        check(expiry.fired && !toast.classList.contains('bc-visible'), 'Chat toast remained visible after its expiry callback');
         // A new video replaces the player subtree; the first event on its new overlay must also render.
         const oldPlayer = window.__biliCinemaPlayerRoot;
         const next = oldPlayer.cloneNode(true);
