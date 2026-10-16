@@ -1,0 +1,112 @@
+BiliCinema Android 界面与播放改造方案 · 设计定稿 v1
+
+状态：保留原始设计图与改造前调查记录；图片是视觉参考，不是当前 APK 的运行截图。
+原始出图范围：分析、只读验证和出图。以下最终交互约定记录用户讨论后的要求，不作为实现或真机验收完成的证明。
+
+最终交互约定（优先于原图文字和下附生成提示词）
+- 房主决定云端时间轴。访客加入、尚未就绪、缓冲、进入后台或掉线，只影响该访客本机；房主和其余访客继续播放。访客恢复后对齐房主当前进度，不追赶过期快照，也不在每次快照到达时强制 seek。
+- 房主未就绪或缓冲时全房暂停，并保留此前的播放请求；房主恢复后自动继续。房主主动暂停会清除播放请求。房主掉线沿用两分钟重连窗口，重连后由房主明确重新发起播放。
+- 每个成员仍须如实报告 ready/buffering，保持精确影片与分 P 身份校验、房主权限和五人上限；访客不阻塞不意味着伪报就绪或绕过校验。
+- 新消息在画面右侧短暂显示“昵称＋消息内容”，以纯文本展示 5 秒，与 Windows 保持一致；聊天面板继续用于查看完整消息和发送文字。原图仅靠聊天入口未读点提示新消息的方案已被这项讨论结果替代。
+- phone-core-v1.png 中“等待小雨准备”“已就绪 2 / 3”等全房等待访客的文字已被替代：访客准备中仅显示其本机状态；只有房主未就绪、缓冲或离线才显示相应的全房等待状态。保留图片用于布局和视觉参考，不照搬过期门禁行为。
+
+交付图
+- phone-core-v1.png：首页、房间播放、原始等待成员示意（交互以以上最终约定为准）。
+- adaptive-layouts-v1.png：手机横屏、平板横屏。
+- recovery-states-v1.png：官方登录区域、播放加载失败、需要点击启用播放。
+
+一、原始调查基线（改造前；不是当前实现说明）
+1. 启动时直接加载 https://www.bilibili.com，使用 Windows/Chrome 桌面 UA 和宽视口。首页、登录和视频共用同一 WebView。
+   入口：android/app/src/main/java/com/leonz03/bilicinema/MainActivity.java:61,74,117,199,244。
+2. 播放页通过 player.js:43 的 fitPlayer 隐藏播放器祖先的其他子元素。只有找到支持的 video/root 才生效；首页和登录页没有这条隔离保证。页面加载过程和 DOM 变化也可能露出整页。
+3. player.js:88 将所有 video.play() Promise 拒绝合并为 blocked，没有保留原因分类。MainActivity.java:135,267 将 blocked 和真实播放器错误一并处理为 MediaSession.ERROR；MediaSession.java:30,38 之后忽略播放器观测，不能仅靠后续 ready 事件恢复。
+4. cloud/src/cloud-room.mjs:121,326,333 按所有在线成员 ready 且非 buffering 控制播放；访客不就绪或缓冲会暂停整房。与上面的本地错误处理组合，会形成“播放→访客失败→撤销就绪→整房暂停”的故障放大链。
+5. 影片身份依赖 window.player / bilibiliPlayer 的 getCid。接口缺失时脚本发送 CID=0，即使存在可播的 video；MediaSession 会等待或撤销身份验证。不能以删除身份校验或伪报 ready 修复。
+6. MediaSession 对 readyState、waiting、stalled 逐事件门控；MainActivity 在就绪恢复时强制套用快照；player.js 使用固定 1800ms 抑制控制回声。短时缓冲、seek 与异步事件的交错存在抖动和意图误识别风险，需真机时序确认。
+7. MainActivity.java:84 的 buildUi 将登录、更新、选片、房间、控制和聊天堆叠在一个长滚动页面；横屏只改变播放器高度，缺少场景和设备布局。
+
+二、原始调查的证据边界
+- 已运行现有 5 项 Node 播放脚本测试，全部通过。
+- 只读 VM 模拟确认两点：play 拒绝只剩 blocked 分类；无预期页面 API 时 video 就绪仍报告 CID=0。
+- 未连接可调试安卓设备；以上不等于在用户手机上重现了确切触发。需要脱敏事件与房间快照确认是 autoplay/编解码/鉴权、身份识别、缓冲抖动中的哪一个。
+- 应采集事件类型、错误名、readyState、相对时间、角色、短期 generation、snapshot.version/syncRevision/playing/waitingForReady 及各成员 ready/buffering。不得记录 Cookie、token、账号标识、完整敏感 URL 或私有重连凭据。
+- 代码/协议测试通过不能替代真机播放、登录和旋转验收。
+
+三、设计方向与最终同步约定
+A. 播放：
+优先验证本机按账号权限解析媒体并交给 Android Media3 的可行性，先普通稿件，再分 P 和会员/番剧兼容性。原生播放直接提供准备、缓冲、实际播放、错误和用户意图的状态。WebView 放在独立登录流程或明确标识的兼容流程中，不再作为首页。
+Media3 不自动获得 B 站权限或 DRM license；实际格式、设备解码和内容授权仍须验证。不能承诺所有内容可播，也不向云端上传凭据或媒体地址。
+如果仍保留网页播放，未确认播放器区域时应显示原生加载/错误层，而不是裸露完整网页；对 DOM 和身份接口的依赖仍然存在，必须明确兼容范围。
+
+B. 同步：
+沿用并修复既有 MediaSession 状态所有权，不增加并行状态中心。区分加载、可播、缓冲、需要本地点按、需要登录、可重试网络错误、不可播放、重连。
+保留房主播放意图与真实缓冲门禁；不要把一次本地播放失败永久封死，也不要把程序施加的暂停误写为房主主动暂停。
+本地准备/手势确认后才发布真实就绪；保持精确影片与分 P 校验。
+采用房主控制、访客追随：只有房主真实未就绪或缓冲才暂停全房，并保留播放意图；主动暂停清除意图。访客准备、缓冲、后台或掉线不阻塞其他成员，恢复后追随房主当前进度。访客本机失败给出重试或检查登录等操作，聊天仍可使用。
+沿用现有 v2 成员状态字段表达真实 readiness，不增加“暂不参与同步”协议标记，也不以伪报 ready 避开门禁。云端与 Windows、Android 必须对房主门禁和访客恢复使用一致语义。
+控制事件应依据当前媒体 generation、快照版本和操作来源避免回声；短时缓冲合并需要用真机数据决定，不能通过忽略真实缓冲制造假就绪。
+
+C. UI：
+首页只保留选片、建房、加入、恢复有效房间与账号入口；不默认打开 B 站主页。
+房间以视频为主，影片、同步状态、成员和聊天围绕观看；设置与软件更新收入账号/更多菜单。
+手机竖屏是 16:9 视频加下方聊天；横屏全屏，控制浮层按需显示、聊天按需打开；平板是视频与房间侧栏并排。16:9 视频保持比例，宽屏允许黑边，不拉伸内容。
+账号/官方登录单独成页。“我已完成登录”触发本地实际登录态核验，不能仅凭按钮点击标记登录成功。图中二维码仅作示例，不可使用。
+只提供文字聊天，图中头像为虚构示例；不得默认把 B 站账号身份公开给房间。成员显示名是房间昵称，需按协议验证。
+房主才能换片、播放、seek 和调倍速；访客显示跟随房主，保留音量、清晰度、全屏和本地点按等本机能力。
+房主等待、访客本机加载失败、需要点击启用都保留房间上下文，聊天可用。状态原因显示在相关位置，给出对应操作，不堆叠全局错误文字；访客本机问题不显示为全房等待。
+右侧新消息提示同时显示房间昵称和消息内容，纯文本展示 5 秒；控制浮层或聊天面板的重复刷新不重新延长同一消息的提示时间。
+
+四、视觉规则
+品牌：沿用已有青色品牌方向，只使用 BiliCinema 文字标识，不生成替代 Logo。
+颜色：背景 #101216；表面 #1A1E25；分隔 #303642；主文字 #F4F6FA；次文字 #A8B2C3；强调青 #64C9DF；就绪 #66D6AF；等待 #F4C478。
+控件：4/8dp 间距体系，手机 20dp 侧边距，卡片约 16dp 圆角，安卓触控目标至少 48dp。状态同时用图标和文字，不只靠颜色。
+字体：系统中文无衬线；适应系统字号和屏幕阅读器；确保安全区、键盘和固定输入栏不会遮挡内容。
+风格：炭黑影院感、克制青色、清楚层级；无大面积炫光、复杂渐变或网页导航。
+本地设计库未匹配到 watch-party 专用模板，未采用检索结果中的影院订票/营销漏斗；本稿使用与场景相符的通用 Android 交互原则。
+图像只是视觉定稿，尺寸、对比度、TalkBack、大字号和横竖屏还须在实际实现中验收。
+
+五、落地前验收
+同一版本下验证 Windows 房主+Android 访客、Android 房主+Android 访客以及混合五人：
+进入房间、房主就绪后起播、加载期间发起播放、真实缓冲与恢复、分 P/换集、seek、后台/前台、断网重连、登录过期、会员与不支持内容、旋转和聊天键盘。
+播放失败应可恢复；房主意图不丢失；不允许旧影片事件污染新影片或伪报就绪。
+确认访客加入、未就绪、缓冲、后台或掉线均不暂停房主与其他访客，恢复后对齐当前房主；确认房主缓冲时全房暂停、恢复续播，主动暂停后不会自动重启。确认右侧消息提示包含昵称和内容，5 秒后消失。
+
+资料
+https://developer.android.com/media/media3/exoplayer/listening-to-player-events
+https://developer.android.com/media/media3/exoplayer/supported-formats
+https://developer.android.com/media/media3/exoplayer/drm
+
+生成方式：内置 image_gen 工具。下附原始生成提示词，仅用于保存图片生成依据；其中“等待访客”“未读点”等旧交互已被文首最终约定替代。首轮参考图在最终图中修正了聊天附件按钮和成员状态。
+
+
+======== 核心界面首轮 ========
+Use case: ui-mockup. Create a production-level final UI design board for BiliCinema, a Chinese Android private watch-together app for up to five people. This is a DESIGN PROPOSAL, not proof of a running build. High fidelity flat Android UI, precise typography and spacing, elegant restrained cinematic aesthetic, realistic and implementable. All screen text is Simplified Chinese, crisp legible Noto Sans SC / system sans. Preserve the existing brand name exactly as "BiliCinema"; use the text wordmark only, no invented logo. Design language: charcoal background #101216, elevated surfaces #1A1E25, subtle dividers #303642, primary text #F4F6FA, readable secondary text #A8B2C3, signature cyan #64C9DF with nearly-black button text, green #66D6AF for ready plus textual labels, amber #F4C478 for waiting. No purple gradient, no gold theme, no excessive glowing effects or glass. Eight-dp spacing, 20dp phone side gutters, restrained 16dp card corners, minimum 48dp touch targets. Consistent simple outline icons. Android status and navigation safe areas, no iPhone notch or hardware. No browser chrome, webpage navigation, Bilibili homepage, ads, recommendations, creator profile, counts, or unrelated tools. No download-video feature. The video itself is a tasteful cinematic original still of mountains and a lake at dusk, not a recognizable film or copyrighted poster. All rooms, nicknames and media titles are fictional examples. Room invitation is a link or 22-character token, NEVER a six-digit code. Network, login and playback states must have actionable and truthful messages. Show native playback controls. No claims of universal premium/DRM support. Overall clean, spacious, focused on watching with friends, not a developer form or a marketing landing page.
+Asset: 01 — mobile core flow, one coherent 3072x2048 landscape design board on a very light cool gray presentation canvas, three equal front-on portrait Android screens in thin flat dark frames, with large readable short captions below. Generous gutters, all screens fully visible. Top-left board title "BiliCinema" and subtitle "Android · 核心界面定稿"; top-right small "DESIGN PROPOSAL". Three screens left to right:
+1. Caption "01 首页". Status bar 9:41. Header text wordmark BiliCinema left and an account avatar button right. Spacious short heading "今晚，一起看。" then muted "和朋友开一间放映室". A well-composed native input card titled "想看什么？", labelled "影片链接", input hint "粘贴 B 站链接或 BV 号", trailing small "粘贴". Primary full-width cyan button with plus icon "创建房间". Below a secondary outline full-width button "加入房间" with link icon. A smaller lower card "继续上次的房间" with two little avatars, fictional title "周五放映室", secondary "仅在房间仍有效时恢复", chevron. Footer near bottom "最多 5 人 · 各自账号播放". No embedded website on the home screen. Deliberate negative space, not a control grid.
+2. Caption "02 房间 · 正在播放". Header back arrow, "周五放映室", small "3 / 5 人", more icon. Directly below an edge-to-edge 16:9 original mountain-lake video still; an unobtrusive overlay progress bar and native pause/fullscreen icons, timestamp "12:48 / 46:20". Below player title "山海之间 · 第 2 集" with small trailing "换片"; next line a green check and "已同步 · 房主正在播放". A compact single row of 3 avatar chips: "阿辰 · 房主", "小雨 · 已就绪", "木木 · 已就绪", plus an outline invite button. A tab row "聊天" selected / "成员" with understated cyan indicator. Show 3 concise chat messages in a spacious native list, authors and subtle timestamps, e.g. "小雨  21:06" / "这段风景太美了", "木木  21:07" / "一起看果然更有感觉", and right-aligned small cyan-tinted host reply "下一集也一起？". A compact bottom composer above Android navigation inset with field "聊两句…" and a cyan send-arrow button. Settings, login and APK-update controls are absent from this watching flow.
+3. Caption "03 房间 · 等待成员". Same header, same mountain still dimmed only inside video. Centered subtle spinner, big text "等待小雨准备", smaller "影片加载中，准备后自动开始"; no misleading playing indicator. Below title same episode, amber strip "已就绪 2 / 3 · 正在等 1 人". Distinct member rows with avatars: "阿辰" + "房主 · 已就绪", "木木" + "已就绪", "小雨" + amber "正在缓冲". A subdued contextual card explaining "播放请求已保留" and "小雨准备好后自动开始，无需反复点播放". Bottom shows the chat composer and a muted waiting-state playback button. Do not show a force-play bypass in this loading screen.
+Use exact Chinese copy where specified, avoid dense microtext. The three screens should feel like a polished, consistent real Android application. No perspective mockups, no hands, no glossy device renders.
+
+======== 核心界面定稿修正 ========
+Edit the provided BiliCinema Android design board. Preserve the canvas, three-screen layout, typography, color system, all texts, mountain image, phone proportions and all other UI details exactly. Make only these functional corrections: remove the small picture/attachment icon to the left of the chat input on BOTH the middle and right phones; this app supports text chat only. Let the chat input use the freed width. On the RIGHT waiting-state phone, keep chat available while somebody buffers: make its send-arrow button the SAME enabled cyan appearance as the middle phone, instead of disabled gray. Do not add any new features or change any other text or layout.
+
+======== 横屏与平板 ========
+Use case: ui-mockup. Create a production-level final UI design board for BiliCinema, a Chinese Android private watch-together app for up to five people. This is a DESIGN PROPOSAL, not proof of a running build. High fidelity flat Android UI, precise typography and spacing, elegant restrained cinematic aesthetic, realistic and implementable. All screen text is Simplified Chinese, crisp legible Noto Sans SC / system sans. Preserve the existing brand name exactly as "BiliCinema"; use the text wordmark only, no invented logo. Design language: charcoal background #101216, elevated surfaces #1A1E25, subtle dividers #303642, primary text #F4F6FA, readable secondary text #A8B2C3, signature cyan #64C9DF with nearly-black button text, green #66D6AF for ready plus textual labels, amber #F4C478 for waiting. No purple gradient, no gold theme, no excessive glowing effects or glass. Eight-dp spacing, 20dp phone side gutters, restrained 16dp card corners, minimum 48dp touch targets. Consistent simple outline icons. Android status and navigation safe areas, no iPhone notch or hardware. No browser chrome, webpage navigation, Bilibili homepage, ads, recommendations, creator profile, counts, or unrelated tools. No download-video feature. The video itself is a tasteful cinematic original still of mountains and a lake at dusk, not a recognizable film or copyrighted poster. All rooms, nicknames and media titles are fictional examples. Room invitation is a link or 22-character token, NEVER a six-digit code. Network, login and playback states must have actionable and truthful messages. Show native playback controls. No claims of universal premium/DRM support. Overall clean, spacious, focused on watching with friends, not a developer form or a marketing landing page.
+Input image is a STYLE REFERENCE only: match its charcoal/cyan UI, exact Chinese typography character, same mountain-lake still and the same fictional room, but produce this new complementary board, not a duplicate.
+Asset: 02 — adaptive layouts, one 3200x2400 high-resolution light cool gray board with title "BiliCinema" and subtitle "Android · 横屏与平板定稿", small top-right "DESIGN PROPOSAL". TWO large front-on devices stacked vertically with ample separation, fully visible. Thin flat dark frames, no perspective, no real environment.
+TOP: a wide 20:9 Android phone landscape screen, around 2100 px wide. Caption "04 手机横屏 · 沉浸观看". The video fills the available screen with correct aspect ratio and discreet pillarboxing if needed. Same mountain-lake dusk original still. Translucent controls only at top and bottom: upper-left back arrow and title "山海之间 · 第 2 集"; upper-right a subtle green check pill "已同步 · 3 人", a chat bubble button with small unread dot and a more menu. Bottom progress slider, large accessible native pause button at left, time "12:48 / 46:20", "1×", volume, exit-fullscreen. Do not draw a permanent chat panel over the video on the phone. No huge lists or form fields in landscape. Annotate beneath in short readable Chinese: "轻触显示控制 · 聊天按需打开". Controls are demonstrated visible; they hide during uninterrupted playback.
+BOTTOM: a landscape 16:10 Android tablet approximately 2200 px wide, caption "05 平板横屏 · 观看与聊天并排". Native top app bar: wordmark BiliCinema left, room name "周五放映室" center-left, link icon + "邀请" at right and more menu. A deliberate two-pane layout, left around 70% width showing the complete 16:9 mountain video in a black player surface with native overlay controls and progress, below it the episode title plus green "所有成员已就绪" and understated host-only "换片". Keep generous black breathing room, video never cropped just to fill. Right pane about 30% width is a dark native room sidebar with title "房间 · 3 / 5", a compact three-avatar status row, tabs "聊天" selected and "成员", then spacious plain text chat messages by 阿辰、小雨、木木 with original example dialogue. At the sidebar bottom, a single text composer "聊两句…" and enabled cyan send-arrow. No attachment/photo upload button. Sidebar remains distinct from video with a subtle divider, sufficient width for readable Chinese messages, at least 48dp touch controls. No heavy borders or rounded-card nesting everywhere. Tablet should look intentionally adapted, not a stretched portrait phone. Room status and video controls stay visible without scrolling the whole tablet.
+Use precise alignment and large legible captions. Both screens share the same media, time, room and visual language as the reference.
+
+======== 登录与异常状态首轮 ========
+Use case: ui-mockup. Create a production-level final UI design board for BiliCinema, a Chinese Android private watch-together app for up to five people. This is a DESIGN PROPOSAL, not proof of a running build. High fidelity flat Android UI, precise typography and spacing, elegant restrained cinematic aesthetic, realistic and implementable. All screen text is Simplified Chinese, crisp legible Noto Sans SC / system sans. Preserve the existing brand name exactly as "BiliCinema"; use the text wordmark only, no invented logo. Design language: charcoal background #101216, elevated surfaces #1A1E25, subtle dividers #303642, primary text #F4F6FA, readable secondary text #A8B2C3, signature cyan #64C9DF with nearly-black button text, green #66D6AF for ready plus textual labels, amber #F4C478 for waiting. No purple gradient, no gold theme, no excessive glowing effects or glass. Eight-dp spacing, 20dp phone side gutters, restrained 16dp card corners, minimum 48dp touch targets. Consistent simple outline icons. Android status and navigation safe areas, no iPhone notch or hardware. No browser chrome, webpage navigation, Bilibili homepage, ads, recommendations, creator profile, counts, or unrelated tools. No download-video feature. The video itself is a tasteful cinematic original still of mountains and a lake at dusk, not a recognizable film or copyrighted poster. All rooms, nicknames and media titles are fictional examples. Room invitation is a link or 22-character token, NEVER a six-digit code. Network, login and playback states must have actionable and truthful messages. Show native playback controls. No claims of universal premium/DRM support. Overall clean, spacious, focused on watching with friends, not a developer form or a marketing landing page.
+Input image is a STYLE REFERENCE only; match the same charcoal/cyan product, Chinese font and fictional room. Create a new complementary board.
+Asset: 03 — account and recovery states, a 3072x2048 light cool-gray design board with title "BiliCinema" and subtitle "Android · 登录与异常状态定稿", top-right small "DESIGN PROPOSAL". Three equal portrait Android screens, fully visible, front-on thin dark frames, generous gutters, all important text legible.
+LEFT, caption "06 账号与登录". Native header back arrow and title "登录 B 站". Main native section has concise heading "登录后使用自己的播放权限", secondary "登录信息仅保存在这台设备". A clean bordered CONTAINED official-login area with a small visible label "B 站官方登录", a simple generic square QR-code placeholder (explicitly a demonstration, not a real usable QR) centered, text below "使用哔哩哔哩 App 扫码", and text link "使用其他登录方式". A calm footer information row "登录完成后返回房间". Native bottom cyan button "我已完成登录" and text button "稍后登录". This is a contained official authentication presentation; do not invent BiliCinema password inputs, authentication success, membership rights, or a promise to unlock protected content. No full Bilibili website navigation, recommendations or browser bar.
+MIDDLE, caption "07 加载失败 · 可重试". Header same room "周五放映室" and "3 / 5 人". Player region with dim mountain-lake thumbnail, centered outline network warning icon, heading "影片暂时加载失败", smaller "请检查网络后重试", prominent small cyan button "重试播放". Below episode "山海之间 · 第 2 集". A native amber notice row "你尚未进入同步 · 聊天仍可使用". A short dark explanation card "房间连接正常" / "播放未准备好，请重试或检查登录状态". A secondary text control "检查登录状态". A little "聊天" section with two text messages and an active bottom text composer and cyan send button. Error must preserve room/media context and not look like an application crash. No fake technical error codes, no stack traces, no force-ready button.
+RIGHT, caption "08 需要点击启用播放". Header same room and online count. Same video still dimmed in video region. Centered large circular cyan play triangle in a 72dp touch area, main label "点击启用本机播放", subtext "启用后将跟随房主同步". Below episode title and a clear amber pill "需要你操作". A state card "房间已连接" / "这台设备需要一次点击才能开始播放". Prominent cyan button "启用播放并同步". Muted short note "播放准备完成后才会进入同步". Below retain a compact member row, chat tab and text chat composer. Chat remains usable and enabled. This demonstrates a recoverable local action; NEVER label this condition as an unrecoverable playback failure or login failure.
+Use exact Chinese copy where practical, no extra paragraphs of tiny text, no attachment buttons, no webpage visible outside the explicit login area. These are implementable design states for a future client, not screenshots of the existing APK.
+
+======== 登录与异常状态定稿修正 ========
+Edit only the provided BiliCinema Android login/error-state board. Preserve all three screens, all text, the title, canvas, style, layout, colors, video thumbnails and controls except the following small corrections. This application offers TEXT chat only: remove the photo/attachment square button to the LEFT of the bottom chat composer on BOTH the middle and right phones. Expand each text input leftward into that freed area while retaining the cyan send button. On the RIGHT phone, in its three-avatar member row, the first avatar is the local host needing activation: change the name below that mountain avatar from 阿辰 to 阿辰（你）, and change its small status text from 房主 to 待启用 in amber (keep the crown showing host role). Leave 小雨 and 木木 as 已就绪. This makes the member state consistent with the primary '点击启用本机播放' action. Do not add controls or any additional text; do not change any other part of the board.
+
