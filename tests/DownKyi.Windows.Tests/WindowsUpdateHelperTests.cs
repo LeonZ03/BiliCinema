@@ -120,6 +120,21 @@ public sealed class WindowsUpdateHelperTests(ITestOutputHelper output)
         Assert.False(File.Exists(fixture.State.TargetPath));
     }
 
+    [Fact]
+    public async Task PreviousLaunchReadinessAcceptsCompleteRecordWhilePublisherStillOwnsWriteHandle()
+    {
+        var fixture = await UpdateFixture.CreateAsync();
+        await using var fixtureLifetime = fixture.ConfigureAwait(true);
+        using var publisher = new FileStream(fixture.PreviousLaunchMarker, FileMode.CreateNew,
+            FileAccess.Write, FileShare.Read);
+        var record = System.Text.Encoding.UTF8.GetBytes(
+            Environment.ProcessId.ToString(CultureInfo.InvariantCulture) + "\n");
+        await publisher.WriteAsync(record, TestContext.Current.CancellationToken);
+        await publisher.FlushAsync(TestContext.Current.CancellationToken);
+
+        Assert.Equal(Environment.ProcessId, await fixture.WaitForPreviousLaunchAsync(waitForExit: false));
+    }
+
     private async Task<string> ReadPhaseWithDiagnosticsAsync(UpdateFixture fixture)
     {
         var phase = await fixture.ReadPhaseAsync().ConfigureAwait(false);
@@ -205,8 +220,14 @@ public sealed class WindowsUpdateHelperTests(ITestOutputHelper output)
             {
                 if (File.Exists(PreviousLaunchMarker))
                 {
-                    var marker = await File.ReadAllTextAsync(PreviousLaunchMarker, timeout.Token).ConfigureAwait(false);
-                    int.TryParse(marker.Trim(), NumberStyles.None, CultureInfo.InvariantCulture, out pid);
+                    // File creation precedes the publisher's final flush and close.
+                    // Share its write handle and require a complete PID record.
+                    using var stream = new FileStream(PreviousLaunchMarker, FileMode.Open,
+                        FileAccess.Read, FileShare.ReadWrite, 4096, FileOptions.Asynchronous);
+                    using var reader = new StreamReader(stream);
+                    var marker = await reader.ReadToEndAsync(timeout.Token).ConfigureAwait(false);
+                    if (marker.EndsWith('\n'))
+                        int.TryParse(marker.Trim(), NumberStyles.None, CultureInfo.InvariantCulture, out pid);
                 }
 
                 if (pid > 0) break;
