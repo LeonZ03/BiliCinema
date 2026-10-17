@@ -95,36 +95,63 @@ public final class MainActivity extends Activity implements RoomClient.Listener,
     }
 
     @Override public void createRoom(String input) {
-        if (inRoom() || connecting) { status("请先退出当前房间"); return; }
+        if (inRoom() || connectionUnresolved()) { status("请先完成或取消当前连接"); return; }
         pendingInput = input == null ? "" : input.trim();
         pendingRoomMedia = pendingInput.isEmpty() ? media.selected() : null;
         hostRestorePending = pendingRoomMedia != null;
         pendingRoomPosition = position; pendingRoomRate = currentRate; pendingRoomPlaying = soloIntent;
-        connect("", "");
+        connect("", "", RoomConnectionProgress.Operation.CREATE);
     }
     @Override public void joinRoom(String input) {
-        if (inRoom() || connecting) { status("请先退出当前房间"); return; }
+        if (inRoom() || connectionUnresolved()) { status("请先完成或取消当前连接"); return; }
         String value = input == null ? "" : input.trim();
         try {
             if (value.contains("?")) value = Uri.parse(value).getQueryParameter("room");
             if (value == null || !value.matches("[A-Za-z0-9_-]{22}")) { status("请输入完整邀请链接或22位房间码"); return; }
             pendingInput = ""; pendingRoomMedia = null;
             String credential = value.equals(preferences().getString("room", "")) ? preferences().getString("client", "") : "";
-            connect(value, credential);
+            connect(value, credential, RoomConnectionProgress.Operation.JOIN);
         } catch (RuntimeException error) { status("邀请链接无法识别，请重新复制"); }
     }
     @Override public void restoreRoom() {
-        if (inRoom() || connecting) { status("当前已在房间中"); return; }
+        if (inRoom() || connectionUnresolved()) { status("请先完成或取消当前连接"); return; }
         String code = preferences().getString("room", ""), credential = preferences().getString("client", "");
         if (code.isEmpty() || credential.isEmpty()) { status("没有可恢复的房间"); return; }
         pendingInput = ""; pendingRoomMedia = null;
-        connect(code, credential);
+        connect(code, credential, RoomConnectionProgress.Operation.RESTORE);
     }
-    private void connect(String code, String credential) {
+    private boolean connectionUnresolved() {
+        return rooms != null && rooms.progress() != null && rooms.progress().needsResolution();
+    }
+    private void connect(String code, String credential, RoomConnectionProgress.Operation operation) {
         roomEpoch++; version = -1; syncRevision = -1; connected = false; connecting = true;
         publishedReady = null; publishedBuffering = null;
         notice = "正在连接云端房间…";
-        rooms.connect(code, credential);
+        rooms.connect(code, credential, operation);
+        render();
+    }
+    @Override public void connectionProgress(RoomConnectionProgress progress) {
+        if (destroyed) return;
+        if (progress.outcome == RoomConnectionProgress.Outcome.RUNNING) { connected = false; connecting = true; }
+        else if (progress.outcome == RoomConnectionProgress.Outcome.FAILED) {
+            connected = false; connecting = false; notice = progress.failure;
+        }
+        render();
+    }
+    @Override public void retryRoomConnection() {
+        if (rooms.progress() == null || rooms.progress().outcome != RoomConnectionProgress.Outcome.FAILED) return;
+        roomEpoch++; version = -1; syncRevision = -1; connected = false; connecting = true;
+        publishedReady = null; publishedBuffering = null; notice = "正在重试房间连接…";
+        rooms.retry(); render();
+    }
+    @Override public void cancelRoomConnection() {
+        boolean established = !memberId.isEmpty();
+        rooms.stop(true);
+        if (established) { clearRoom("已取消连接，可在本机继续观看", false); return; }
+        roomEpoch++; room = ""; role = ""; memberId = ""; connected = false; connecting = false;
+        snapshot = null; version = -1; syncRevision = -1;
+        pendingInput = ""; pendingRoomMedia = null; hostRestorePending = false;
+        publishedReady = null; publishedBuffering = null; notice = "已取消房间连接";
         render();
     }
 
@@ -489,6 +516,9 @@ public final class MainActivity extends Activity implements RoomClient.Listener,
             notice = "本机登录已验证";
             if (media.selected() != null) retryPlayback();
             render();
+        } else if (request == LOGIN_REQUEST && result == LoginActivity.RESULT_LOGGED_OUT) {
+            loggedIn = false; preferences().edit().putBoolean("loggedIn", false).apply();
+            notice = "未登录B站"; render();
         }
     }
     private String apiCookie() {
@@ -529,6 +559,7 @@ public final class MainActivity extends Activity implements RoomClient.Listener,
         CinemaUi.Model model = new CinemaUi.Model();
         model.inRoom = inRoom(); model.isHost = host(); model.connected = !inRoom() || connected;
         model.canControl = canControl(); model.busy = busy || connecting;
+        model.roomConnection = rooms.progress();
         model.canRestore = !preferences().getString("room", "").isEmpty();
         model.loggedIn = loggedIn; model.accountLabel = loggedIn ? "本机登录已保存" : "B站登录";
         model.nickname = preferences().getString("nickname", "影友");
@@ -598,7 +629,7 @@ public final class MainActivity extends Activity implements RoomClient.Listener,
     }
     @Override public void onBackPressed() {
         if (ui.handleBack()) return;
-        if (connecting && !inRoom()) { rooms.stop(false); clearRoom("已取消连接", false); return; }
+        if (connectionUnresolved()) { cancelRoomConnection(); return; }
         if (inRoom()) new AlertDialog.Builder(this).setMessage("退出当前房间？").setNegativeButton("继续观看", null)
             .setPositiveButton("退出房间", (dialog, which) -> leaveRoom()).show();
         else if (media.selected() != null) clearMedia();
