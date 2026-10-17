@@ -10,9 +10,10 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
-        <activity android:name=".LoginActivity" android:windowSoftInputMode="adjustResize" android:exported="false" />
+        <activity android:name=".LoginActivity" android:configChanges="orientation|screenSize|keyboardHidden" android:windowSoftInputMode="adjustResize" android:exported="false" />
         
         <provider android:name=".UpdateFileProvider" android:authorities="${applicationId}.fileprovider" android:exported="false" android:grantUriPermissions="true" />
+        <provider android:name=".LoginQrImageProvider" android:authorities="${applicationId}.loginqr" android:exported="false" android:grantUriPermissions="true" />
     </application>
 </manifest>
 

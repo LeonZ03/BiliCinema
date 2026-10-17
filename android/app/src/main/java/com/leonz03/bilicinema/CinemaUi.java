@@ -43,6 +43,8 @@ public final class CinemaUi {
         void createRoom(String media);
         void joinRoom(String invitation);
         void restoreRoom();
+        void retryRoomConnection();
+        void cancelRoomConnection();
         void selectMedia(String media);
         void togglePlayback();
         void seek(double seconds);
@@ -80,6 +82,7 @@ public final class CinemaUi {
         public PlaybackState playbackState = PlaybackState.EMPTY;
         public double rate = 1;
         public List<Member> members = new ArrayList<>();
+        RoomConnectionProgress roomConnection;
     }
 
     private static final int BG = Color.rgb(16, 18, 22), SURFACE = Color.rgb(26, 30, 37);
@@ -103,6 +106,22 @@ public final class CinemaUi {
     private TextView headerTitle, headerSubtitle, mediaTitle, syncStatus, detail, notice, playerState;
     private TextView homeStatus, time, rateButton, fullscreenTitle;
     private LinearLayout preview;
+    private FrameLayout connectionLayer;
+    private TextView connectionTitle, connectionSteps, connectionElapsed, connectionFailure;
+    private Button connectionRetry, connectionCancel;
+    private RoomConnectionProgress displayedConnection;
+    private boolean connectionDismissed;
+    private final Runnable connectionTick = new Runnable() {
+        @Override public void run() {
+            if (disposed || displayedConnection == null || connectionDismissed) return;
+            updateConnectionElapsed();
+            if (displayedConnection.outcome == RoomConnectionProgress.Outcome.RUNNING) main.postDelayed(this, 1000);
+        }
+    };
+    private final Runnable dismissConnection = () -> {
+        connectionDismissed = true;
+        setConnectionVisible(false);
+    };
     private Button create, open, restore, change, overlayAction, send;
     private ImageButton play, fullscreenButton;
     private SeekBar progress;
@@ -201,6 +220,13 @@ public final class CinemaUi {
     }
 
     public boolean handleBack() {
+        if (connectionLayer != null && connectionLayer.getVisibility() == View.VISIBLE) {
+            if (keyboardVisible) { hideKeyboard(); return true; }
+            if (displayedConnection != null && displayedConnection.outcome == RoomConnectionProgress.Outcome.COMPLETE) {
+                dismissConnection.run(); return true;
+            }
+            return false;
+        }
         switch (CinemaInteraction.back(keyboardVisible, drawerOpen, fullscreen)) {
             case KEYBOARD: hideKeyboard(); return true;
             case DRAWER: closeDrawer(); return true;
@@ -248,6 +274,7 @@ public final class CinemaUi {
         metadataScroll = null; chatTabs = null;
         create = null; open = null; restore = null;
         if (!builtWatching) buildHome(); else buildRoom();
+        buildConnectionProgress();
         applyInsets(); root.requestApplyInsets();
         attachPlayer();
         screen.requestFocus();
@@ -419,8 +446,10 @@ public final class CinemaUi {
     }
 
     private void bind() {
+        bindConnectionProgress();
         if (!builtWatching) {
-            create.setEnabled(!model.busy); open.setEnabled(!model.busy);
+            boolean available = !model.busy && (model.roomConnection == null || !model.roomConnection.needsResolution());
+            create.setEnabled(available); open.setEnabled(available);
             restoreSection.setVisibility(model.canRestore ? View.VISIBLE : View.GONE); restore.setEnabled(!model.busy);
             homeStatus.setText(nonempty(model.notice, nonempty(model.status, "视频在本机播放，房间同步控制与聊天")));
             return;
@@ -450,6 +479,78 @@ public final class CinemaUi {
         updateMembers(); updatePosition(position, duration);
         if (!model.playing || !lastRenderedPlaying) showControls(true);
         lastRenderedPlaying = model.playing;
+    }
+
+    private void buildConnectionProgress() {
+        connectionLayer = new FrameLayout(context);
+        View scrim = new View(context); scrim.setBackgroundColor(0xAA101216); scrim.setClickable(true);
+        connectionLayer.addView(scrim, new FrameLayout.LayoutParams(-1, -1));
+        BoundedScrollView scroll = new BoundedScrollView(context); scroll.limitHeight = dp(520);
+        LinearLayout card = card();
+        connectionTitle = label("", 22, TEXT, true); card.addView(connectionTitle);
+        connectionSteps = label("", 16, TEXT, false); spacing(connectionSteps, 16, 8); card.addView(connectionSteps);
+        connectionSteps.setAccessibilityLiveRegion(View.ACCESSIBILITY_LIVE_REGION_POLITE);
+        connectionElapsed = label("", 14, MUTED, false); card.addView(connectionElapsed);
+        connectionFailure = label("", 15, AMBER, false); spacing(connectionFailure, 12, 8); card.addView(connectionFailure);
+        connectionRetry = button("重试当前连接", true, actions::retryRoomConnection); spacing(connectionRetry, 8, 8); card.addView(connectionRetry);
+        connectionCancel = button("取消连接", false, () -> {
+            if (displayedConnection != null && displayedConnection.outcome == RoomConnectionProgress.Outcome.COMPLETE) dismissConnection.run();
+            else actions.cancelRoomConnection();
+        }); card.addView(connectionCancel);
+        scroll.addView(card, new ScrollView.LayoutParams(-1, -2));
+        FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(dp(Math.min(480,
+                context.getResources().getConfiguration().screenWidthDp - 40)), -2, Gravity.CENTER);
+        params.topMargin = dp(16); params.bottomMargin = dp(16); connectionLayer.addView(scroll, params);
+        root.addView(connectionLayer, new FrameLayout.LayoutParams(-1, -1));
+        connectionLayer.setVisibility(View.GONE);
+    }
+
+    private void bindConnectionProgress() {
+        RoomConnectionProgress current = model.roomConnection;
+        if (current == null || current.outcome == RoomConnectionProgress.Outcome.CANCELLED) {
+            displayedConnection = current; setConnectionVisible(false);
+            main.removeCallbacks(connectionTick); main.removeCallbacks(dismissConnection); return;
+        }
+        boolean newAttempt = displayedConnection == null || displayedConnection.startedMillis != current.startedMillis;
+        boolean completed = current.outcome == RoomConnectionProgress.Outcome.COMPLETE
+                && (newAttempt || displayedConnection.outcome != RoomConnectionProgress.Outcome.COMPLETE);
+        if (newAttempt) { connectionDismissed = false; main.removeCallbacks(dismissConnection); hideKeyboard(); clearPreviews(); }
+        displayedConnection = current;
+        setConnectionVisible(!connectionDismissed);
+        String title = current.operation == RoomConnectionProgress.Operation.CREATE ? "创建房间"
+                : current.operation == RoomConnectionProgress.Operation.JOIN ? "加入房间"
+                : current.operation == RoomConnectionProgress.Operation.RESTORE ? "恢复房间" : "重新连接房间";
+        connectionTitle.setText(title);
+        String request = current.joiningRequest ? "发送加入请求" : "发送创建请求";
+        String[] stages = {"连接云端", request, "等待房间信息", "同步房间状态", "房间连接完成"};
+        StringBuilder steps = new StringBuilder();
+        for (int index = 0; index < stages.length; index++) {
+            if (index > 0) steps.append('\n');
+            steps.append(index < current.stage.ordinal() || current.outcome == RoomConnectionProgress.Outcome.COMPLETE ? "已完成 · "
+                    : index == current.stage.ordinal() ? (current.outcome == RoomConnectionProgress.Outcome.FAILED ? "中断 · " : "当前 · ") : "待进行 · ").append(stages[index]);
+        }
+        connectionSteps.setText(steps.toString());
+        connectionFailure.setText(current.failure);
+        connectionFailure.setVisibility(current.outcome == RoomConnectionProgress.Outcome.FAILED ? View.VISIBLE : View.GONE);
+        connectionRetry.setVisibility(current.outcome == RoomConnectionProgress.Outcome.FAILED ? View.VISIBLE : View.GONE);
+        connectionCancel.setText(current.outcome == RoomConnectionProgress.Outcome.COMPLETE ? "进入房间" : "取消连接");
+        updateConnectionElapsed(); main.removeCallbacks(connectionTick);
+        if (current.outcome == RoomConnectionProgress.Outcome.RUNNING) main.postDelayed(connectionTick, 1000);
+        if (completed) main.postDelayed(dismissConnection, 1800);
+    }
+
+    private void updateConnectionElapsed() {
+        if (displayedConnection == null || connectionElapsed == null) return;
+        long seconds = displayedConnection.elapsedMillis(System.nanoTime() / 1_000_000) / 1000;
+        connectionElapsed.setText(String.format(Locale.getDefault(), "已用时 %d 秒%s", seconds,
+                displayedConnection.outcome == RoomConnectionProgress.Outcome.RUNNING ? " · 请稍候" : ""));
+    }
+
+    private void setConnectionVisible(boolean visible) {
+        if (connectionLayer == null) return;
+        connectionLayer.setVisibility(visible ? View.VISIBLE : View.GONE);
+        screen.setImportantForAccessibility(visible || drawerOpen ? View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS : View.IMPORTANT_FOR_ACCESSIBILITY_AUTO);
+        if (drawerLayer != null) drawerLayer.setImportantForAccessibility(visible ? View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS : View.IMPORTANT_FOR_ACCESSIBILITY_AUTO);
     }
 
     private void updateMembers() {
