@@ -8,6 +8,8 @@ The Android client uses AndroidX WebKit 1.12.1 and its AndroidX dependencies
 OkHttp 4.12.0 ([source and license](https://github.com/square/okhttp/tree/parent-4.12.0)),
 and their Okio/Kotlin runtime dependencies. These libraries use the Apache License
 2.0; their upstream distributions contain the corresponding copyright notices.
+QR images are generated locally with ZXing core 3.5.4
+([source and Apache 2.0 license](https://github.com/zxing/zxing/tree/zxing-3.5.4)).
 The checked-in Gradle wrapper is a build tool from the
 [Gradle project](https://github.com/gradle/gradle/tree/v8.9.0), also under Apache 2.0.
 Android System WebView and Bilibili's player are supplied by the device/platform
