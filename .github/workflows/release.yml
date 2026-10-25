@@ -110,6 +110,8 @@ jobs:
       - uses: actions/setup-node@v6
         with:
           node-version: '24'
+      - name: Verify Android official player bridge
+        run: node --test android/tests/official-player.test.cjs
       - name: Restore Android release signing identity
         shell: pwsh
         env:

@@ -44,6 +44,8 @@ jobs:
           node-version: '24'
       - run: npm ci
         working-directory: cloud
+      - name: Restore verified published Android assets
+        run: node cloud/scripts/restore-android-assets.mjs
       - name: Deploy verified rooms to the existing domain
         working-directory: cloud
         env:

@@ -154,6 +154,52 @@ public sealed class AriaClientSecurityTests
     }
 
     [Fact]
+    public async Task LoopbackRpcBypassesConfiguredRejectingProxy()
+    {
+        var proxy = new LoopbackHttpServer(_ =>
+            new LoopbackResponse(HttpStatusCode.BadGateway, "proxy rejected request"));
+        await using var proxyLifetime = proxy.ConfigureAwait(false);
+        var rpc = new LoopbackHttpServer(_ =>
+            new LoopbackResponse(
+                HttpStatusCode.OK,
+                "{\"id\":\"test\",\"jsonrpc\":\"2.0\",\"result\":{\"version\":\"1.37.0\",\"enabledFeatures\":[]}}"));
+        await using var rpcLifetime = rpc.ConfigureAwait(false);
+        using var transport = new AriaRpcHttpTransport(new WebProxy(proxy.Url));
+        var client = new AriaClient(
+            "http://127.0.0.1",
+            rpc.Url.Port,
+            "test-token",
+            transport.RequestAsync);
+
+        var response = await client.GetAriaVersionAsync(
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal("1.37.0", response.Result?.Version);
+        Assert.Equal(1, rpc.RequestCount);
+        Assert.Equal(0, proxy.RequestCount);
+    }
+
+    [Fact]
+    public async Task RemoteHttpsRpcUsesConfiguredProxy()
+    {
+        var proxy = new LoopbackHttpServer(_ =>
+            new LoopbackResponse(HttpStatusCode.BadGateway, "proxy rejected CONNECT"));
+        await using var proxyLifetime = proxy.ConfigureAwait(false);
+        using var transport = new AriaRpcHttpTransport(new WebProxy(proxy.Url));
+        var client = new AriaClient(
+            "https://aria.example",
+            6800,
+            "test-token",
+            transport.RequestAsync);
+
+        await Assert.ThrowsAsync<HttpRequestException>(() =>
+                client.GetAriaVersionAsync(TestContext.Current.CancellationToken))
+            .ConfigureAwait(true);
+
+        Assert.Contains(proxy.Requests, request => request.Method == "CONNECT");
+    }
+
+    [Fact]
     public void DownloadProxyUsesHttpsScopeWithoutEmbeddingCredentials()
     {
         var option = new AriaSendOption

@@ -4,6 +4,13 @@ import org.junit.Test;
 import static org.junit.Assert.*;
 
 public class CinemaInteractionTest {
+    @Test public void fullscreenUsesVideoShapeAndExitAlwaysReturnsPortrait() {
+        assertTrue(CinemaInteraction.fullscreenLandscape(true, 16f / 9f));
+        assertFalse(CinemaInteraction.fullscreenLandscape(true, 9f / 16f));
+        assertFalse(CinemaInteraction.fullscreenLandscape(false, 16f / 9f));
+        assertFalse(CinemaInteraction.fullscreenLandscape(false, 9f / 16f));
+        assertFalse(CinemaInteraction.fullscreenLandscape(true, 0));
+    }
     @Test public void chatTapExcludesEdgesControlsAndDrags() {
         assertTrue(tap(850, 250, 0));
         assertFalse(tap(700, 250, 0));

@@ -1,0 +1,84 @@
+BiliCinema Windows UI proposal v1 — design only, not implemented.
+
+Planned deliverables owned by this design:
+  home-room-v1.png
+  fullscreen-downloads-v1.png
+Generation mode: built-in image_gen. These are visual specifications, not screenshots.
+
+Match the approved Android v2 design: white #FFFFFF / #F8F8F8 utility surfaces,
+ink #0F0F0F, secondary #606060, blue #065FD4; viewing surfaces #0F0F0F,
+foreground #F1F1F1, blue #3EA6FF. Simplified Chinese system typography, regular
+and medium weights, 8 px grid, 10 px corner radius, consistent thin outline icons.
+No slogans, greetings, recommendations, giant pill buttons, gradients or glow.
+Keep Windows window controls and download functionality. Icon controls have
+tooltips and keyboard labels in the eventual implementation. This proposal does
+not add a new feature or change production UI.
+
+Prompt 1 — home-room-v1.png:
+Use case: ui-mockup. Produce an exceptionally polished, realistic Windows desktop
+application design board, 1920 x 2160 portrait canvas, two complete large desktop
+windows stacked vertically on a very pale neutral background. Small board header
+"BiliCinema / Windows" and "UI 定稿 · 01". Each window is a credible wide desktop
+window, not a phone, with a slim native title bar and minimize/maximize/close.
+TOP WINDOW: light home screen. A quiet 72 px icon rail with film icon selected,
+download arrow below, settings gear and round mountain avatar near bottom; no
+marketing sidebar text. Main top-left heading "BiliCinema". A centered compact
+content column ~650 px wide, generous purposeful white space. Visible field label
+"视频", populated input "BV1xx411c7mD", small x clear control and clipboard icon
+button. Under it a horizontal preview row with original alpine lake thumbnail,
+"山海之间" and "46:20". Two medium buttons: blue play icon + "播放", subtle
+outline plus icon + "创建房间". Divider then a spacious row with enter icon,
+"加入房间" and chevron. Top-right account chip round mountain avatar and short
+"已登录". All type crisp, short and readable. No instructional paragraphs.
+BOTTOM WINDOW: dark viewing room. Compact top bar: back arrow, "山海之间";
+right side members icon "3/5", chain-link invite icon, chat icon, more icon,
+native window controls. Main content split large left video and narrower right
+chat. Video shows original cinematic alpine mountains reflecting in a lake,
+blue sky and subtle warm sun, no celebrity, no film branding. Controls within
+video bottom: pause, speaker, "12:48 / 46:20", thin blue seek line, "1080P",
+"1.0×", fullscreen icon. Below video a small check icon and "已同步", and
+small film-change icon at right. Right pane header "聊天" and close x; sparse
+messages "小雨" / "这一段很好看" and "阿青" / "嗯，继续看" with round abstract
+avatars. Bottom fixed message box "发送消息" and blue paper-plane icon. Keep
+desktop proportions and a roomy stable player canvas. Accurate Simplified Chinese.
+Avoid neon, giant headings, generic dashboards, marketing cards, extra text,
+decorative charts, phone frames, fake browser address bars, account secrets.
+
+Prompt 2 — fullscreen-downloads-v1.png:
+Use case: ui-mockup. Same BiliCinema Windows design family and colors. 1920 x
+2160 portrait design board with two large realistic desktop surfaces stacked,
+small header "BiliCinema / Windows" and "UI 定稿 · 02". TOP: immersive fullscreen
+video of the same original alpine lake and mountains. No sidebar or title bar.
+Subtle top overlay back arrow + "山海之间", top-right chat icon and more icon.
+Bottom overlay pause, speaker, "12:48 / 46:20", blue seek line, "1080P", "1.0×",
+exit-fullscreen. A semi-opaque dark chat drawer overlays the RIGHT quarter of
+the full video; the video still spans the entire surface underneath and is NOT
+resized, shifted or cropped to accommodate chat. Drawer header "聊天", close x;
+two short sample messages and fixed text input "发送消息" with blue send icon.
+No tutorial copy inside player. BOTTOM: light desktop download screen, same slim
+Windows title bar and 72 px icon rail as home, download icon selected. Heading
+"下载". Tabs "下载中 2" and "已完成". Compact top-right plus icon + "新建下载".
+Two clean horizontal download rows with small landscape thumbnails. First title
+"山海之间", detail "1080P · 1.2 GB / 2.0 GB", thin blue progress 60%, speed
+"8.4 MB/s", pause icon, folder icon, more icon. Second "城市漫步", detail
+"720P · 已暂停", faint progress 25%, resume triangle, folder icon, more icon.
+Rows separated by fine rules, restrained whitespace, no enormous cards. Bottom
+small storage/folder icon with label "下载位置". Clean white/#F8F8F8 utilities,
+ink#0F0F0F, subdued blue#065FD4, dark viewer#0F0F0F and blue#3EA6FF. Crisp Chinese
+system sans typography, thin consistent line icons, 8 px rhythm, 10 px corners.
+No slogans, promotional posters, gradients, neon, emojis or irrelevant widgets.
+
+Interaction specification:
+- Home accepts share text, URLs and BV IDs; clear x resets the whole input;
+  clipboard button pastes. Join opens a compact dialog with input, clear/paste,
+  join action and an inline error. Creating/joining displays staged progress.
+- Account is an avatar popover/page: avatar, display name, UID with copy icon,
+  login status, switch account, check updates, sign out. Logged out shows QR login.
+- Viewing shows only essential playback state; technical diagnosis is on demand.
+- Fullscreen chat uses an overlay: chat icon or right-side click opens; outside
+  click, x or Escape closes; video geometry and playback do not change.
+- Incoming messages briefly preview on the right even with chat closed.
+- Guest controls do not override the host timeline; local volume and quality stay
+  available. Clear user-visible recovery action for media errors.
+- Tooltips explain icon-only controls; Tab focus remains visible; Enter sends
+  chat, Escape first dismisses overlays and then exits fullscreen.

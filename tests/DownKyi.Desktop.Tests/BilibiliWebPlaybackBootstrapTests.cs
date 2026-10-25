@@ -74,6 +74,36 @@ public sealed class BilibiliWebPlaybackBootstrapTests
     }
 
     [Fact]
+    public void RoomEpisodeIdentityWinsOverAStaleCid()
+    {
+        var page = new VideoPage { EpisodeId = 251429, Cid = 880001, Name = "EP page" };
+
+        var selected = WatchWindowViewModel.SelectPage(
+            [page],
+            "https://www.bilibili.com/bangumi/play/ep251429",
+            selectedCid: 880999);
+
+        Assert.Same(page, selected);
+    }
+
+    [Fact]
+    public void RoomVideoIdentityStillUsesCidForMultipartVideo()
+    {
+        var pages = new[]
+        {
+            new VideoPage { Bvid = "BV1ZpYd66ELP", Avid = 123, Cid = 201, Page = 1 },
+            new VideoPage { Bvid = "BV1ZpYd66ELP", Avid = 123, Cid = 202, Page = 2 }
+        };
+
+        var selected = WatchWindowViewModel.SelectPage(
+            pages,
+            "https://www.bilibili.com/video/BV1ZpYd66ELP",
+            selectedCid: 202);
+
+        Assert.Same(pages[1], selected);
+    }
+
+    [Fact]
     public void PlayerPartUrlSelectsTheChangedPartWithoutChangingBvid()
     {
         var pages = new[]

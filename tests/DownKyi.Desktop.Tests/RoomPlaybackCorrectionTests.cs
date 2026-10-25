@@ -112,6 +112,27 @@ public sealed class RoomPlaybackCorrectionTests
     }
 
     [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void HiddenRoomStaysLocallyPausedWhileSharedPlaybackContinues(bool isHost)
+    {
+        var snapshot = new WatchRoomSnapshot
+        {
+            Playing = true,
+            Host = new WatchRoomMember { Online = true, Ready = true }
+        };
+
+        var hidden = WatchWindowViewModel.CreatePlaybackCorrection(
+            isHost, snapshot, drift: 0, currentRate: 1, roomVisible: false);
+        var visible = WatchWindowViewModel.CreatePlaybackCorrection(
+            isHost, snapshot, drift: 0, currentRate: 1, roomVisible: true);
+
+        Assert.True(hidden.ShouldPause);
+        Assert.False(visible.ShouldPause);
+        Assert.True(snapshot.Playing);
+    }
+
+    [Theory]
     [InlineData(null, null, true)]
     [InlineData("", null, true)]
     [InlineData("ws://127.0.0.1:5077/ws", null, true)]

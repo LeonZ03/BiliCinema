@@ -29,4 +29,6 @@ script/macos/*.app
 cloud/node_modules/
 cloud/.wrangler/
 cloud/.dev.vars
+cloud/public/downloads/*.apk
+cloud/public/downloads/android-manifest.json
 .wrangler/

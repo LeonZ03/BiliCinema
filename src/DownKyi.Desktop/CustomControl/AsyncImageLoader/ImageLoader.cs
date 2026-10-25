@@ -81,7 +81,16 @@ internal static class ImageLoader
 
                     using (loaded)
                     {
-                        return loaded.CreateScaledBitmap(targetSize.Value);
+                        // Decode at a smaller size without baking the control's aspect ratio
+                        // into the bitmap. The Image's Stretch setting owns crop/letterboxing.
+                        var sourceSize = loaded.PixelSize;
+                        var scaleFactor = Math.Min(1d, Math.Max(
+                            (double)targetSize.Value.Width / sourceSize.Width,
+                            (double)targetSize.Value.Height / sourceSize.Height));
+                        var scaledSize = new PixelSize(
+                            Math.Max(1, (int)Math.Round(sourceSize.Width * scaleFactor)),
+                            Math.Max(1, (int)Math.Round(sourceSize.Height * scaleFactor)));
+                        return loaded.CreateScaledBitmap(scaledSize);
                     }
                 }
                 catch (TaskCanceledException)

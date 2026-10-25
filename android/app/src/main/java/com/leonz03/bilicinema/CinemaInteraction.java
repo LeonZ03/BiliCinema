@@ -6,6 +6,10 @@ import java.util.ArrayDeque;
 final class CinemaInteraction {
     private CinemaInteraction() { }
 
+    static boolean fullscreenLandscape(boolean fullscreen, float videoAspectRatio) {
+        return fullscreen && Float.isFinite(videoAspectRatio) && videoAspectRatio >= 1;
+    }
+
     static boolean opensChat(float x, float y, float width, float height, float edge,
                              float controlsTop, float controlsBottom, float movement, float slop) {
         return width > 0 && height > 0 && movement <= slop

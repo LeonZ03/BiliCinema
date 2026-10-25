@@ -4,6 +4,7 @@ import org.json.JSONArray;
 import org.json.JSONObject;
 import java.io.IOException;
 import java.net.URI;
+import java.net.URISyntaxException;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.concurrent.CancellationException;
@@ -13,22 +14,41 @@ import java.util.regex.Pattern;
 import okhttp3.OkHttpClient;
 import okhttp3.Call;
 import okhttp3.CookieJar;
+import okhttp3.HttpUrl;
 import okhttp3.Request;
 import okhttp3.Response;
 
 /** Resolves the exact public episode/CID locally before any room selection or readiness. */
 final class BilibiliMediaResolver {
-    static final String USER_AGENT = "Mozilla/5.0 (Linux; Android) BiliCinema/" + BuildConfig.VERSION_NAME;
+    // These are desktop web playback endpoints. PGC media CDNs reject their PC URLs
+    // with an Android/Mobile agent even while the signed addresses remain valid.
+    // Keep API and media requests on the same profile used by the desktop client.
+    static final String USER_AGENT = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
     static final class Resolved {
+        static final class CatalogItem {
+            final String title, url;
+            CatalogItem(String title, String url) { this.title = title; this.url = url; }
+        }
         final JSONObject media;
         final String pageUrl;
         final String title;
+        final String cover;
+        final double duration;
+        final java.util.List<CatalogItem> catalog;
         Resolved(JSONObject media, String pageUrl) { this(media, pageUrl, ""); }
         Resolved(JSONObject media, String pageUrl, String title) {
-            this.media = media; this.pageUrl = pageUrl; this.title = title;
+            this(media, pageUrl, title, "", 0);
+        }
+        Resolved(JSONObject media, String pageUrl, String title, String cover, double duration) {
+            this(media, pageUrl, title, cover, duration, java.util.Collections.emptyList());
+        }
+        Resolved(JSONObject media, String pageUrl, String title, String cover, double duration, java.util.List<CatalogItem> catalog) {
+            this.media = media; this.pageUrl = pageUrl; this.title = title; this.cover = cover; this.duration = duration;
+            this.catalog = java.util.Collections.unmodifiableList(new java.util.ArrayList<>(catalog));
         }
     }
     private static final class Operation { boolean cancelled; Call call; }
+    private static final Pattern SHARE_LINK = Pattern.compile("(?i)(?<![A-Za-z0-9.-])(?:https?://)?(?:(?:[A-Za-z0-9-]+\\.)?bilibili\\.com|b23\\.tv)/[A-Za-z0-9._~:/?#\\[\\]@!$&'()*+,;=%-]+");
     private final Object gate = new Object();
     private Operation current;
     private boolean closed;
@@ -44,9 +64,11 @@ final class BilibiliMediaResolver {
     Resolved input(String input, String cookie) throws Exception {
         Operation operation = begin();
         try {
-            JSONObject identity = MediaIdentity.parse(input);
-            Matcher page = Pattern.compile("[?&]p=(\\d+)").matcher(input);
-            int number = page.find() ? Integer.parseInt(page.group(1)) : 1;
+            String value = selectedInput(input, operation);
+            HttpUrl selected = HttpUrl.parse(value);
+            JSONObject identity = MediaIdentity.parse(selected == null ? value : selected.encodedPath());
+            String page = selected == null ? null : selected.queryParameter("p");
+            int number = page == null ? 1 : Integer.parseInt(page);
             if (number < 1) throw new PlaybackFailure(PlaybackFailure.Reason.INVALID_MEDIA);
             Resolved result = resolve(identity, number, cookie, operation);
             check(operation);
@@ -55,6 +77,97 @@ final class BilibiliMediaResolver {
         catch (Exception exception) { throw new PlaybackFailure(PlaybackFailure.Reason.INVALID_MEDIA); }
         finally { end(operation); }
     }
+
+    private String expandShortLink(String input, Operation operation) throws Exception {
+        URI current = new URI(input);
+        if ("http".equalsIgnoreCase(current.getScheme())) {
+            current = new URI("https" + current.toString().substring(4));
+        }
+        if (!isShortHost(current)) throw new PlaybackFailure(PlaybackFailure.Reason.INVALID_MEDIA);
+        for (int redirects = 0; redirects < 5; redirects++) {
+            check(operation);
+            Request request = new Request.Builder().url(current.toString()).header("User-Agent", USER_AGENT).get().build();
+            Call call = http.newCall(request);
+            synchronized (gate) { checkLocked(operation); operation.call = call; }
+            String location;
+            try (Response response = call.execute()) {
+                check(operation);
+                location = response.header("Location");
+                if (response.code() >= 500 || response.code() == 408 || response.code() == 429) {
+                    throw new PlaybackFailure(PlaybackFailure.Reason.NETWORK_RETRYABLE);
+                }
+                if (response.code() < 300 || response.code() >= 400 || location == null) {
+                    throw new PlaybackFailure(PlaybackFailure.Reason.INVALID_MEDIA);
+                }
+            } catch (PlaybackFailure | CancellationException failure) { throw failure; }
+            catch (IOException exception) { check(operation); throw new PlaybackFailure(PlaybackFailure.Reason.NETWORK_RETRYABLE); }
+            finally { synchronized (gate) { if (operation.call == call) operation.call = null; } }
+            URI next;
+            try { next = current.resolve(new URI(location)); }
+            catch (URISyntaxException exception) { throw new PlaybackFailure(PlaybackFailure.Reason.INVALID_MEDIA); }
+            if (!safeShareRedirect(next)) throw new PlaybackFailure(PlaybackFailure.Reason.INVALID_MEDIA);
+            next = canonicalMediaLink(next);
+            if (!isShortHost(next)) return selectedInput(next.toString(), operation);
+            current = next;
+        }
+        throw new PlaybackFailure(PlaybackFailure.Reason.INVALID_MEDIA);
+    }
+
+    private String selectedInput(String input, Operation operation) throws Exception {
+        if (input == null || input.length() > 16_384) throw new PlaybackFailure(PlaybackFailure.Reason.INVALID_MEDIA);
+        Matcher matcher = SHARE_LINK.matcher(input);
+        if (!matcher.find()) return input;
+        String candidate = trimSharePunctuation(matcher.group());
+        if (!candidate.contains("://")) candidate = "https://" + candidate;
+        if (candidate.regionMatches(true, 0, "http://", 0, 7)) candidate = "https://" + candidate.substring(7);
+        URI uri;
+        try { uri = new URI(candidate); }
+        catch (URISyntaxException exception) { throw new PlaybackFailure(PlaybackFailure.Reason.INVALID_MEDIA); }
+        if (!safeShareRedirect(uri) && !isShortInput(uri)) throw new PlaybackFailure(PlaybackFailure.Reason.INVALID_MEDIA);
+        uri = canonicalMediaLink(uri);
+        if (isShortInput(uri)) return expandShortLink(candidate, operation);
+        String host = uri.getHost().toLowerCase(java.util.Locale.ROOT);
+        String path = uri.getPath();
+        if (!(host.equals("bilibili.com") || host.endsWith(".bilibili.com")) || path == null
+                || !path.matches("(?i)^/(?:video/(?:BV[0-9A-Za-z]{10}|av[0-9]+)/?|bangumi/play/ep[0-9]+)/?$")) {
+            throw new PlaybackFailure(PlaybackFailure.Reason.INVALID_MEDIA);
+        }
+        return uri.toString();
+    }
+
+    private static URI canonicalMediaLink(URI uri) {
+        // Identifier links already name the media. Resolving them must not depend on
+        // the short-link service; only opaque codes require a network redirect.
+        String path = uri.getRawPath();
+        if (!isShortHost(uri) || path == null || !path.matches("^/(?:ep[0-9]+|av[0-9]+|BV[0-9A-Za-z]{10})/?$")) return uri;
+        String section = path.startsWith("/ep") ? "/bangumi/play" : "/video";
+        return HttpUrl.get(uri.toString()).newBuilder().host("www.bilibili.com").encodedPath(section + path).build().uri();
+    }
+
+    private static boolean isShortHost(URI uri) {
+        return uri != null && "b23.tv".equalsIgnoreCase(uri.getHost()) && "https".equalsIgnoreCase(uri.getScheme())
+                && uri.getPort() == -1 && uri.getRawUserInfo() == null;
+    }
+
+    private static boolean isShortInput(URI uri) {
+        return uri != null && "b23.tv".equalsIgnoreCase(uri.getHost())
+                && ("https".equalsIgnoreCase(uri.getScheme()) || "http".equalsIgnoreCase(uri.getScheme()))
+                && uri.getPort() == -1 && uri.getRawUserInfo() == null;
+    }
+
+    private static boolean safeShareRedirect(URI uri) {
+        if (uri == null || !"https".equalsIgnoreCase(uri.getScheme()) || uri.getPort() != -1 || uri.getRawUserInfo() != null) return false;
+        String host = uri.getHost();
+        return host != null && ("b23.tv".equalsIgnoreCase(host) || "bilibili.com".equalsIgnoreCase(host)
+                || host.toLowerCase(java.util.Locale.ROOT).endsWith(".bilibili.com"));
+    }
+
+    private static String trimSharePunctuation(String value) {
+        int end = value.length();
+        while (end > 0 && "，。；：、）》】」』”’!?！?,.;)\"]}".indexOf(value.charAt(end - 1)) >= 0) end--;
+        return value.substring(0, end);
+    }
+
     Resolved room(JSONObject identity, String cookie) throws Exception {
         Operation operation = begin();
         try {
@@ -81,6 +194,9 @@ final class BilibiliMediaResolver {
         return video(result, identity, page);
     }
     PlaybackSource playable(Resolved resolved, String cookie) throws Exception {
+        return playable(resolved, cookie, 0);
+    }
+    PlaybackSource playable(Resolved resolved, String cookie, int preferredQuality) throws Exception {
         Operation operation = begin();
         try {
             JSONObject media = new JSONObject(resolved.media.toString());
@@ -101,7 +217,7 @@ final class BilibiliMediaResolver {
                 if (response.optInt("code") == -403) response = signedPlayUrl(parameters, cookie, operation);
             }
             check(operation);
-            PlaybackSource source = PlaybackSourceParser.parse(response, exact);
+            PlaybackSource source = PlaybackSourceParser.parse(response, exact, preferredQuality);
             check(operation);
             return source;
         } catch (PlaybackFailure | CancellationException failure) { throw failure; }
@@ -119,6 +235,32 @@ final class BilibiliMediaResolver {
         String query = WbiSigner.sign(parameters, WbiSigner.extractKey(keys.optString("img_url")),
                 WbiSigner.extractKey(keys.optString("sub_url")), System.currentTimeMillis() / 1000);
         return fetch("https://api.bilibili.com/x/player/wbi/playurl?" + query, cookie, operation);
+    }
+
+    /** Public artwork is fetched without credentials, bounded before decoding on the client. */
+    byte[] cover(Resolved resolved) throws Exception {
+        HttpUrl url = HttpUrl.parse(resolved.cover.startsWith("//") ? "https:" + resolved.cover : resolved.cover);
+        if (url == null || !(url.host().endsWith(".hdslb.com") || url.host().endsWith(".bilibili.com"))
+                || !url.username().isEmpty() || !url.password().isEmpty()
+                || (url.port() != 80 && url.port() != 443)) throw new IOException("Cover unavailable");
+        url = url.newBuilder().scheme("https").build();
+        Operation operation = begin();
+        try {
+            Call call = http.newCall(new Request.Builder().url(url).header("Referer", "https://www.bilibili.com/").build());
+            synchronized (gate) { checkLocked(operation); operation.call = call; }
+            try (Response response = call.execute()) {
+                if (!response.isSuccessful() || response.body() == null) throw new IOException("Cover unavailable");
+                try (java.io.InputStream stream = response.body().byteStream(); java.io.ByteArrayOutputStream data = new java.io.ByteArrayOutputStream()) {
+                    byte[] buffer = new byte[8192]; int count;
+                    while ((count = stream.read(buffer)) != -1) {
+                        check(operation);
+                        if (data.size() + count > 1024 * 1024) throw new IOException("Cover too large");
+                        data.write(buffer, 0, count);
+                    }
+                    return data.toByteArray();
+                }
+            }
+        } finally { end(operation); }
     }
 
     private JSONObject fetch(String url, String cookie, Operation operation) throws Exception {
@@ -187,7 +329,14 @@ final class BilibiliMediaResolver {
         validate(expected, media);
         String title = data.optString("title");
         if (pages.length() > 1 && !chosen.optString("part").isEmpty()) title += " · " + chosen.optString("part");
-        return new Resolved(media, "https://www.bilibili.com/video/" + media.getString("bvid") + "?p=" + chosen.getInt("page"), title);
+        java.util.List<Resolved.CatalogItem> catalog = new java.util.ArrayList<>();
+        for (int i = 0; i < pages.length() && i < 300; i++) {
+            JSONObject item = pages.getJSONObject(i);
+            String part = item.optString("part").trim();
+            catalog.add(new Resolved.CatalogItem("P" + item.optInt("page") + (part.isEmpty() ? "" : " · " + part),
+                    "https://www.bilibili.com/video/" + media.getString("bvid") + "?p=" + item.optInt("page")));
+        }
+        return new Resolved(media, "https://www.bilibili.com/video/" + media.getString("bvid") + "?p=" + chosen.getInt("page"), title, data.optString("pic"), chosen.optDouble("duration", 0), catalog);
     }
     static Resolved episode(JSONObject response, JSONObject expected) throws Exception {
         JSONObject result = response.getJSONObject("result");
@@ -198,7 +347,22 @@ final class BilibiliMediaResolver {
         if (episode == null) throw new IOException("无法确认该番剧集数，请重新选择");
         JSONObject media = identity(episode.optLong("aid"), episode.optString("bvid"), episode.optLong("cid")).put("episodeId", id);
         validate(expected, media);
-        return new Resolved(media, "https://www.bilibili.com/bangumi/play/ep" + id, result.optString("title") + " " + episode.optString("long_title", episode.optString("title")));
+        java.util.List<Resolved.CatalogItem> catalog = new java.util.ArrayList<>();
+        addEpisodes(catalog, result.optJSONArray("episodes"));
+        if (sections != null) for (int i = 0; i < sections.length(); i++) addEpisodes(catalog, sections.getJSONObject(i).optJSONArray("episodes"));
+        return new Resolved(media, "https://www.bilibili.com/bangumi/play/ep" + id, result.optString("title") + " " + episode.optString("long_title", episode.optString("title")), episode.optString("cover", result.optString("cover")), episode.optDouble("duration", 0) / 1000, catalog);
+    }
+    private static void addEpisodes(java.util.List<Resolved.CatalogItem> catalog, JSONArray episodes) throws Exception {
+        if (episodes == null) return;
+        for (int i = 0; i < episodes.length() && catalog.size() < 300; i++) {
+            JSONObject item = episodes.getJSONObject(i);
+            long id = item.optLong("id", item.optLong("ep_id"));
+            if (id <= 0) continue;
+            String label = item.optString("title");
+            String subtitle = item.optString("long_title");
+            if (!subtitle.isEmpty()) label += " · " + subtitle;
+            catalog.add(new Resolved.CatalogItem(label, "https://www.bilibili.com/bangumi/play/ep" + id));
+        }
     }
     private static JSONObject findEpisode(JSONArray episodes, long expected) throws Exception {
         if (episodes != null) for (int i = 0; i < episodes.length(); i++) { JSONObject ep = episodes.getJSONObject(i); if (ep.optLong("id", ep.optLong("ep_id")) == expected) return ep; }

@@ -37,6 +37,66 @@ public class BilibiliLoginClientTest {
     private static final String GENERATED = "{\"code\":0,\"data\":{\"url\":\"https://account.bilibili.com/h5/fixture?qrcode_key=fixture-key\",\"qrcode_key\":\"fixture-key\"}}";
     private static final String LOGGED_IN = "{\"code\":0,\"data\":{\"isLogin\":true,\"mid\":7}}";
 
+    @Test public void verifiedProfileExposesUidAndLoadsAvatarWithoutSessionCookies() throws Exception {
+        try (Fixture fixture = new Fixture()) {
+            BilibiliLoginClient.Challenge challenge = fixture.challenge();
+            fixture.add(POLL, scan(0, null), "Set-Cookie", parent("SESSDATA=fixture-session"));
+            JSONObject nav = new JSONObject(LOGGED_IN);
+            nav.getJSONObject("data").put("face", "http://i0.hdslb.com/bfs/face/fixture.png");
+            nav.getJSONObject("data").put("uname", "示例昵称");
+            fixture.add(NAV, nav.toString());
+            BilibiliLoginClient.Account account = fixture.client.poll(challenge).account;
+            assertEquals("7", account.uid()); assertEquals("示例昵称", account.nickname()); assertTrue(account.hasAvatar());
+            fixture.add("/bfs/face/fixture.png", "fixture-image-bytes");
+            assertArrayEquals("fixture-image-bytes".getBytes(java.nio.charset.StandardCharsets.UTF_8), fixture.client.loadAvatar(account));
+            assertEquals("i0.hdslb.com", fixture.last().url().host()); assertTrue(fixture.last().url().isHttps());
+            assertNull(fixture.last().header("Cookie")); fixture.finished();
+        }
+    }
+
+    @Test public void missingOrUntrustedAvatarDoesNotEraseVerifiedIdentity() throws Exception {
+        for (String address : new String[]{"", "https://i0.hdslb.com.example.test/bfs/face/a.png",
+                "https://fixture@i0.hdslb.com/bfs/face/a.png", "https://i0.hdslb.com:444/bfs/face/a.png"}) {
+            try (Fixture fixture = new Fixture()) {
+                JSONObject nav = new JSONObject(LOGGED_IN); nav.getJSONObject("data").put("face", address);
+                fixture.add(NAV, nav.toString());
+                BilibiliLoginClient.Account account = fixture.client.validateSaved("SESSDATA=fixture-session");
+                assertTrue(account.loggedIn()); assertEquals("7", account.uid()); assertEquals("", account.nickname()); assertFalse(account.hasAvatar());
+                expectFailure(() -> fixture.client.loadAvatar(account));
+                assertEquals(1, fixture.requests.size()); fixture.finished();
+            }
+        }
+    }
+
+    @Test public void missingNicknameRemainsEmptyWithoutChangingVerifiedIdentity() throws Exception {
+        try (Fixture fixture = new Fixture()) {
+            fixture.add(NAV, LOGGED_IN);
+            BilibiliLoginClient.Account account = fixture.client.validateSaved("SESSDATA=fixture-session");
+            assertTrue(account.loggedIn()); assertEquals("7", account.uid()); assertEquals("", account.nickname());
+            fixture.finished();
+        }
+    }
+
+    @Test public void avatarFailureCannotRevokeTheVerifiedAccountOrFollowRedirects() throws Exception {
+        try (Fixture fixture = new Fixture()) {
+            JSONObject nav = new JSONObject(LOGGED_IN); nav.getJSONObject("data").put("face", "//i0.hdslb.com/bfs/face/fixture.png");
+            fixture.add(NAV, nav.toString());
+            BilibiliLoginClient.Account account = fixture.client.validateSaved("SESSDATA=fixture-session");
+            fixture.add("/bfs/face/fixture.png", 302, "", "Location", "https://outside.example.test/avatar");
+            expectFailure(() -> fixture.client.loadAvatar(account));
+            assertTrue(account.loggedIn()); assertEquals("7", account.uid());
+            assertNull(fixture.last().header("Cookie")); assertEquals(2, fixture.requests.size()); fixture.finished();
+        }
+    }
+
+    @Test public void loggedOutEnvelopeDoesNotExposeProfileFields() throws Exception {
+        try (Fixture fixture = new Fixture()) {
+            fixture.add(NAV, "{\"code\":0,\"data\":{\"isLogin\":false,\"mid\":7,\"face\":\"https://i0.hdslb.com/bfs/face/fixture.png\"}}");
+            BilibiliLoginClient.Account account = fixture.client.validateSaved("SESSDATA=fixture-session");
+            assertFalse(account.loggedIn()); assertEquals("", account.uid()); assertFalse(account.hasAvatar()); fixture.finished();
+        }
+    }
+
     @Test public void qrStatesKeepGenerateAndPollInTheSameIsolatedAttempt() throws Exception {
         try (Fixture fixture = new Fixture()) {
             fixture.add(GENERATE, GENERATED, "Set-Cookie", "attempt=fixture-attempt; Path=/; Secure");

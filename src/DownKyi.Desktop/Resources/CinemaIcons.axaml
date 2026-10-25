@@ -1,0 +1,28 @@
+<ResourceDictionary xmlns="https://github.com/avaloniaui"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <!-- Geometry is copied from the approved Android drawable pathData at a 24×24 viewport. -->
+    <StreamGeometry x:Key="CinemaFilm">M5,3H19C20.1,3 21,3.9 21,5V19C21,20.1 20.1,21 19,21H5C3.9,21 3,20.1 3,19V5C3,3.9 3.9,3 5,3Z M7,3V21 M17,3V21 M3,8H7 M3,16H7 M17,8H21 M17,16H21 M7,12H17</StreamGeometry>
+    <!-- Android has no download drawable: conventional 24 px tray-and-arrow outline fallback. -->
+    <StreamGeometry x:Key="CinemaDownload">M21,15V19A2,2 0 0 1 19,21H5A2,2 0 0 1 3,19V15 M7,10L12,15L17,10 M12,15V3</StreamGeometry>
+    <StreamGeometry x:Key="CinemaAccount">M12,22A10,10 0 1 0 12,2A10,10 0 1 0 12,22 M12,12A3,3 0 1 0 12,6A3,3 0 1 0 12,12 M5,19C6,13 18,13 19,19</StreamGeometry>
+    <!-- Filled source geometry; render with Path.glyphFilled. -->
+    <StreamGeometry x:Key="CinemaSettings">M19.14,12.94C19.18,12.63 19.2,12.32 19.2,12S19.18,11.37 19.13,11.06L21.16,9.48A0.5,0.5 0 0 0 21.28,8.84L19.36,5.52A0.5,0.5 0 0 0 18.75,5.3L16.36,6.26A7.25,7.25 0 0 0 14.73,5.31L14.37,2.78A0.49,0.49 0 0 0 13.88,2.37H10.04A0.49,0.49 0 0 0 9.55,2.78L9.19,5.31A7.25,7.25 0 0 0 7.56,6.26L5.17,5.3A0.5,0.5 0 0 0 4.56,5.52L2.64,8.84A0.5,0.5 0 0 0 2.76,9.48L4.79,11.06C4.74,11.37 4.71,11.69 4.71,12S4.74,12.63 4.79,12.94L2.76,14.52A0.5,0.5 0 0 0 2.64,15.16L4.56,18.48A0.5,0.5 0 0 0 5.17,18.7L7.56,17.74C8.06,18.14 8.61,18.46 9.19,18.69L9.55,21.22A0.49,0.49 0 0 0 10.04,21.63H13.88A0.49,0.49 0 0 0 14.37,21.22L14.73,18.69A7.25,7.25 0 0 0 16.36,17.74L18.75,18.7A0.5,0.5 0 0 0 19.36,18.48L21.28,15.16A0.5,0.5 0 0 0 21.16,14.52ZM12,15.5A3.5,3.5 0 1 1 12,8.5A3.5,3.5 0 0 1 12,15.5Z</StreamGeometry>
+    <StreamGeometry x:Key="CinemaClose">M6,6L18,18 M18,6L6,18</StreamGeometry>
+    <!-- Filled source geometry; render with Path.glyphFilled. -->
+    <StreamGeometry x:Key="CinemaCopy">M8,3H18A2,2 0 0 1 20,5V17H18V5H8ZM5,7H15A2,2 0 0 1 17,9V19A2,2 0 0 1 15,21H5A2,2 0 0 1 3,19V9A2,2 0 0 1 5,7ZM5,9V19H15V9Z</StreamGeometry>
+    <StreamGeometry x:Key="CinemaPaste">M9,4H6C4.9,4 4,4.9 4,6V20C4,21.1 4.9,22 6,22H18C19.1,22 20,21.1 20,20V6C20,4.9 19.1,4 18,4H15 M9,3H15V7H9ZM8,11H16 M8,15H16 M8,19H13</StreamGeometry>
+    <!-- Android has no plus drawable: conventional centered 24 px outline plus. -->
+    <StreamGeometry x:Key="CinemaPlus">M12,5V19 M5,12H19</StreamGeometry>
+    <StreamGeometry x:Key="CinemaPlay">M8,5L19,12L8,19Z</StreamGeometry>
+    <StreamGeometry x:Key="CinemaBack">M19,12H5 M12,5L5,12L12,19</StreamGeometry>
+    <!-- Geometry copied from approved android ic_chevron_right.xml. -->
+    <StreamGeometry x:Key="CinemaJoin">M9,5L16,12L9,19</StreamGeometry>
+    <StreamGeometry x:Key="CinemaLink">M10,13C11.6,14.6 14.2,14.6 15.8,13L20,8.8C21.6,7.2 21.6,4.6 20,3C18.4,1.4 15.8,1.4 14.2,3L11.8,5.4 M14,11C12.4,9.4 9.8,9.4 8.2,11L4,15.2C2.4,16.8 2.4,19.4 4,21C5.6,22.6 8.2,22.6 9.8,21L12.2,18.6</StreamGeometry>
+    <StreamGeometry x:Key="CinemaChat">M21,11.5C21,16.2 17,20 12,20C10.4,20 8.8,19.6 7.5,19L3,21L4.2,16.5C2.9,15.1 2,13.4 2,11.5C2,6.8 6.5,3 12,3C17,3 21,6.8 21,11.5Z M7,11H7.01 M12,11H12.01 M17,11H17.01</StreamGeometry>
+    <StreamGeometry x:Key="CinemaMembers">M16,21V19A4,4 0 0 0 12,15H6A4,4 0 0 0 2,19V21 M9,11A4,4 0 1 0 9,3A4,4 0 0 0 9,11 M17,4C20,4 21,8 18,10 M22,21V19C22,17 21,15.5 19,15</StreamGeometry>
+    <StreamGeometry x:Key="CinemaMore">M12,5H12.01 M12,12H12.01 M12,19H12.01</StreamGeometry>
+    <StreamGeometry x:Key="CinemaSend">M22,2L15,22L11,13L2,9Z M22,2L11,13</StreamGeometry>
+    <!-- Filled source geometry from Android ic_refresh.xml; render with Path.glyphFilled. -->
+    <StreamGeometry x:Key="CinemaSync">M17.65,6.35A8,8 0,0 0,4,12h2a6,6 0,0 1,10.24 -4.24L13,11h7V4zM18,12a6,6 0,0 1,-10.24 4.24L11,13H4v7l2.35,-2.35A8,8 0,0 0,20 12z</StreamGeometry>
+    <StreamGeometry x:Key="CinemaFullscreen">M8,3H3V8 M16,3H21V8 M3,16V21H8 M21,16V21H16</StreamGeometry>
+</ResourceDictionary>

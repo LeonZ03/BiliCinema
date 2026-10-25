@@ -1,4 +1,5 @@
 using System;
+using System.ComponentModel;
 using System.IO;
 using System.Text.Json;
 using System.Threading;
@@ -6,6 +7,8 @@ using System.Threading.Tasks;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
+using Avalonia.Input.Platform;
+using Avalonia.Interactivity;
 using Avalonia.Media;
 using Avalonia.Platform;
 using Avalonia.Threading;
@@ -110,12 +113,15 @@ internal sealed partial class WatchWindow : Window
         // second fixed height. This lets fullscreen expand without changing
         // the surrounding Avalonia layout during WebView navigation.
         _roomBrowser.Height = double.NaN;
+        _roomBrowser.IsVisible = false;
         _normalBackground = Background;
         _normalCornerRadius = _roomPlayerSurface.CornerRadius;
         ConfigureBrowser(_roomBrowser, "BiliCinemaOnline");
         _roomBrowser.WebMessageReceived += OnViewportMessageReceived;
         _roomBrowser.NavigationStarted += (_, _) => _lastViewportFullscreen = null;
         _viewModel.AttachBrowser(_roomBrowser);
+        _viewModel.PropertyChanged += OnWatchPropertyChanged;
+        ApplyViewerLayout();
         _fullscreenTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(500) };
         _fullscreenTimer.Tick += OnFullscreenTimerTick;
         Opened += OnOpened;
@@ -138,6 +144,7 @@ internal sealed partial class WatchWindow : Window
         _closeInProgress = true;
         _windowClosing = true;
         _fullscreenTimer.Stop();
+        _viewModel.PropertyChanged -= OnWatchPropertyChanged;
         ObserveCloseCompletion(CompleteCloseAsync());
     }
 
@@ -245,6 +252,13 @@ internal sealed partial class WatchWindow : Window
 
     protected override async void OnKeyDown(KeyEventArgs args)
     {
+        if (!_isFullscreen && _viewModel.ShowRoom && _viewModel.DockedChatOpen
+            && args.Key == Key.Escape)
+        {
+            _viewModel.DockedChatOpen = false;
+            args.Handled = true;
+            return;
+        }
         if (_viewModel.ChatPanelOpen && args.Key is Key.LeftAlt or Key.RightAlt
             && (args.KeyModifiers & (KeyModifiers.Control | KeyModifiers.Shift | KeyModifiers.Meta)) == 0)
         {
@@ -282,7 +296,7 @@ internal sealed partial class WatchWindow : Window
         }
 
         if (!_viewModel.ChatPanelOpen && ((_isFullscreen && args.Key == Key.Escape)
-            || args.Key == Key.F11)
+            || (_viewModel.ShowRoom && _viewModel.PlayerReady && args.Key == Key.F11))
             || (shortcutAvailable && args.Key == Key.F))
         {
             var exitBrowserFullscreen = _isFullscreen && _browserFullscreen;
@@ -467,7 +481,7 @@ internal sealed partial class WatchWindow : Window
                 toastSequence,
                 _viewModel.ChatToastRemainingMilliseconds,
                 _viewModel.HostActionNotices,
-                actionSequence)).ConfigureAwait(true);
+                actionSequence, dockedChat: !_isFullscreen)).ConfigureAwait(true);
             _lastChatRevision = chatRevision;
             _lastChatToastSequence = toastSequence;
             _lastHostActionToastSequence = actionSequence;
@@ -491,29 +505,76 @@ internal sealed partial class WatchWindow : Window
         if (_isFullscreen)
         {
             WindowState = _previousWindowState;
-            Background = _normalBackground;
-            _sidebar.IsVisible = true;
-            _watchLayout.Margin = new Avalonia.Thickness(22);
-            _watchLayout.RowDefinitions = new RowDefinitions("Auto,Auto,*");
-            _watchLayout.RowSpacing = 14;
-            _roomPlayerSurface.CornerRadius = _normalCornerRadius;
-            _roomPlayerSurface.Height = 440;
             _isFullscreen = false;
         }
         else
         {
             _previousWindowState = WindowState;
-            Background = Brushes.Black;
-            _sidebar.IsVisible = false;
-            _watchLayout.Margin = new Avalonia.Thickness(0);
-            _watchLayout.RowDefinitions = new RowDefinitions("*,0,0");
-            _watchLayout.RowSpacing = 0;
-            _roomPlayerSurface.CornerRadius = new Avalonia.CornerRadius(0);
-            _roomPlayerSurface.Height = double.NaN;
             _isFullscreen = true;
             WindowState = WindowState.FullScreen;
         }
+        ApplyViewerLayout();
     }
+
+    private void ApplyViewerLayout()
+    {
+        Background = _viewModel.ShowRoom ? Brushes.Black : _normalBackground;
+        _sidebar.SetCurrentValue(IsVisibleProperty, !_isFullscreen && _viewModel.ShowSidebar);
+        _watchLayout.RowDefinitions = new RowDefinitions(_isFullscreen ? "0,*,0" : "Auto,*,Auto");
+        _roomPlayerSurface.CornerRadius = _isFullscreen ? new CornerRadius(0) : _normalCornerRadius;
+        _roomPlayerSurface.Margin = _isFullscreen ? new Thickness(0) : new Thickness(12, 0, 12, 0);
+        this.FindControl<Grid>("ViewerHeader")!.IsVisible = !_isFullscreen;
+        this.FindControl<StackPanel>("PlaybackToolbar")!.IsVisible = !_isFullscreen;
+        this.FindControl<Border>("DockedChat")!.IsVisible = !_isFullscreen
+            && _viewModel.ShowRoom && _viewModel.IsInRoom && _viewModel.DockedChatOpen;
+    }
+
+    private void OnWatchPropertyChanged(object? sender, PropertyChangedEventArgs args)
+    {
+        if (args.PropertyName is nameof(WatchWindowViewModel.ShowRoom)
+            or nameof(WatchWindowViewModel.IsInRoom) or nameof(WatchWindowViewModel.DockedChatOpen))
+            ApplyViewerLayout();
+        if (args.PropertyName == nameof(WatchWindowViewModel.ChatRevision))
+            Dispatcher.UIThread.Post(() => this.FindControl<ScrollViewer>("ChatScroll")?.ScrollToEnd());
+    }
+
+    private async void OnPasteVideoClick(object? sender, RoutedEventArgs args)
+        => await PasteInputAsync(invite: false).ConfigureAwait(true);
+
+    private async void OnPasteInviteClick(object? sender, RoutedEventArgs args)
+        => await PasteInputAsync(invite: true).ConfigureAwait(true);
+
+    private async void OnVideoInputLostFocus(object? sender, RoutedEventArgs args)
+        => await PreviewHomeVideoAsync().ConfigureAwait(true);
+
+    private async Task PreviewHomeVideoAsync()
+    {
+        if (_viewModel.ShowHome && _viewModel.PreviewVideoInputCommand.CanExecute(null))
+            await _viewModel.PreviewVideoInputCommand.ExecuteAsync(null).ConfigureAwait(true);
+    }
+
+    private async Task PasteInputAsync(bool invite)
+    {
+        try
+        {
+            var text = Clipboard == null ? null : await Clipboard.TryGetTextAsync().ConfigureAwait(true);
+            if (text == null) return;
+            if (invite) _viewModel.InviteText = text.Trim();
+            else
+            {
+                _viewModel.RoomVideoInput = text.Trim();
+                await PreviewHomeVideoAsync().ConfigureAwait(true);
+            }
+        }
+        catch (Exception error) when (error is InvalidOperationException
+            or NotSupportedException or System.Runtime.InteropServices.COMException)
+        {
+            _viewModel.ReportInteractionError("无法读取剪贴板，请手动粘贴。");
+        }
+    }
+
+    private void OnDismissFlyoutClick(object? sender, RoutedEventArgs args)
+        => this.FindControl<Button>("ChangeMovieButton")?.Flyout?.Hide();
 
     private async void OnOpened(object? sender, EventArgs args)
     {

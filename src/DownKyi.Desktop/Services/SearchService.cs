@@ -1,6 +1,7 @@
 using System;
 using System.Globalization;
 using DownKyi.Application.Desktop;
+using DownKyi.Application.Media;
 using DownKyi.Core.BiliApi.BiliUtils;
 using DownKyi.Core.Settings;
 
@@ -39,7 +40,11 @@ internal class SearchService
         ArgumentNullException.ThrowIfNull(input);
 
         // 移除剪贴板id
-        var justId = input.Replace(AppConstant.ClipboardId, "", StringComparison.Ordinal);
+        var justId = VideoInputResolver.Normalize(
+            input.Replace(AppConstant.ClipboardId, "", StringComparison.Ordinal));
+        var navigationInput = justId + (input.EndsWith(AppConstant.ClipboardId, StringComparison.Ordinal)
+            ? AppConstant.ClipboardId
+            : string.Empty);
 
         // 视频
         if (ParseEntrance.IsAvId(justId))
@@ -49,7 +54,7 @@ internal class SearchService
         }
         else if (ParseEntrance.IsAvUrl(justId))
         {
-            NavigateToVideo(parentRoute, input);
+            NavigateToVideo(parentRoute, navigationInput);
         }
         else if (ParseEntrance.IsBvId(justId))
         {
@@ -57,7 +62,7 @@ internal class SearchService
         }
         else if (ParseEntrance.IsBvUrl(justId))
         {
-            NavigateToVideo(parentRoute, input);
+            NavigateToVideo(parentRoute, navigationInput);
         }
         // 番剧（电影、电视剧）
         else if (ParseEntrance.IsBangumiSeasonId(justId))
@@ -67,7 +72,7 @@ internal class SearchService
         }
         else if (ParseEntrance.IsBangumiSeasonUrl(justId))
         {
-            NavigateToVideo(parentRoute, input);
+            NavigateToVideo(parentRoute, navigationInput);
         }
         else if (ParseEntrance.IsBangumiEpisodeId(justId))
         {
@@ -76,7 +81,7 @@ internal class SearchService
         }
         else if (ParseEntrance.IsBangumiEpisodeUrl(justId))
         {
-            NavigateToVideo(parentRoute, input);
+            NavigateToVideo(parentRoute, navigationInput);
         }
         else if (ParseEntrance.IsBangumiMediaId(justId))
         {
@@ -85,12 +90,12 @@ internal class SearchService
         }
         else if (ParseEntrance.IsBangumiMediaUrl(justId))
         {
-            NavigateToVideo(parentRoute, input);
+            NavigateToVideo(parentRoute, navigationInput);
         }
         // 课程
         else if (ParseEntrance.IsCheeseSeasonUrl(justId) || ParseEntrance.IsCheeseEpisodeUrl(justId))
         {
-            NavigateToVideo(parentRoute, input);
+            NavigateToVideo(parentRoute, navigationInput);
         }
         // UP主指定系列
         else if (ParseEntrance.GetUserSeriesListUrl(justId) is { } series)

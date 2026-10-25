@@ -367,6 +367,9 @@ internal sealed class MainWindowViewModel : ObservableObject, IDisposable
         }
     }
 
+    internal void OpenPage(AppRoute route) =>
+        _navigationService.Navigate(new AppNavigationRequest(route, AppRoute.Index));
+
     private async Task CheckForUpdatesCoreAsync()
     {
         try

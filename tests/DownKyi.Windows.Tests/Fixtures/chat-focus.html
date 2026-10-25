@@ -34,19 +34,23 @@
         await input('Input.dispatchKeyEvent', {type:'keyDown', key, windowsVirtualKeyCode});
         await input('Input.dispatchKeyEvent', {type:'keyUp', key, windowsVirtualKeyCode});
     };
-    const click = async (x, y) => {
+    const click = async (x, y = 100) => {
         await input('Input.dispatchMouseEvent', {type:'mousePressed', x, y, button:'left', clickCount:1});
         await input('Input.dispatchMouseEvent', {type:'mouseReleased', x, y, button:'left', clickCount:1});
     };
     const events = [];
     window.invokeCSharpAction = message => events.push(JSON.parse(message));
     const renderWindowed = () => { /* WINDOWED_OVERLAY */ };
+    const renderDocked = () => { /* DOCKED_OVERLAY */ };
     (async () => {
         /* PLAYER_SCRIPT */
         await waitFor(() => window.__biliCinemaLayoutReady, 'Player did not mount');
         /* CHAT_OVERLAY */
         const ui = window.__biliCinemaChatUi;
         const isOpen = () => ui.host.classList.contains('bc-open');
+        check(getComputedStyle(ui.fullscreenOpen).display === 'flex'
+            && ui.fullscreenOpen.getAttribute('aria-label') === '打开聊天'
+            && ui.fullscreenOpen.title === '打开聊天', 'Fullscreen chat button is missing');
         const checkControlCorner = async () => {
             const x = innerWidth - 2;
             const y = innerHeight - 20;
@@ -66,41 +70,33 @@
         await delay(250);
         check(!isOpen(), 'Hidden expanded control bar opened chat');
         check(!ui.host.contains(document.elementFromPoint(innerWidth - 2, innerHeight - 110)),
-            'Hidden control bar region was intercepted');
+            'Hidden expanded control bar region was intercepted');
         controls.style.height = '';
         controls.style.transform = '';
         let probes = 0;
         document.querySelector('.bpx-player-video-area').addEventListener('mousemove', event => {
             if (!event.isTrusted) probes++;
         });
-        // Open with the real pointer while a layout probe is pending.
+        // Fullscreen edge hover opens without taking keyboard focus; leaving closes it.
         window.__biliCinemaCheckPlayerLayout(true);
         await move(innerWidth - 2);
+        check(isOpen() && document.activeElement !== ui.input, 'Fullscreen hover did not open chat');
+        await move(20);
+        await waitFor(() => !isOpen(), 'Chat did not close after leaving the edge');
+        const fullscreenButton = ui.fullscreenOpen.getBoundingClientRect();
+        await click(fullscreenButton.left + fullscreenButton.width / 2,
+            fullscreenButton.top + fullscreenButton.height / 2);
         check(isOpen() && document.activeElement === ui.input, 'Edge did not open/focus input');
+        check(getComputedStyle(ui.fullscreenOpen).display === 'none',
+            'Fullscreen chat button remained visible while panel was open');
         const probesAtOpen = probes;
         await delay(450);
         check(probes === probesAtOpen, 'Pending player probe interfered with chat');
         window.__biliCinemaCheckPlayerLayout(true);
         await delay(450);
         check(probes === probesAtOpen, 'Player probe ran while chatting');
-        window.dispatchEvent(new PointerEvent('pointermove', {clientX:20, clientY:100}));
-        await delay(400);
-        check(isOpen(), 'Synthetic movement dismissed panel');
-        // Hover-only panels still dismiss, and a quick re-entry cancels dismissal.
-        await move(20);
-        await move(innerWidth - 2);
-        await delay(400);
-        check(isOpen(), 'Re-entry did not cancel hover dismissal');
-        await move(20);
-        await delay(650);
-        check(!isOpen(), 'Hover-only panel did not dismiss');
-        await waitFor(() => window.__biliCinemaCheckPlayerLayout(), 'Player checks did not resume');
-        check(probes > probesAtOpen, 'Deferred player probe never resumed');
-        await move(innerWidth - 2);
         await input('Input.insertText', {text:'一起看电影'});
-        await move(20);
         window.dispatchEvent(new Event('blur'));
-        await delay(450);
         check(isOpen() && document.activeElement === ui.input && ui.input.value === '一起看电影',
             'Pointer/blur interrupted typing');
         // Real composition must neither send nor collapse while selecting text.
@@ -110,43 +106,56 @@
         check(isOpen() && ui.composing, 'IME lost panel ownership');
         await input('Input.insertText', {text:'你'});
         let playerKeys = 0;
+        let playerKeyUps = 0;
         let playerClicks = 0;
         document.addEventListener('keydown', () => { playerKeys++; });
+        document.addEventListener('keyup', () => { playerKeyUps++; });
         window.__biliCinemaPlayerRoot.addEventListener('click', () => { playerClicks++; });
         await key('Alt', 18);
         check(!isOpen() && ui.input.value === '一起看电影你', 'Explicit dismissal lost draft');
         check(playerKeys === 0 && playerClicks === 0, 'Alt dismissal triggered player controls');
-        await move(innerWidth - 2);
+        await click(innerWidth - 2);
         await key('Enter', 13);
         check(events.some(event => event.type === 'send' && event.text === '一起看电影你'), 'Message not sent');
         check(isOpen() && ui.input.value === '' && document.activeElement === ui.input, 'Send lost focus');
-        await move(20);
-        await delay(450);
-        check(isOpen(), 'Conversation collapsed immediately after sending');
-        await key('Alt', 18);
-        check(!isOpen() && events.at(-1).type === 'panelState' && !events.at(-1).open,
-            'Alt did not dismiss and restore player shortcuts');
-        check(ui.host.querySelector('.bc-hint').textContent === 'Shift+Enter 换行\nAlt 收起'
-            && getComputedStyle(ui.host.querySelector('.bc-hint')).whiteSpace === 'pre-line',
+        check(isOpen(), 'Conversation collapsed after sending');
+        const player = window.__biliCinemaPlayerRoot;
+        player.addEventListener('keydown', () => { playerKeys++; });
+        await key('Escape', 27);
+        check(!isOpen() && playerKeys === 0 && playerKeyUps === 0
+            && window.__biliCinemaPlayerRoot === player,
+            'Escape did not close chat without reaching player');
+        await waitFor(() => window.__biliCinemaCheckPlayerLayout(), 'Player checks did not resume');
+        check(probes > probesAtOpen, 'Deferred player probe never resumed');
+        check(ui.host.querySelector('.bc-hint').textContent === 'Enter 发送 · Esc 收起',
             'Chat shortcut hint is outdated');
         renderWindowed();
+        check(getComputedStyle(ui.fullscreenOpen).display === 'none',
+            'Windowed mode displayed the fullscreen chat button');
         await checkControlCorner();
         await move(innerWidth - 2);
-        await delay(250);
+        check(!isOpen(), 'Windowed hover opened chat');
+        await click(innerWidth - 2);
         const panelBox = ui.panel.getBoundingClientRect();
         check(isOpen() && panelBox.right <= innerWidth && panelBox.left < innerWidth
             && getComputedStyle(ui.panel).pointerEvents === 'auto', 'Windowed chat did not open visibly');
         await input('Input.insertText', {text:'窗口聊天'});
-        await move(20);
-        await delay(650);
         check(isOpen() && ui.input.value === '窗口聊天', 'Windowed typing was interrupted');
-        await key('Alt', 18);
-        check(!isOpen() && ui.input.value === '窗口聊天', 'Windowed Alt dismissal lost draft');
-        // Clicking the movie retains its normal semantics and is never a chat-close trigger.
-        await move(innerWidth - 2);
+        const video = document.querySelector('video');
+        let videoClicks = 0;
+        video.addEventListener('click', () => { videoClicks++; });
         await click(20, 100);
-        check(isOpen(), 'Video click still dismissed chat');
-        await key('Alt', 18);
+        check(!isOpen() && videoClicks === 0 && ui.input.value === '窗口聊天',
+            'Dismiss click reached the video or lost the draft');
+        await click(20, 100);
+        check(videoClicks === 1, 'Click after dismissal did not reach the video');
+        renderDocked();
+        check(ui.host.classList.contains('bc-docked')
+            && getComputedStyle(ui.fullscreenOpen).display === 'none'
+            && getComputedStyle(ui.edge).display === 'none'
+            && getComputedStyle(ui.panel).display === 'none'
+            && !ui.host.contains(document.elementFromPoint(innerWidth - 2, 100)),
+            'Docked mode kept a web chat hit target above the video');
         check(scrollX === 0 && scrollY === 0, 'Chat focus scrolled the player');
         document.querySelector('#result').textContent = 'PASS';
     })().catch(error => { document.querySelector('#result').textContent = `FAIL: ${error.message}`; });

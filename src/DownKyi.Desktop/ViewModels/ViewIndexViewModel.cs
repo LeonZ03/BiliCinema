@@ -1,11 +1,11 @@
 using System;
 using System.IO;
-using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 using CommunityToolkit.Mvvm.Input;
 using DownKyi.Application.Desktop;
 using DownKyi.Application.Diagnostics;
+using DownKyi.Application.Media;
 using DownKyi.Images;
 using DownKyi.Services;
 using DownKyi.Services.Account;
@@ -203,7 +203,7 @@ internal class ViewIndexViewModel : ViewModelBase
         }
 
         _logger.LogDebugMessage("Processing search input.");
-        InputText = Regex.Replace(InputText, @"[【]*[^【]*[^】]*[】 ]", "");
+        InputText = VideoInputResolver.Normalize(InputText);
         _searchService.BiliInput(InputText, AppRoute.Index);
 
         InputText = string.Empty;
@@ -213,28 +213,21 @@ internal class ViewIndexViewModel : ViewModelBase
     /// <summary>
     /// 更新用户登录信息
     /// </summary>
-    private async Task UpdateUserInfoAsync(bool isBackground = false)
+    private async Task UpdateUserInfoAsync()
     {
         var cancellationToken = ReplaceCancellationSource(ref _userRefreshCancellation);
-        var updateUi = !isBackground || !LoginPanelVisibility;
         try
         {
-            if (updateUi)
-            {
-                LoginPanelVisibility = false;
-            }
-
             var snapshot = await _userSessionCoordinator
                 .RefreshAsync(cancellationToken)
                 .ConfigureAwait(true);
             cancellationToken.ThrowIfCancellationRequested();
-            if (_userRefreshCancellation?.Token != cancellationToken || !updateUi)
+            if (_userRefreshCancellation?.Token != cancellationToken)
             {
                 return;
             }
 
-            // 检查本地是否存在login文件，没有则说明未登录
-            if (!snapshot.HasLoginFile)
+            if (snapshot.UserInfo?.IsLogin != true)
             {
                 LoginPanelVisibility = true;
                 Header = "avares://DownKyi.Desktop/Resources/default_header.jpg";
@@ -242,19 +235,9 @@ internal class ViewIndexViewModel : ViewModelBase
                 return;
             }
 
+            Header = snapshot.UserInfo.Face ?? "avares://DownKyi.Desktop/Resources/default_header.jpg";
+            UserName = snapshot.UserInfo.Name;
             LoginPanelVisibility = true;
-
-            if (snapshot.UserInfo != null)
-            {
-                Header = snapshot.UserInfo.Face ?? "avares://DownKyi.Desktop/Resources/default_header.jpg";
-
-                UserName = snapshot.UserInfo.Name;
-            }
-            else
-            {
-                Header = "avares://DownKyi.Desktop/Resources/default_header.jpg";
-                UserName = null;
-            }
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
@@ -266,7 +249,7 @@ internal class ViewIndexViewModel : ViewModelBase
             or Newtonsoft.Json.JsonException)
         {
             _logger.LogErrorMessage("User session refresh failed.", e);
-            if (updateUi && _userRefreshCancellation?.Token == cancellationToken)
+            if (_userRefreshCancellation?.Token == cancellationToken)
             {
                 LoginPanelVisibility = true;
             }
@@ -287,8 +270,7 @@ internal class ViewIndexViewModel : ViewModelBase
         switch (parameter)
         {
             case null:
-                // 其他情况只更新设置的用户信息，不更新UI
-                RunFireAndForget(UpdateUserInfoAsync(true), nameof(UpdateUserInfoAsync), _logger);
+                RunFireAndForget(UpdateUserInfoAsync(), nameof(UpdateUserInfoAsync), _logger);
                 return;
             // 启动
             case "start":
@@ -299,8 +281,7 @@ internal class ViewIndexViewModel : ViewModelBase
                 RunFireAndForget(UpdateUserInfoAsync(), nameof(UpdateUserInfoAsync), _logger);
                 break;
             default:
-                // 其他情况只更新设置的用户信息，不更新UI
-                RunFireAndForget(UpdateUserInfoAsync(true), nameof(UpdateUserInfoAsync), _logger);
+                RunFireAndForget(UpdateUserInfoAsync(), nameof(UpdateUserInfoAsync), _logger);
                 break;
         }
     }

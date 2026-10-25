@@ -391,6 +391,8 @@ internal sealed record WatchRoomMedia
 
 internal sealed record WatchRoomChatMessage
 {
+    [System.Text.Json.Serialization.JsonIgnore]
+    public bool IsSelf { get; init; }
     public string MemberId { get; init; } = string.Empty;
     public string Role { get; init; } = string.Empty;
     public string Nickname { get; init; } = string.Empty;

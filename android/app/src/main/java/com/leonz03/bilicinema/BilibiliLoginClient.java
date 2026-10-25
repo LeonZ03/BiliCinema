@@ -27,9 +27,18 @@ final class BilibiliLoginClient implements AutoCloseable {
     enum ScanState { WAITING, SCANNED, EXPIRED, VERIFIED }
     static final class Account {
         private final long id;
-        private Account(long id) { this.id = id; }
+        private final HttpUrl avatar;
+        private final String nickname;
+        private Account(long id) { this(id, null, ""); }
+        private Account(long id, HttpUrl avatar) { this(id, avatar, ""); }
+        private Account(long id, HttpUrl avatar, String nickname) {
+            this.id = id; this.avatar = avatar; this.nickname = nickname == null ? "" : nickname.trim();
+        }
         boolean loggedIn() { return id > 0; }
         boolean sameAs(Account other) { return other != null && loggedIn() && id == other.id; }
+        String uid() { return loggedIn() ? Long.toString(id) : ""; }
+        String nickname() { return nickname; }
+        boolean hasAvatar() { return avatar != null; }
     }
     static final class Challenge {
         final String address;
@@ -49,9 +58,11 @@ final class BilibiliLoginClient implements AutoCloseable {
         Failure(String safeMessage) { super(safeMessage); }
     }
     private static final class Reply {
-        final String body, location;
+        final byte[] body;
+        final String location;
         final int status;
-        Reply(String body, String location, int status) { this.body = body; this.location = location; this.status = status; }
+        Reply(byte[] body, String location, int status) { this.body = body; this.location = location; this.status = status; }
+        String text() { return new String(body, StandardCharsets.UTF_8); }
     }
     private final Object gate = new Object();
     private final Call.Factory calls;
@@ -111,7 +122,7 @@ final class BilibiliLoginClient implements AutoCloseable {
         Reply reply = fetch(HttpUrl.get(NAV), false, cookie, true);
         if (reply.status < 200 || reply.status >= 300) throw new Failure("暂时无法验证登录，请检查网络后重试");
         try {
-            JSONObject envelope = new JSONObject(reply.body);
+            JSONObject envelope = new JSONObject(reply.text());
             int code = envelope.optInt("code", -1);
             if (code == -101) return new Account(0);
             JSONObject data = envelope.optJSONObject("data");
@@ -119,9 +130,26 @@ final class BilibiliLoginClient implements AutoCloseable {
             if (!data.optBoolean("isLogin", false)) return new Account(0);
             long id = data.optLong("mid", 0);
             if (id <= 0) throw new Failure("登录状态响应无法确认，请稍后重试");
-            return new Account(id);
+            return new Account(id, avatarUrl(data.optString("face")), data.optString("uname"));
         } catch (Failure failure) { throw failure; }
         catch (Exception invalid) { throw new Failure("登录状态响应无法确认，请稍后重试"); }
+    }
+
+    /** Avatar identity comes only from verified NAV; never send the API session to the image CDN. */
+    byte[] loadAvatar(Account account) throws Failure {
+        if (account == null || !account.loggedIn() || account.avatar == null) throw new Failure("暂无头像");
+        Reply reply = fetch(account.avatar, false, null, true);
+        if (reply.status != 200 || reply.body.length == 0) throw new Failure("头像暂未加载，可重新检查");
+        return reply.body;
+    }
+
+    private static HttpUrl avatarUrl(String address) {
+        if (address.startsWith("//")) address = "https:" + address;
+        HttpUrl parsed = HttpUrl.parse(address);
+        if (parsed == null || (!parsed.scheme().equals("http") && !parsed.isHttps())
+                || (parsed.port() != 80 && parsed.port() != 443) || !parsed.username().isEmpty() || !parsed.password().isEmpty()
+                || !parsed.host().endsWith(".hdslb.com") || !parsed.encodedPath().startsWith("/bfs/")) return null;
+        return parsed.newBuilder().scheme("https").port(443).query(null).fragment(null).build();
     }
 
     private void callback(String address) throws Failure {
@@ -168,7 +196,7 @@ final class BilibiliLoginClient implements AutoCloseable {
     private static String cookieKey(Cookie cookie) { return cookie.name() + "|" + cookie.domain() + "|" + cookie.path(); }
     private JSONObject payload(Reply reply) throws Failure {
         try {
-            JSONObject envelope = new JSONObject(reply.body);
+            JSONObject envelope = new JSONObject(reply.text());
             JSONObject data = envelope.optJSONObject("data");
             if (reply.status < 200 || reply.status >= 300 || envelope.optInt("code", -1) != 0 || data == null)
                 throw new Failure("B站登录服务暂不可用，请稍后重试");
@@ -193,12 +221,12 @@ final class BilibiliLoginClient implements AutoCloseable {
                 if (collect) for (Cookie cookie : Cookie.parseAll(url, response.headers()))
                     cookies.put(cookieKey(cookie), cookie);
             }
-            String body = "";
+            byte[] body = new byte[0];
             if (readBody && response.body() != null) {
                 okio.BufferedSource source = response.body().source();
                 source.request(1_048_577);
                 if (source.getBuffer().size() > 1_048_576) throw new Failure("登录服务响应无法确认，请稍后重试");
-                body = source.readString(StandardCharsets.UTF_8);
+                body = source.readByteArray();
             }
             synchronized (gate) { checkOpen(); }
             return new Reply(body, response.header("Location"), response.code());

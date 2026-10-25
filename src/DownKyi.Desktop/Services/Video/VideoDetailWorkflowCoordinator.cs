@@ -1,9 +1,9 @@
 using System;
 using System.Collections.Generic;
-using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 using DownKyi.Application.Bilibili;
+using DownKyi.Application.Media;
 using DownKyi.Core.BiliApi.Sign;
 using DownKyi.Core.Settings;
 using DownKyi.Presentation;
@@ -99,7 +99,7 @@ internal sealed class VideoDetailWorkflowCoordinator : IVideoDetailWorkflowCoord
     public string SetInput(string requestedInput)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(requestedInput);
-        CurrentInput = Regex.Replace(requestedInput, @"[【]*[^【]*[^】]*[】 ]", string.Empty);
+        CurrentInput = VideoInputResolver.Normalize(requestedInput);
         return CurrentInput;
     }
 

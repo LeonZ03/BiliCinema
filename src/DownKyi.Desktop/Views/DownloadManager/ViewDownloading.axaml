@@ -1,4 +1,4 @@
-﻿<UserControl xmlns="https://github.com/avaloniaui"
+<UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              x:Class="DownKyi.Views.DownloadManager.ViewDownloading"
              xmlns:images="clr-namespace:DownKyi.Images"
@@ -15,7 +15,7 @@
                             Width="{Binding RelativeSource={RelativeSource FindAncestor, AncestorType={x:Type ListBox}}, Path=Bounds.Width}"
                             Height="86"
                             Padding="14,0"
-                            Background="{TemplateBinding Background}"
+                            Background="{TemplateBinding Background}" BorderThickness="0,0,0,1" BorderBrush="{DynamicResource BrushBorderSubtle}"
                             CornerRadius="{DynamicResource DownKyiRadiusSmall}">
                             <Grid ColumnDefinitions="52,1.05*,1.75*,92">
 
@@ -191,6 +191,7 @@
                                         Command="{Binding ElementName=DownloadingList,Path=((vmdm:ViewDownloadingViewModel)DataContext).ToggleDownloadingCommand}"
                                         CommandParameter="{Binding}"
                                         Theme="{StaticResource BtnStyle}"
+                                        AutomationProperties.Name="暂停、继续或重试下载"
                                         ToolTip.Tip="{Binding OperationTip}">
                                         <ContentControl Width="18" Height="18">
                                             <Path
@@ -213,6 +214,7 @@
                                         CommandParameter="{Binding}"
                                         Foreground="{DynamicResource BrushWarning}"
                                         Theme="{StaticResource BtnStyle}"
+                                        AutomationProperties.Name="删除下载任务"
                                         ToolTip.Tip="{DynamicResource DeleteDownload}">
                                         <ContentControl Width="18" Height="18">
                                             <Path
@@ -327,6 +329,8 @@
                                 MinWidth="104"
                                 Command="{Binding PauseAllDownloadingCommand}"
                                 FontSize="12"
+                                AutomationProperties.Name="暂停全部下载"
+                                ToolTip.Tip="暂停全部下载"
                                 Theme="{StaticResource BtnStyle}">
                                 <StackPanel Orientation="Horizontal" Spacing="8">
                                     <Path
@@ -345,6 +349,8 @@
                                 MinWidth="104"
                                 Command="{Binding ContinueAllDownloadingCommand}"
                                 FontSize="12"
+                                AutomationProperties.Name="继续全部下载"
+                                ToolTip.Tip="继续全部下载"
                                 Theme="{StaticResource BtnStyle}">
                                 <StackPanel Orientation="Horizontal" Spacing="8">
                                     <Path
@@ -373,6 +379,8 @@
                             Background="{DynamicResource BrushControlFill}"
                             Command="{Binding DeleteAllDownloadingCommand}"
                             FontSize="12"
+                            AutomationProperties.Name="删除全部下载任务"
+                            ToolTip.Tip="删除全部下载任务"
                             Foreground="{DynamicResource BrushWarning}"
                             Theme="{StaticResource BtnStyle}">
                             <StackPanel Orientation="Horizontal" Spacing="8">

@@ -59,6 +59,61 @@ public class PlaybackSourceParserTest {
         assertNull(source.audioUri);
         assertEquals(202, source.media().getLong("cid"));
     }
+    @Test public void qualityChoicesContainOnlyReturnedCompatibleTracksAndKeepIdentity() throws Exception {
+        JSONObject response = dash();
+        response.getJSONObject("data").put("accept_quality", new JSONArray().put(120).put(80).put(64))
+                .put("support_formats", new JSONArray().put(new JSONObject().put("quality", 80).put("new_description", "1080P 高清")));
+        response.getJSONObject("data").getJSONObject("dash").getJSONArray("video").put(track(120, "video/mp4", "hev1.1.6.L120", "4k-hevc"));
+        PlaybackSource lower = PlaybackSourceParser.parse(response, selected(false), 64);
+        assertEquals(64, lower.quality);
+        assertEquals(2, lower.qualities.size());
+        assertEquals("1080P 高清", lower.qualities.get(0).label);
+        assertEquals(80, lower.qualities.get(0).id);
+        assertTrue(lower.videoUri.getPath().contains("avc720"));
+        assertEquals(202, lower.media().getLong("cid"));
+        assertFalse(lower.media().has("quality"));
+        assertFalse(lower.media().toString().contains("opaque"));
+        try { lower.qualities.clear(); fail("Quality choices must be immutable"); }
+        catch (UnsupportedOperationException expected) { assertNotNull(expected); }
+    }
+    @Test public void unavailablePreferredQualityFallsBackToAvailableTrack() throws Exception {
+        assertEquals(80, PlaybackSourceParser.parse(dash(), selected(false), 120).quality);
+        assertEquals(64, PlaybackSourceParser.parse(dash(), selected(false), 74).quality);
+        assertEquals(64, PlaybackSourceParser.parse(dash(), selected(false), 16).quality);
+        assertEquals(80, PlaybackSourceParser.parse(dash(), selected(false), 0).quality);
+    }
+    @Test public void progressiveQualityGroupsSwitchOnlyCompleteSingleSegments() throws Exception {
+        JSONObject response = mp4();
+        JSONObject data = response.getJSONObject("data").put("quality", 32);
+        data.put("durls", new JSONArray()
+                .put(new JSONObject().put("quality", 80).put("durl", new JSONArray().put(new JSONObject()
+                        .put("url", "https://media.example.test/1080.mp4").put("length", 120000))))
+                .put(new JSONObject().put("quality", 32).put("durl", data.getJSONArray("durl"))));
+        PlaybackSource high = PlaybackSourceParser.parse(response, selected(false), 80);
+        assertEquals(80, high.quality);
+        assertEquals("/1080.mp4", high.videoUri.getPath());
+        assertEquals(2, high.qualities.size());
+        PlaybackSource low = PlaybackSourceParser.parse(response, selected(false), 32);
+        assertEquals(32, low.quality);
+        assertEquals("/video.mp4", low.videoUri.getPath());
+    }
+    @Test public void pgcPreviewTakesPrecedenceOverDrmAndNeverClaimsFullMovie() throws Exception {
+        JSONObject data = mp4().getJSONObject("data").put("is_preview", 1).put("is_drm", true).put("timelength", 8444052);
+        data.getJSONArray("durl").getJSONObject(0).put("length", 360360);
+        JSONObject response = new JSONObject().put("code", 0).put("result", new JSONObject()
+                .put("play_check", new JSONObject().put("play_detail", "PLAY_PREVIEW")).put("video_info", data));
+        failure(response, true, PlaybackFailure.Reason.PERMISSION_DENIED);
+        data.put("is_preview", 0);
+        response.getJSONObject("result").remove("play_check");
+        assertEquals(PlaybackSource.Kind.OFFICIAL, PlaybackSourceParser.parse(response, selected(true)).kind);
+    }
+    @Test public void emptyProtectionMetadataDoesNotClaimDrmButExplicitProtectionDoes() throws Exception {
+        JSONObject response = dash();
+        response.getJSONObject("data").put("drm_info", new JSONObject()).put("content_protection", new JSONArray());
+        assertNotNull(PlaybackSourceParser.parse(response, selected(false)));
+        response.getJSONObject("data").put("drm_info", new JSONObject().put("type", "widevine"));
+        assertEquals(PlaybackSource.Kind.OFFICIAL, PlaybackSourceParser.parse(response, selected(false)).kind);
+    }
     @Test public void bangumiUsesNestedV2VideoInfo() throws Exception {
         JSONObject root = new JSONObject().put("code", 0).put("result", new JSONObject().put("video_info", dash().getJSONObject("data")));
         PlaybackSource source = PlaybackSourceParser.parse(root, selected(true));
@@ -94,14 +149,21 @@ public class PlaybackSourceParserTest {
         JSONObject root = dash(); root.getJSONObject("data").getJSONObject("dash").put("video", new JSONArray().put(track(80, "video/mp4", "av01.0.08M.08", "av1")));
         failure(root, false, PlaybackFailure.Reason.UNSUPPORTED);
     }
-    @Test public void previewAndDrmNeverBecomeFullPlayback() throws Exception {
+    @Test public void previewFailsButAuthorizedDrmUsesOfficialPlayer() throws Exception {
         JSONObject preview = dash(); preview.getJSONObject("data").put("is_preview", 1);
         failure(preview, false, PlaybackFailure.Reason.PERMISSION_DENIED);
         JSONObject drm = dash(); drm.getJSONObject("data").put("drm_tech_type", 2);
-        failure(drm, false, PlaybackFailure.Reason.UNSUPPORTED);
+        PlaybackSource official = PlaybackSourceParser.parse(drm, selected(false));
+        assertEquals(PlaybackSource.Kind.OFFICIAL, official.kind);
+        assertEquals("www.bilibili.com", official.videoUri.getHost());
+        assertTrue(official.headers.isEmpty());
         JSONObject pgc = new JSONObject().put("code", 0).put("result", new JSONObject().put("video_info", dash().getJSONObject("data"))
                 .put("play_check", new JSONObject().put("play_detail", "PLAY_PREVIEW")));
         failure(pgc, true, PlaybackFailure.Reason.PERMISSION_DENIED);
+    }
+    @Test public void drmCannotSkipExactIdentityValidation() throws Exception {
+        JSONObject root = dash(); root.getJSONObject("data").put("is_drm", true).put("cid", 999);
+        failure(root, false, PlaybackFailure.Reason.INVALID_MEDIA);
     }
     @Test public void multiSegmentAndFlvDoNotPlayOnlyTheFirstSegment() throws Exception {
         JSONObject root = mp4(); root.getJSONObject("data").getJSONArray("durl").put(new JSONObject().put("url", "https://media.example.test/second.mp4"));

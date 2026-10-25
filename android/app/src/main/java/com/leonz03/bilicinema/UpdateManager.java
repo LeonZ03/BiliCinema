@@ -11,7 +11,6 @@ import android.os.Build;
 import android.os.Handler;
 import android.os.Looper;
 import android.provider.Settings;
-import org.json.JSONArray;
 import org.json.JSONObject;
 import java.io.File;
 import java.io.FileOutputStream;
@@ -30,13 +29,14 @@ import okhttp3.Response;
 
 /** Release verification precedes the system installer; user data and signing identity stay intact. */
 final class UpdateManager {
-    private static final String RELEASE_API = "https://api.github.com/repos/LeonZ03/BiliCinema/releases/latest";
-    private static final long MAX_APK = 128L * 1024 * 1024;
+    private static final String ORIGIN = "https://bilicinema.leonz03.dpdns.org";
+    private static final String MANIFEST = ORIGIN + "/downloads/android-manifest.json";
+    private static final long MAX_APK = 25L * 1024 * 1024;
     private final Activity activity;
     private final Consumer<String> status;
     private final Handler main = new Handler(Looper.getMainLooper());
     private final ExecutorService work = Executors.newSingleThreadExecutor();
-    private final OkHttpClient http = new OkHttpClient.Builder().connectTimeout(15, TimeUnit.SECONDS).readTimeout(45, TimeUnit.SECONDS).callTimeout(5, TimeUnit.MINUTES).build();
+    private final OkHttpClient http = new OkHttpClient.Builder().followRedirects(false).followSslRedirects(false).connectTimeout(15, TimeUnit.SECONDS).readTimeout(45, TimeUnit.SECONDS).callTimeout(5, TimeUnit.MINUTES).build();
     private final HttpResourceLifecycle network = new HttpResourceLifecycle(http);
     private final UpdateJournal journal;
     private volatile boolean closed;
@@ -73,24 +73,25 @@ final class UpdateManager {
         if (explicit) status.accept("正在检查新版本…");
         work.execute(() -> {
             try {
-                JSONObject release = new JSONObject(readText(RELEASE_API, 2 * 1024 * 1024));
-                String tag = release.getString("tag_name").replaceFirst("^bilicinema-v", "");
+                JSONObject release = new JSONObject(readText(MANIFEST, 65536));
+                String tag = release.getString("version");
+                String expectedName = "BiliCinema-" + tag + "-android-universal.apk";
+                if (!tag.matches("[0-9]{1,3}\\.[0-9]{1,3}\\.[0-9]{1,3}")
+                    || !expectedName.equals(release.getString("filename"))
+                    || !activity.getPackageName().equals(release.getString("applicationId"))
+                    || !release.getString("sha256").matches("[a-f0-9]{64}")
+                    || release.getLong("bytes") < 1000 || release.getLong("bytes") > MAX_APK
+                    || release.getLong("versionCode") != versionCode(tag)) throw new IOException("invalid update manifest");
                 if (!newer(tag, BuildConfig.VERSION_NAME)) {
                     if (explicit) showStatus("当前已是最新版本 " + BuildConfig.VERSION_NAME);
                     return;
                 }
-                String expectedName = "BiliCinema-" + tag + "-android-universal.apk";
-                String apk = "", sums = "";
-                JSONArray assets = release.getJSONArray("assets");
-                for (int i = 0; i < assets.length(); i++) {
-                    JSONObject asset = assets.getJSONObject(i);
-                    if (expectedName.equals(asset.optString("name"))) apk = asset.getString("browser_download_url");
-                    if ("SHA256SUMS.txt".equals(asset.optString("name"))) sums = asset.getString("browser_download_url");
-                }
-                if (apk.isEmpty() || sums.isEmpty()) { if (explicit) showStatus("发现新版本，但安卓更新包尚未发布，请稍后重试"); return; }
-                String apkUrl = approvedAsset(apk), sumUrl = approvedAsset(sums);
+                if (release.getLong("versionCode") <= installedVersionCode()) throw new IOException("version code does not increase");
+                String apkUrl = ORIGIN + "/downloads/" + expectedName;
+                String hash = release.getString("sha256");
+                long bytes = release.getLong("bytes");
                 main.post(() -> {
-                    if (!closed && !activity.isFinishing()) new AlertDialog.Builder(activity).setTitle("发现新版本 " + tag).setMessage("下载更新后将打开系统安装界面。安装会保留本机登录和房间记录。").setNegativeButton("稍后", null).setPositiveButton("下载更新", (d, w) -> download(apkUrl, sumUrl, expectedName, tag)).show();
+                    if (!closed && !activity.isFinishing()) new AlertDialog.Builder(activity).setTitle("发现新版本 " + tag).setMessage("下载更新后将打开系统安装界面。安装会保留本机登录和房间记录。").setNegativeButton("稍后", null).setPositiveButton("下载更新", (d, w) -> download(apkUrl, hash, bytes, expectedName, tag)).show();
                 });
             } catch (Exception error) { if (explicit) showStatus("更新检查失败，请检查网络后重试"); }
             finally { main.post(() -> busy = false); }
@@ -103,39 +104,36 @@ final class UpdateManager {
         catch (RuntimeException error) { return false; }
         return false;
     }
-    static String checksum(String sums, String filename) throws IOException {
-        for (String line : sums.split("\\r?\\n")) {
-            String[] parts = line.trim().split("\\s+", 2);
-            if (parts.length == 2 && parts[1].replaceFirst("^\\*", "").equals(filename) && parts[0].matches("[0-9A-Fa-f]{64}")) return parts[0].toLowerCase(java.util.Locale.ROOT);
-        }
-        throw new IOException("checksum missing");
+    private static long versionCode(String version) {
+        String[] parts = version.split("\\.");
+        return Long.parseLong(parts[0]) * 1000000 + Long.parseLong(parts[1]) * 1000 + Long.parseLong(parts[2]);
     }
-    private static String approvedAsset(String value) throws IOException {
-        Uri uri = Uri.parse(value);
-        if (!"https".equals(uri.getScheme()) || !"github.com".equals(uri.getHost()) || uri.getPath() == null || !uri.getPath().startsWith("/LeonZ03/BiliCinema/releases/download/")) throw new IOException("invalid release asset");
-        return value;
+    @SuppressWarnings("deprecation")
+    private long installedVersionCode() throws Exception {
+        PackageInfo info = activity.getPackageManager().getPackageInfo(activity.getPackageName(), 0);
+        return Build.VERSION.SDK_INT >= 28 ? info.getLongVersionCode() : info.versionCode;
     }
-    private void download(String apkUrl, String sumUrl, String name, String targetVersion) {
+    private void download(String apkUrl, String expected, long expectedBytes, String name, String targetVersion) {
         if (busy || closed) return; busy = true; status.accept("正在下载并校验更新包…");
         work.execute(() -> {
             boolean owned = false, committed = false;
             try {
-                String expected = checksum(readText(sumUrl, 256 * 1024), name);
                 journal.begin(name, expected, targetVersion); owned = true;
                 File partial = journal.partial();
                 MessageDigest sha = MessageDigest.getInstance("SHA-256");
                 try (Response response = http.newCall(request(apkUrl)).execute()) {
                     if (!response.isSuccessful() || response.body() == null) throw new IOException("download failed");
-                    if (response.body().contentLength() > MAX_APK) throw new IOException("package too large");
+                    if (!response.request().url().toString().equals(apkUrl) || response.body().contentLength() > MAX_APK) throw new IOException("invalid package response");
                     try (InputStream source = response.body().byteStream(); FileOutputStream target = new FileOutputStream(partial)) {
                         byte[] buffer = new byte[32768]; int count; long size = 0;
                         while ((count = source.read(buffer)) != -1) { if (closed || Thread.currentThread().isInterrupted()) throw new IOException("cancelled"); size += count; if (size > MAX_APK) throw new IOException("package too large"); sha.update(buffer, 0, count); target.write(buffer, 0, count); }
+                        if (size != expectedBytes) throw new IOException("package size mismatch");
                         target.getFD().sync();
                     }
                 }
                 StringBuilder actual = new StringBuilder(); for (byte value : sha.digest()) actual.append(String.format(java.util.Locale.ROOT, "%02x", value & 255));
                 if (!MessageDigest.isEqual(expected.getBytes(StandardCharsets.US_ASCII), actual.toString().getBytes(StandardCharsets.US_ASCII))) throw new IOException("checksum mismatch");
-                validateIdentity(partial);
+                validateIdentity(partial, targetVersion);
                 File apk = journal.commitVerified(); committed = true;
                 main.post(() -> { pendingInstall = apk; permissionRequested = false; installPending(); });
             } catch (Exception error) { showStatus("更新包下载或校验失败，未执行安装；请检查网络后重试"); }
@@ -147,10 +145,16 @@ final class UpdateManager {
     }
     @SuppressWarnings("deprecation")
     private void validateIdentity(File apk) throws Exception {
+        validateIdentity(apk, null);
+    }
+    @SuppressWarnings("deprecation")
+    private void validateIdentity(File apk, String expectedVersion) throws Exception {
         PackageManager pm = activity.getPackageManager();
         int flags = Build.VERSION.SDK_INT >= 28 ? PackageManager.GET_SIGNING_CERTIFICATES : PackageManager.GET_SIGNATURES;
         PackageInfo incoming = pm.getPackageArchiveInfo(apk.getAbsolutePath(), flags), current = pm.getPackageInfo(activity.getPackageName(), flags);
-        if (incoming == null || !activity.getPackageName().equals(incoming.packageName) || !newer(incoming.versionName, current.versionName)) throw new IOException("package identity mismatch");
+        if (incoming == null || !activity.getPackageName().equals(incoming.packageName) || !newer(incoming.versionName, current.versionName)
+            || (expectedVersion != null && !expectedVersion.equals(incoming.versionName))
+            || (Build.VERSION.SDK_INT >= 28 ? incoming.getLongVersionCode() <= current.getLongVersionCode() : incoming.versionCode <= current.versionCode)) throw new IOException("package identity mismatch");
         Signature[] incomingSigners = Build.VERSION.SDK_INT >= 28 ? incoming.signingInfo.getApkContentsSigners() : incoming.signatures;
         Signature[] installedSigners = Build.VERSION.SDK_INT >= 28 ? current.signingInfo.getApkContentsSigners() : current.signatures;
         if (incomingSigners == null || installedSigners == null || incomingSigners.length != installedSigners.length) throw new IOException("signing identity mismatch");
@@ -182,10 +186,10 @@ final class UpdateManager {
         } catch (RuntimeException error) { status.accept("无法打开安装界面，请在系统设置中允许安装应用后重试"); }
     }
     private void cancelPending() { pendingInstall = null; work.execute(() -> { try { journal.cancel(); showStatus("已删除下载的更新包"); } catch (Exception error) { showStatus("更新包清理未完成，记录已保留以便重试"); } }); }
-    private Request request(String url) { return new Request.Builder().url(url).header("Accept", "application/vnd.github+json").header("User-Agent", "BiliCinema-Android/" + BuildConfig.VERSION_NAME).build(); }
+    private Request request(String url) { return new Request.Builder().url(url).header("Accept", "application/octet-stream").header("User-Agent", "BiliCinema-Android/" + BuildConfig.VERSION_NAME).build(); }
     private String readText(String url, int limit) throws IOException {
         try (Response response = http.newCall(request(url)).execute()) {
-            if (!response.isSuccessful() || response.body() == null) throw new IOException("request failed");
+            if (!response.isSuccessful() || response.body() == null || !response.request().url().toString().equals(url)) throw new IOException("request failed");
             try (InputStream input = response.body().byteStream(); java.io.ByteArrayOutputStream result = new java.io.ByteArrayOutputStream()) {
                 byte[] buffer = new byte[8192]; int count; while ((count = input.read(buffer)) != -1) { if (result.size() + count > limit) throw new IOException("response too large"); result.write(buffer, 0, count); }
                 return result.toString(StandardCharsets.UTF_8.name());

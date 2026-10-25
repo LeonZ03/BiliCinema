@@ -10,6 +10,7 @@ import androidx.media3.common.C;
 import androidx.media3.common.MediaItem;
 import androidx.media3.common.PlaybackException;
 import androidx.media3.common.Player;
+import androidx.media3.common.VideoSize;
 import androidx.media3.common.util.UnstableApi;
 import androidx.media3.datasource.HttpDataSource;
 import androidx.media3.datasource.okhttp.OkHttpDataSource;
@@ -25,15 +26,7 @@ import okhttp3.OkHttpClient;
 
 /** Main-thread Media3 owner. Only its explicit local control methods emit user intent. */
 @UnstableApi
-final class NativePlaybackAdapter implements AutoCloseable {
-    enum State { IDLE, BUFFERING, READY, ENDED }
-    interface Listener {
-        void onState(long generation, State state);
-        void onProgress(long generation, double position, double duration, boolean actuallyPlaying);
-        void onUserIntent(long generation, double position, double rate, boolean playing);
-        void onError(long generation, PlaybackFailure failure);
-    }
-
+final class NativePlaybackAdapter implements PlaybackAdapter {
     private final Context context;
     private final Listener listener;
     private final PlayerView view;
@@ -77,9 +70,9 @@ final class NativePlaybackAdapter implements AutoCloseable {
         view.setContentDescription("影片画面");
     }
 
-    View view() { return view; }
+    @Override public View view() { return view; }
 
-    void prepare(PlaybackSource next, long nextGeneration) {
+    @Override public void prepare(PlaybackSource next, long nextGeneration) {
         requireMain();
         if (closed) return;
         releasePlayer();
@@ -99,6 +92,12 @@ final class NativePlaybackAdapter implements AutoCloseable {
         current.setHandleAudioBecomingNoisy(true);
         current.addListener(new Player.Listener() {
             private boolean active() { return !closed && player == current && generation == preparedGeneration; }
+            @Override public void onVideoSizeChanged(VideoSize size) {
+                if (!active() || failed || size.width <= 0 || size.height <= 0) return;
+                float ratio = size.width * size.pixelWidthHeightRatio / size.height;
+                if (size.unappliedRotationDegrees == 90 || size.unappliedRotationDegrees == 270) ratio = 1 / ratio;
+                listener.onVideoAspectRatio(preparedGeneration, ratio);
+            }
             @Override public void onPlaybackStateChanged(int state) {
                 if (!active() || failed) return;
                 if (state == Player.STATE_ENDED) intent.ended();
@@ -151,10 +150,20 @@ final class NativePlaybackAdapter implements AutoCloseable {
     }
 
     /** Room state application deliberately never emits onUserIntent. */
-    void apply(double position, double rate, boolean playing, boolean force) {
+    @Override public void requestPlayback(boolean playing) {
         requireMain();
         if (closed || player == null || failed) return;
         intent.remote(playing);
+        enforcePlayerIntent();
+        updateSuppression();
+    }
+
+    @Override public void apply(double position, double rate, boolean playing, boolean force) {
+        requireMain();
+        if (closed || player == null || failed) return;
+        // Seek callbacks can run synchronously. Apply intent first so those callbacks do not
+        // mistake our still-paused player for an external focus loss.
+        requestPlayback(playing);
         double target = boundedPosition(position);
         if (needsSeek(player.getPlaybackState(), positionSeconds(), target, force)) player.seekTo((long) (target * 1000));
         player.setPlaybackSpeed((float) PlaybackIntentState.boundedRate(rate));
@@ -162,7 +171,7 @@ final class NativePlaybackAdapter implements AutoCloseable {
         updateSuppression();
     }
 
-    void play() {
+    @Override public void play() {
         requireMain();
         if (!usable()) return;
         if (player.getPlaybackState() == Player.STATE_ENDED) player.seekTo(0);
@@ -173,7 +182,7 @@ final class NativePlaybackAdapter implements AutoCloseable {
         updateSuppression();
     }
 
-    void pause() {
+    @Override public void pause() {
         requireMain();
         if (!usable()) return;
         boolean recovered = intent.localPlayback(false);
@@ -183,21 +192,21 @@ final class NativePlaybackAdapter implements AutoCloseable {
         updateSuppression();
     }
 
-    void seek(double position) {
+    @Override public void seek(double position) {
         requireMain();
         if (!usable()) return;
         player.seekTo((long) (boundedPosition(position) * 1000));
         publishIntent();
     }
 
-    void setRate(double rate) {
+    @Override public void setRate(double rate) {
         requireMain();
         if (!usable()) return;
         player.setPlaybackSpeed((float) PlaybackIntentState.boundedRate(rate));
         publishIntent();
     }
 
-    void setForeground(boolean active) {
+    @Override public void setForeground(boolean active) {
         requireMain();
         if (closed) return;
         intent.setForeground(active);
@@ -285,11 +294,11 @@ final class NativePlaybackAdapter implements AutoCloseable {
         for (Throwable cause = error; cause != null; cause = cause.getCause()) {
             if (cause instanceof HttpDataSource.InvalidResponseCodeException) {
                 int status = ((HttpDataSource.InvalidResponseCodeException) cause).responseCode;
-                if (status == 401 || status == 403 || status == 404 || status == 410) return new PlaybackFailure(PlaybackFailure.Reason.EXPIRED_SOURCE);
+                return PlaybackFailure.fromMediaHttpStatus(status);
             }
         }
         if (error.errorCode >= PlaybackException.ERROR_CODE_DRM_UNSPECIFIED
-                && error.errorCode <= PlaybackException.ERROR_CODE_DRM_LICENSE_EXPIRED) return new PlaybackFailure(PlaybackFailure.Reason.UNSUPPORTED);
+                && error.errorCode <= PlaybackException.ERROR_CODE_DRM_LICENSE_EXPIRED) return new PlaybackFailure(PlaybackFailure.Reason.DRM_PROTECTED);
         if (error.errorCode >= PlaybackException.ERROR_CODE_DECODER_INIT_FAILED
                 && error.errorCode <= PlaybackException.ERROR_CODE_AUDIO_TRACK_WRITE_FAILED) return new PlaybackFailure(PlaybackFailure.Reason.UNSUPPORTED);
         if (error.errorCode == PlaybackException.ERROR_CODE_PARSING_CONTAINER_MALFORMED

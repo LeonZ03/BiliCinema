@@ -1,199 +1,415 @@
-<Window xmlns="https://github.com/avaloniaui"
-        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        xmlns:vm="clr-namespace:DownKyi.ViewModels"
-        x:Class="DownKyi.Views.WatchWindow"
-        x:DataType="vm:WatchWindowViewModel"
-        Title="BiliCinema" Width="1180" Height="860" MinWidth="860" MinHeight="620"
-        Background="{DynamicResource BrushSurfaceBase}" Icon="/Resources/favicon.ico">
+<Window xmlns="https://github.com/avaloniaui" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:vm="clr-namespace:DownKyi.ViewModels" xmlns:watch="clr-namespace:DownKyi.Services.Watch" xmlns:images="clr-namespace:DownKyi.CustomControl.AsyncImageLoader" x:Class="DownKyi.Views.WatchWindow" x:DataType="vm:WatchWindowViewModel" Title="BiliCinema" Width="1180" Height="780" MinWidth="860" MinHeight="620" Background="{DynamicResource BrushSurfaceBase}" Icon="/Resources/favicon.ico" FontFamily="{StaticResource MicrosoftYaHeiFont}">
+    <Window.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceInclude Source="/Resources/CinemaIcons.axaml" />
+            </ResourceDictionary.MergedDictionaries>
+            <SolidColorBrush x:Key="CinemaCanvas">#0F0F0F</SolidColorBrush>
+            <SolidColorBrush x:Key="CinemaPanel">#171717</SolidColorBrush>
+            <SolidColorBrush x:Key="CinemaInk">#F1F1F1</SolidColorBrush>
+            <SolidColorBrush x:Key="CinemaMuted">#B0B0B0</SolidColorBrush>
+            <SolidColorBrush x:Key="CinemaLine">#333333</SolidColorBrush>
+            <SolidColorBrush x:Key="CinemaAccent">#3EA6FF</SolidColorBrush>
+            <FontFamily x:Key="MicrosoftYaHeiFont">Microsoft YaHei UI,Segoe UI</FontFamily>
+        </ResourceDictionary>
+    </Window.Resources>
     <Window.Styles>
-        <Style Selector="Button.nav">
-            <Setter Property="HorizontalContentAlignment" Value="Left" />
-            <Setter Property="Padding" Value="14,11" />
+        <Style Selector="Button.cinema">
+            <Setter Property="MinHeight" Value="42" />
+            <Setter Property="Padding" Value="16,10" />
+            <Setter Property="CornerRadius" Value="8" />
             <Setter Property="FontSize" Value="15" />
+            <Setter Property="FontFamily" Value="{StaticResource MicrosoftYaHeiFont}" />
+            <Setter Property="HorizontalContentAlignment" Value="Center" />
+            <Setter Property="VerticalContentAlignment" Value="Center" />
+            <Setter Property="Foreground" Value="{DynamicResource BrushTextPrimary}" />
             <Setter Property="Background" Value="Transparent" />
             <Setter Property="BorderThickness" Value="0" />
         </Style>
-        <Style Selector="Button.nav.selected">
-            <Setter Property="Background" Value="{DynamicResource BrushSurfaceSunken}" />
-            <Setter Property="BorderBrush" Value="{DynamicResource BrushPrimary}" />
-            <Setter Property="BorderThickness" Value="3,0,0,0" />
-            <Setter Property="FontWeight" Value="SemiBold" />
+        <Style Selector="Button.cinema:pointerover /template/ ContentPresenter">
+            <Setter Property="Background" Value="{DynamicResource BrushControlFillHover}" />
+        </Style>
+        <Style Selector="Button.cinema.primary">
+            <Setter Property="Background" Value="{DynamicResource BrushPrimary}" />
+            <Setter Property="Foreground" Value="White" />
+        </Style>
+        <Style Selector="Button.cinema.primary:pointerover /template/ ContentPresenter">
+            <Setter Property="Background" Value="#0454BC" />
+            <Setter Property="Foreground" Value="White" />
+        </Style>
+        <Style Selector="Button.cinema.outline">
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="BorderBrush" Value="{DynamicResource BrushBorderSubtle}" />
+        </Style>
+        <Style Selector="Button.cinema.icon">
+            <Setter Property="Width" Value="42" />
+            <Setter Property="Height" Value="42" />
+            <Setter Property="Padding" Value="10" />
+        </Style>
+        <Style Selector="Button.cinema.rail">
+            <Setter Property="Width" Value="48" />
+            <Setter Property="Height" Value="48" />
+        </Style>
+        <Style Selector="Button.cinema.selected">
+            <Setter Property="Background" Value="{DynamicResource BrushPrimaryTranslucent3}" />
+            <Setter Property="Foreground" Value="{DynamicResource BrushPrimary}" />
+        </Style>
+        <Style Selector="Button.cinema.viewer">
+            <Setter Property="Foreground" Value="{StaticResource CinemaInk}" />
+        </Style>
+        <Style Selector="Button.cinema.viewer:pointerover /template/ ContentPresenter">
+            <Setter Property="Background" Value="{StaticResource CinemaLine}" />
+            <Setter Property="Foreground" Value="{StaticResource CinemaInk}" />
+        </Style>
+        <Style Selector="Path.glyph">
+            <Setter Property="Width" Value="24" />
+            <Setter Property="Height" Value="24" />
+            <Setter Property="Stretch" Value="None" />
+            <Setter Property="Stroke" Value="{Binding Foreground, RelativeSource={RelativeSource FindAncestor, AncestorType=Button}}" />
+            <Setter Property="StrokeThickness" Value="1.8" />
+            <Setter Property="StrokeLineCap" Value="Round" />
+            <Setter Property="StrokeJoin" Value="Round" />
+        </Style>
+        <Style Selector="Path.glyphFilled">
+            <Setter Property="Stroke" Value="{x:Null}" />
+            <Setter Property="Fill" Value="{Binding Foreground, RelativeSource={RelativeSource FindAncestor, AncestorType=Button}}" />
+        </Style>
+        <Style Selector="Button.cinema TextBlock">
+            <Setter Property="VerticalAlignment" Value="Center" />
+            <Setter Property="FontWeight" Value="Medium" />
+        </Style>
+        <Style Selector="TextBlock">
+            <Setter Property="FontFamily" Value="{StaticResource MicrosoftYaHeiFont}" />
+        </Style>
+        <Style Selector="TextBox.cinema">
+            <Setter Property="MinHeight" Value="48" />
+            <Setter Property="CornerRadius" Value="8" />
+            <Setter Property="Padding" Value="14,11" />
+            <Setter Property="FontSize" Value="16" />
+            <Setter Property="FontFamily" Value="{StaticResource MicrosoftYaHeiFont}" />
+            <Setter Property="Background" Value="{DynamicResource BrushSurfaceBase}" />
+            <Setter Property="VerticalContentAlignment" Value="Center" />
+        </Style>
+        <Style Selector="TextBox.cinemaChat /template/ Border#PART_BorderElement">
+            <Setter Property="Background" Value="{StaticResource CinemaPanel}" />
+            <Setter Property="BorderBrush" Value="{StaticResource CinemaLine}" />
+        </Style>
+        <Style Selector="TextBox.cinemaChat:pointerover /template/ Border#PART_BorderElement">
+            <Setter Property="Background" Value="{StaticResource CinemaPanel}" />
+            <Setter Property="BorderBrush" Value="{StaticResource CinemaMuted}" />
+        </Style>
+        <Style Selector="TextBox.cinemaChat:focus /template/ Border#PART_BorderElement">
+            <Setter Property="Background" Value="{StaticResource CinemaPanel}" />
+            <Setter Property="BorderBrush" Value="{StaticResource CinemaAccent}" />
+        </Style>
+        <Style Selector="TextBox.cinemaChat /template/ TextBlock">
+            <Setter Property="Foreground" Value="{StaticResource CinemaMuted}" />
+        </Style>
+        <Style Selector="FlyoutPresenter.cinemaPopup">
+            <Setter Property="Background" Value="{StaticResource CinemaPanel}" />
+            <Setter Property="Foreground" Value="{StaticResource CinemaInk}" />
+            <Setter Property="BorderBrush" Value="{StaticResource CinemaLine}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CornerRadius" Value="12" />
+            <Setter Property="Padding" Value="14" />
+            <Setter Property="MaxHeight" Value="470" />
+        </Style>
+        <Style Selector="FlyoutPresenter.cinemaPopup TextBlock">
+            <Setter Property="Foreground" Value="{StaticResource CinemaInk}" />
+        </Style>
+        <Style Selector="FlyoutPresenter.cinemaPopup TextBox">
+            <Setter Property="Foreground" Value="{StaticResource CinemaInk}" />
+            <Setter Property="CaretBrush" Value="{StaticResource CinemaInk}" />
+            <Setter Property="SelectionBrush" Value="#345570" />
+            <Setter Property="Background" Value="{StaticResource CinemaPanel}" />
+            <Setter Property="BorderBrush" Value="{StaticResource CinemaLine}" />
+        </Style>
+        <Style Selector="Button.cinema.danger">
+            <Setter Property="Foreground" Value="#FF8C8C" />
+        </Style>
+        <Style Selector="StackPanel.chatMessage TextBlock.chatName">
+            <Setter Property="HorizontalAlignment" Value="Left" />
+        </Style>
+        <Style Selector="StackPanel.chatMessage Border.chatBubble">
+            <Setter Property="HorizontalAlignment" Value="Left" />
+            <Setter Property="Background" Value="{StaticResource CinemaPanel}" />
+        </Style>
+        <Style Selector="StackPanel.chatMessage.self TextBlock.chatName">
+            <Setter Property="HorizontalAlignment" Value="Right" />
+        </Style>
+        <Style Selector="StackPanel.chatMessage.self Border.chatBubble">
+            <Setter Property="HorizontalAlignment" Value="Right" />
+            <Setter Property="Background" Value="#20374B" />
         </Style>
     </Window.Styles>
     <Grid ColumnDefinitions="Auto,*">
-        <Border x:Name="Sidebar" Grid.Column="0" Width="200" Padding="16,24"
-                Background="{DynamicResource BrushSurfaceRaised}">
-            <DockPanel LastChildFill="True">
-                <StackPanel DockPanel.Dock="Top" Spacing="10">
-                    <StackPanel Orientation="Horizontal" Spacing="8" Margin="4,0,0,26">
-                        <Image Width="32" Height="32" Source="/Resources/bilicinema-mark.png" />
-                        <TextBlock Text="BiliCinema" FontSize="20" FontWeight="Bold"
-                                   VerticalAlignment="Center" Foreground="{DynamicResource BrushPrimary}" />
-                    </StackPanel>
-                    <ProgressBar IsVisible="{Binding IsPreparing}" IsIndeterminate="True" Height="4" />
-                    <Button Classes="nav" Classes.selected="{Binding ShowLogin}" Content="登录" Command="{Binding ShowLoginCommand}" />
-                    <Button Classes="nav" Classes.selected="{Binding ShowRoom}" Content="观影房间" Command="{Binding ShowRoomCommand}" />
-                    <Button Classes="nav" Classes.selected="{Binding ShowDownload}" Content="下载影片" Command="{Binding ShowDownloadCommand}" />
+        <Border x:Name="Sidebar" Width="72" Background="{DynamicResource BrushSurfaceSunken}" BorderBrush="{DynamicResource BrushBorderSubtle}" BorderThickness="0,0,1,0" IsVisible="{Binding ShowSidebar}">
+            <Grid RowDefinitions="Auto,*,Auto" Margin="12,20">
+                <StackPanel Spacing="8">
+                    <Button Classes="cinema icon rail" ToolTip.Tip="观影首页" AutomationProperties.Name="观影首页" Classes.selected="{Binding ShowHome}" Command="{Binding ShowHomeCommand}">
+                        <Path Classes="glyph" Data="{StaticResource CinemaFilm}" />
+                    </Button>
+                    <Button Classes="cinema icon rail" ToolTip.Tip="下载" AutomationProperties.Name="下载" Classes.selected="{Binding ShowDownload}" Command="{Binding ShowDownloadCommand}">
+                        <Path Classes="glyph" Data="{StaticResource CinemaDownload}" />
+                    </Button>
                 </StackPanel>
-                <StackPanel VerticalAlignment="Bottom" Margin="7,0,0,0" Spacing="4">
-                    <TextBlock Text="与好友一起看 B 站" Foreground="{DynamicResource BrushTextSecondary}" FontSize="12" />
-                    <TextBlock Text="{Binding VersionDisplay}" Foreground="{DynamicResource BrushTextSecondary}" FontSize="11" />
-                </StackPanel>
-            </DockPanel>
-        </Border>
-
-        <Grid x:Name="WatchLayout" Grid.Column="1" Margin="22" RowDefinitions="Auto,Auto,*" RowSpacing="14">
-            <Border x:Name="RoomPlayerSurface" Grid.Row="0" Height="440" Background="Black"
-                    IsVisible="{Binding ShowRoom}"
-                    ClipToBounds="True" CornerRadius="{DynamicResource DownKyiRadiusMedium}">
-                <NativeWebView x:Name="RoomMovieWebView" Height="440"
-                               Opacity="{Binding PlayerOpacity}"
-                               IsHitTestVisible="{Binding PlayerReady}" />
-            </Border>
-            <Grid x:Name="PlaybackToolbar" Grid.Row="1"
-                  IsVisible="{Binding ShowPlayer}">
-                <TextBlock x:Name="PlaybackStatus" Text="{Binding Status}" FontSize="14"
-                           TextWrapping="Wrap" VerticalAlignment="Center"
-                           Foreground="{DynamicResource BrushPrimary}" />
-            </Grid>
-
-            <ScrollViewer x:Name="WatchDetails" Grid.Row="2" VerticalScrollBarVisibility="Auto"
-                          IsVisible="{Binding ShowPlayer}">
-                <StackPanel Spacing="14">
-                    <Border IsVisible="{Binding ShowRoom}" Padding="20"
-                            Background="{DynamicResource BrushSurfaceRaised}"
-                            CornerRadius="{DynamicResource DownKyiRadiusMedium}">
-                        <StackPanel Spacing="12">
-                            <Grid ColumnDefinitions="*,300" ColumnSpacing="16">
-                                <StackPanel Grid.Column="0" Spacing="10">
-                                    <Grid ColumnDefinitions="Auto,*" ColumnSpacing="12">
-                                        <TextBlock Text="观影房间" FontSize="24" FontWeight="SemiBold" />
-                                        <TextBlock Grid.Column="1" Text="{Binding RoomParticipantText}" FontSize="14"
-                                                   FontWeight="SemiBold" TextWrapping="Wrap" VerticalAlignment="Center"
-                                                   Foreground="{DynamicResource BrushPrimary}" />
-                                    </Grid>
-                                    <StackPanel Spacing="3">
-                                        <TextBlock Text="解析视频后将在上方播放。" TextWrapping="Wrap"
-                                                   Foreground="{DynamicResource BrushTextSecondary}" />
-                                        <TextBlock Text="房间内观影进度由房主统一控制。" TextWrapping="Wrap"
-                                                   Foreground="{DynamicResource BrushTextSecondary}" />
-                                        <TextBlock Text="鼠标移至视频右侧呼出聊天框，Alt 收起。" TextWrapping="Wrap"
-                                                   Foreground="{DynamicResource BrushTextSecondary}" />
-                                    </StackPanel>
-                                    <Border IsVisible="{Binding IsInRoom}" Padding="9,4" HorizontalAlignment="Left"
-                                            Background="{DynamicResource BrushSurfaceSunken}" CornerRadius="8">
-                                        <TextBlock Text="{Binding RoomRoleText}" FontSize="13" FontWeight="SemiBold"
-                                                   Foreground="{DynamicResource BrushPrimary}" />
-                                    </Border>
-                                </StackPanel>
-                                <StackPanel Grid.Column="1" Spacing="6" VerticalAlignment="Top">
-                                    <TextBlock Text="我的昵称" FontSize="14" FontWeight="SemiBold" />
-                                    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
-                                        <TextBox Grid.Column="0" MaxLength="24" PlaceholderText="聊天时显示的昵称"
-                                                 Text="{Binding RoomNicknameInput, Mode=TwoWay}" />
-                                        <Button Grid.Column="1" Content="保存" Command="{Binding SaveRoomNicknameCommand}" />
-                                    </Grid>
-                                    <TextBlock Text="{Binding RoomNicknameStatus}" FontSize="12" TextWrapping="Wrap"
-                                               Foreground="{DynamicResource BrushTextSecondary}" />
-                                </StackPanel>
-                            </Grid>
-                            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="9">
-                                <TextBox Grid.Column="0" PlaceholderText="粘贴 B 站视频链接"
-                                         Text="{Binding RoomVideoInput, Mode=TwoWay}" />
-                                <Button Grid.Column="1" Content="解析视频" Command="{Binding ParseCommand}"
-                                        IsEnabled="{Binding CanControl}" />
-                            </Grid>
-                            <TextBlock Text="{Binding RoomFilmTitle}" TextWrapping="Wrap" FontWeight="SemiBold" />
-                            <Grid ColumnDefinitions="Auto,*" ColumnSpacing="8">
-                                <TextBlock Text="服务地址" VerticalAlignment="Center" />
-                                <Border Grid.Column="1" Padding="12,9" MinHeight="40"
-                                        Background="{DynamicResource BrushSurfaceBase}"
-                                        CornerRadius="{DynamicResource DownKyiRadiusMedium}">
-                                    <TextBlock Text="{Binding ServiceAddressDisplay}" VerticalAlignment="Center"
-                                               TextWrapping="Wrap" />
-                                </Border>
-                            </Grid>
-                            <StackPanel Orientation="Horizontal" Spacing="8">
-                                <Button Content="创建房间" Command="{Binding CreateRoomCommand}" />
-                                <Button Content="复制邀请" Command="{Binding CopyInviteCommand}" />
-                                <Button Content="离开房间" Command="{Binding LeaveRoomCommand}" />
-                                <Button Content="结束房间" Command="{Binding EndRoomCommand}" />
-                            </StackPanel>
-                            <Border IsVisible="{Binding ShowRoomCreationProgress}" Padding="12"
-                                    Background="{DynamicResource BrushSurfaceSunken}"
-                                    CornerRadius="{DynamicResource DownKyiRadiusMedium}">
-                                <StackPanel Spacing="7">
-                                    <TextBlock Text="{Binding RoomCreationSummary}" FontWeight="SemiBold" FontSize="13" />
-                                    <ProgressBar Minimum="0" Maximum="100" Value="{Binding RoomCreationPercentage}" Height="5"
-                                                 AutomationProperties.Name="创建房间步骤完成度" />
-                                    <TextBlock Text="{Binding RoomCreationStep}" FontSize="13" TextWrapping="Wrap"
-                                               Foreground="{DynamicResource BrushTextSecondary}" />
-                                    <TextBlock Text="按步骤完成度显示；网络等待时进度保持不变" FontSize="11" TextWrapping="Wrap"
-                                               Foreground="{DynamicResource BrushTextSecondary}" />
-                                </StackPanel>
+                <StackPanel Grid.Row="2" Spacing="8">
+                    <Button Classes="cinema icon rail" Classes.selected="{Binding ShowLogin}" Command="{Binding ShowLoginCommand}" ToolTip.Tip="账号" AutomationProperties.Name="账号">
+                        <Grid>
+                            <Path Classes="glyph" Data="{StaticResource CinemaAccount}" />
+                            <Border Width="32" Height="32" CornerRadius="16" ClipToBounds="True">
+                                <Image images:ImageLoader.Source="{Binding AccountAvatar}" Stretch="UniformToFill" />
                             </Border>
-                            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
-                                <TextBox Grid.Column="0" PlaceholderText="加入其他房间时，在这里粘贴邀请地址"
-                                         Text="{Binding InviteText, Mode=TwoWay}" />
-                                <Button Grid.Column="1" Content="加入房间" Command="{Binding JoinRoomCommand}" />
-                            </Grid>
-                            <TextBlock Text="{Binding RoomState}" TextWrapping="Wrap" />
-                            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
-                                <TextBlock Text="{Binding SyncStatus}" TextWrapping="Wrap" VerticalAlignment="Center" />
-                                <Button x:Name="SyncPlaybackButton" Grid.Column="1" Width="36" Height="36" Padding="8"
-                                        Command="{Binding SyncPlaybackCommand}"
-                                        AutomationProperties.Name="同步并检查播放器" ToolTip.Tip="检查播放器状态；房间内同时同步播放进度"
-                                        Background="{DynamicResource BrushSurfaceSunken}"
-                                        CornerRadius="{DynamicResource DownKyiRadiusMedium}">
-                                    <Path Width="18" Height="18" Stretch="Uniform"
-                                              Data="M 17,2 L 17,7 L 12,7 M 17,7 A 7,7 0 0 0 4,5 M 3,18 L 3,13 L 8,13 M 3,13 A 7,7 0 0 0 16,15"
-                                              Stroke="{DynamicResource BrushTextSecondary}" StrokeThickness="1.7"
-                                              StrokeLineCap="Round" StrokeJoin="Round" />
-                                </Button>
-                            </Grid>
+                        </Grid>
+                    </Button>
+                </StackPanel>
+            </Grid>
+        </Border>
+        <Grid Grid.Column="1" Margin="40,28" IsVisible="{Binding ShowHome}" x:Name="HomePage">
+            <ScrollViewer VerticalScrollBarVisibility="Auto">
+                <StackPanel MaxWidth="600" Margin="0,32,0,24" Spacing="16">
+                    <StackPanel Spacing="8">
+                        <TextBlock Text="视频" FontSize="15" FontWeight="Medium" />
+                        <Grid ColumnDefinitions="*,48" ColumnSpacing="8">
+                            <TextBox x:Name="HomeVideoInput" Classes="cinema" Padding="14,11,44,11" Text="{Binding RoomVideoInput, Mode=TwoWay}" PlaceholderText="视频链接、分享文字或 BV 号" AutomationProperties.Name="视频链接" LostFocus="OnVideoInputLostFocus">
+                                <TextBox.KeyBindings>
+                                    <KeyBinding Gesture="Enter" Command="{Binding ParseCommand}" />
+                                </TextBox.KeyBindings>
+                            </TextBox>
+                            <Button Classes="cinema icon " ToolTip.Tip="清空视频链接" AutomationProperties.Name="清空视频链接" HorizontalAlignment="Right" Margin="2" Command="{Binding ClearVideoInputCommand}" IsVisible="{Binding RoomVideoInput.Length}">
+                                <Path Classes="glyph" Data="{StaticResource CinemaClose}" />
+                            </Button>
+                            <Button Classes="cinema icon outline" ToolTip.Tip="粘贴视频链接" AutomationProperties.Name="粘贴视频链接" Grid.Column="1" Click="OnPasteVideoClick">
+                                <Path Classes="glyph" Data="{StaticResource CinemaPaste}" />
+                            </Button>
+                        </Grid>
+                    </StackPanel>
+                    <Grid ColumnDefinitions="88,*" ColumnSpacing="16" IsVisible="{Binding HasPreviewFilm}">
+                        <Border Height="88" CornerRadius="8" ClipToBounds="True" Background="{DynamicResource BrushSurfaceSunken}">
+                            <Image images:ImageLoader.Source="{Binding PreviewFilmCover}" Stretch="Uniform" />
+                        </Border>
+                        <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="8">
+                            <TextBlock Text="{Binding PreviewFilmTitle}" TextWrapping="Wrap" MaxLines="3" FontSize="17" FontWeight="SemiBold" />
+                            <TextBlock Text="{Binding PreviewFilmDuration}" Foreground="{DynamicResource BrushTextSecondary}" />
                         </StackPanel>
-                    </Border>
+                    </Grid>
+                    <TextBlock Text="{Binding PreviewStatus}" IsVisible="{Binding PreviewStatus.Length}" FontSize="13" Foreground="{DynamicResource BrushTextSecondary}" TextWrapping="Wrap" />
+                    <Grid ColumnDefinitions="*,*" ColumnSpacing="12">
+                        <Button Classes="cinema primary" MinHeight="48" HorizontalAlignment="Stretch" Command="{Binding ParseCommand}" IsEnabled="{Binding CanControl}" AutomationProperties.Name="播放">
+                            <StackPanel Orientation="Horizontal" Spacing="10">
+                                <Path Classes="glyph" Data="{StaticResource CinemaPlay}" />
+                                <TextBlock Text="播放" />
+                            </StackPanel>
+                        </Button>
+                        <Button Grid.Column="1" Classes="cinema outline" MinHeight="48" HorizontalAlignment="Stretch" Command="{Binding CreateRoomCommand}" IsEnabled="{Binding CanJoinOrCreate}" AutomationProperties.Name="创建房间">
+                            <StackPanel Orientation="Horizontal" Spacing="10">
+                                <Path Classes="glyph" Data="{StaticResource CinemaPlus}" />
+                                <TextBlock Text="创建房间" />
+                            </StackPanel>
+                        </Button>
+                    </Grid>
+                    <Button Classes="cinema" Command="{Binding ShowRoomCommand}" IsVisible="{Binding HasFilm}" Content="返回播放" HorizontalAlignment="Left" />
+                    <TextBlock Text="{Binding Status}" FontSize="13" Foreground="{DynamicResource BrushTextSecondary}" TextWrapping="Wrap" />
+                    <Border Height="1" Background="{DynamicResource BrushBorderSubtle}" Margin="0,4" />
+                    <StackPanel Spacing="12" IsVisible="{Binding !IsInRoom}">
+                            <TextBlock Text="加入房间" FontSize="15" FontWeight="Medium" />
+                            <Grid ColumnDefinitions="*,48,Auto" ColumnSpacing="8">
+                                <TextBox x:Name="RoomInviteInput" Classes="cinema" Padding="14,11,44,11" Text="{Binding InviteText, Mode=TwoWay}" PlaceholderText="粘贴房间链接或邀请码" AutomationProperties.Name="房间邀请">
+                                    <TextBox.KeyBindings>
+                                        <KeyBinding Gesture="Enter" Command="{Binding JoinRoomCommand}" />
+                                    </TextBox.KeyBindings>
+                                </TextBox>
+                                <Button Classes="cinema icon " ToolTip.Tip="清空房间邀请" AutomationProperties.Name="清空房间邀请" HorizontalAlignment="Right" Margin="2" Command="{Binding ClearInviteCommand}" IsVisible="{Binding InviteText.Length}">
+                                    <Path Classes="glyph" Data="{StaticResource CinemaClose}" />
+                                </Button>
+                                <Button Classes="cinema icon outline" ToolTip.Tip="粘贴房间邀请" AutomationProperties.Name="粘贴房间邀请" Grid.Column="1" Click="OnPasteInviteClick">
+                                    <Path Classes="glyph" Data="{StaticResource CinemaPaste}" />
+                                </Button>
+                                <Button Grid.Column="2" Classes="cinema outline" Content="加入" MinHeight="48" Padding="20,10" Command="{Binding JoinRoomCommand}" IsEnabled="{Binding CanJoinOrCreate}" />
+                            </Grid>
+                            <ProgressBar IsVisible="{Binding JoinRoomCommand.IsRunning}" IsIndeterminate="True" Height="3" />
+                            <TextBlock Text="{Binding RoomState}" FontSize="13" TextWrapping="Wrap" Foreground="{DynamicResource BrushTextSecondary}" />
+                    </StackPanel>
+                    <Button Classes="cinema outline" Content="返回当前房间" Command="{Binding ShowRoomCommand}" IsVisible="{Binding IsInRoom}" />
                 </StackPanel>
             </ScrollViewer>
-
-            <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto" IsVisible="{Binding ShowLogin}">
-                <Border Padding="24" Background="{DynamicResource BrushSurfaceRaised}"
-                        CornerRadius="{DynamicResource DownKyiRadiusMedium}">
-                    <StackPanel Spacing="16">
-                        <TextBlock Text="登录" FontSize="26" FontWeight="SemiBold" />
-                        <TextBlock Text="{Binding AccountStatus}" FontSize="16" FontWeight="SemiBold"
-                                   Foreground="{DynamicResource BrushPrimary}" />
-                        <TextBlock Text="扫码后即可在线播放及下载支持的影片。" TextWrapping="Wrap"
-                                   Foreground="{DynamicResource BrushTextSecondary}" />
-                        <StackPanel Orientation="Horizontal" Spacing="9">
-                            <Button Content="获取登录二维码" Command="{Binding LoginCommand}" />
-                            <Button Content="退出本机账号" Command="{Binding LogoutCommand}" />
-                        </StackPanel>
-                        <Image Source="{Binding LoginQrCode}" Width="190" Height="190"
-                               HorizontalAlignment="Left" IsVisible="{Binding HasLoginQrCode}" />
-                        <Button Content="复制二维码图片" Command="{Binding CopyLoginQrCommand}"
-                                HorizontalAlignment="Left" IsVisible="{Binding HasLoginQrCode}" />
-                        <TextBlock Text="{Binding LoginStatus}" TextWrapping="Wrap" />
-                    </StackPanel>
-                </Border>
-            </ScrollViewer>
-
-            <Grid Grid.Row="0" Grid.RowSpan="3" IsVisible="{Binding ShowDownload}">
-                <Grid RowDefinitions="Auto,*" RowSpacing="12">
-                    <StackPanel Grid.Row="0" Spacing="4">
-                        <TextBlock Text="下载影片" FontSize="24" FontWeight="SemiBold" />
-                        <StackPanel Orientation="Horizontal" Spacing="5">
-                            <TextBlock Text="下载功能源自开源项目" FontSize="12" VerticalAlignment="Center"
-                                       Foreground="{DynamicResource BrushTextSecondary}" />
-                            <Image Source="/Resources/downkyi-mark.png" Width="16" Height="16"
-                                   VerticalAlignment="Center" AutomationProperties.Name="DownKyi 标志" />
-                            <TextBlock Text="DownKyi Core。" FontSize="12" VerticalAlignment="Center"
-                                       Foreground="{DynamicResource BrushTextSecondary}" />
-                        </StackPanel>
-                    </StackPanel>
-                    <ContentControl Grid.Row="1" Content="{Binding DownloadContent.MainContent}" />
-                </Grid>
-            </Grid>
         </Grid>
+        <Grid x:Name="WatchLayout" Grid.Column="1" RowDefinitions="Auto,*,Auto" ColumnDefinitions="*,Auto" Background="{StaticResource CinemaCanvas}" IsVisible="{Binding ShowRoom}">
+            <Grid x:Name="ViewerHeader" Grid.ColumnSpan="2" Margin="12,8" ColumnDefinitions="Auto,*,Auto">
+                <Button Classes="cinema icon viewer" ToolTip.Tip="返回首页" AutomationProperties.Name="返回首页" Command="{Binding ShowHomeCommand}">
+                    <Path Classes="glyph" Data="{StaticResource CinemaBack}" />
+                </Button>
+                <TextBlock Grid.Column="1" Text="{Binding ViewerTitle}" Margin="12,0" VerticalAlignment="Center" FontSize="18" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" Foreground="{StaticResource CinemaInk}" />
+                <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="4">
+                    <Button Classes="cinema viewer" IsVisible="{Binding IsInRoom}" ToolTip.Tip="房间状态" AutomationProperties.Name="房间状态">
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <Path Classes="glyph" Data="{StaticResource CinemaMembers}" />
+                            <TextBlock Text="{Binding MemberCountDisplay}" />
+                        </StackPanel>
+                        <Button.Flyout>
+                            <Flyout Placement="BottomEdgeAlignedRight" VerticalOffset="8" FlyoutPresenterClasses="cinemaPopup">
+                                <StackPanel Width="260" Spacing="10">
+                                    <TextBlock Text="{Binding RoomRoleText}" FontWeight="SemiBold" />
+                                    <TextBlock Text="{Binding RoomState}" TextWrapping="Wrap" />
+                                    <TextBlock Text="{Binding SyncStatus}" TextWrapping="Wrap" FontSize="12" />
+                                </StackPanel>
+                            </Flyout>
+                        </Button.Flyout>
+                    </Button>
+                    <Button Classes="cinema icon viewer" ToolTip.Tip="复制邀请" AutomationProperties.Name="复制邀请" Command="{Binding CopyInviteCommand}" IsVisible="{Binding IsHost}">
+                        <Path Classes="glyph" Data="{StaticResource CinemaLink}" />
+                    </Button>
+                    <Button Classes="cinema icon viewer" ToolTip.Tip="打开或关闭聊天" AutomationProperties.Name="打开或关闭聊天" Command="{Binding ToggleDockedChatCommand}" IsVisible="{Binding IsInRoom}">
+                        <Path Classes="glyph" Data="{StaticResource CinemaChat}" />
+                    </Button>
+                    <Button Classes="cinema icon viewer" ToolTip.Tip="更多房间操作" AutomationProperties.Name="更多房间操作">
+                        <Path Classes="glyph" Data="{StaticResource CinemaMore}" />
+                        <Button.Flyout>
+                            <Flyout Placement="BottomEdgeAlignedRight" VerticalOffset="8" FlyoutPresenterClasses="cinemaPopup">
+                                <StackPanel x:Name="WatchDetails" Width="260" Spacing="8">
+                                    <TextBlock Text="房间设置" FontSize="16" FontWeight="SemiBold" Margin="0,0,0,4" />
+                                    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                                        <TextBox Classes="cinema cinemaChat" MinHeight="38" Padding="10,7" FontSize="14" Text="{Binding RoomNicknameInput, Mode=TwoWay}" PlaceholderText="房间昵称" MaxLength="24" AutomationProperties.Name="房间昵称" />
+                                        <Button Grid.Column="1" Classes="cinema primary" MinHeight="38" Padding="12,7" FontSize="14" Content="保存" Command="{Binding SaveRoomNicknameCommand}" />
+                                    </Grid>
+                                    <TextBlock Text="{Binding RoomNicknameStatus}" FontSize="12" TextWrapping="Wrap" Opacity="0.7" />
+                                    <Border Height="1" Background="{StaticResource CinemaLine}" />
+                                    <Button Classes="cinema viewer" MinHeight="36" Padding="8,6" FontSize="14" HorizontalAlignment="Stretch" HorizontalContentAlignment="Left" Content="创建房间" Command="{Binding CreateRoomCommand}" IsVisible="{Binding CanJoinOrCreate}" />
+                                    <Button Classes="cinema viewer" MinHeight="36" Padding="8,6" FontSize="14" HorizontalAlignment="Stretch" HorizontalContentAlignment="Left" Content="离开房间" Command="{Binding LeaveRoomCommand}" IsVisible="{Binding IsInRoom}" />
+                                    <Button Classes="cinema viewer danger" MinHeight="36" Padding="8,6" FontSize="14" HorizontalAlignment="Stretch" HorizontalContentAlignment="Left" Content="结束房间" Command="{Binding EndRoomCommand}" IsVisible="{Binding IsHost}" />
+                                    <TextBlock Text="{Binding SyncStatus}" FontSize="12" Opacity="0.7" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding ServiceAddressDisplay}" IsVisible="{Binding IsInRoom}" />
+                                </StackPanel>
+                            </Flyout>
+                        </Button.Flyout>
+                    </Button>
+                </StackPanel>
+            </Grid>
+            <Border x:Name="RoomPlayerSurface" Grid.Row="1" Margin="12,0,12,0" Background="Black" ClipToBounds="True" CornerRadius="8">
+                <Grid>
+                    <StackPanel MaxWidth="440" Margin="32" VerticalAlignment="Center" HorizontalAlignment="Center" Spacing="16" IsVisible="{Binding !PlayerReady}">
+                        <TextBlock Text="{Binding Status}" FontSize="16" TextWrapping="Wrap" TextAlignment="Center" Foreground="{StaticResource CinemaInk}" />
+                        <ProgressBar IsIndeterminate="True" Height="3" IsVisible="{Binding ParseCommand.IsRunning}" />
+                        <Button Classes="cinema viewer outline" Content="重新同步" Command="{Binding SyncPlaybackCommand}" HorizontalAlignment="Center" />
+                    </StackPanel>
+                    <NativeWebView x:Name="RoomMovieWebView" Opacity="{Binding PlayerOpacity}" IsHitTestVisible="{Binding PlayerReady}" />
+                </Grid>
+            </Border>
+            <Border x:Name="DockedChat" Grid.Row="1" Grid.Column="1" Grid.RowSpan="2" Width="292" Margin="0,0,12,12" BorderBrush="{StaticResource CinemaLine}" BorderThickness="1" CornerRadius="8" Background="{StaticResource CinemaCanvas}">
+                <Grid RowDefinitions="Auto,*,Auto">
+                    <Grid ColumnDefinitions="*,Auto" Margin="16,8">
+                        <TextBlock Text="聊天" FontSize="16" Foreground="{StaticResource CinemaInk}" VerticalAlignment="Center" />
+                        <Button Classes="cinema icon viewer" ToolTip.Tip="关闭聊天" AutomationProperties.Name="关闭聊天" Grid.Column="1" Command="{Binding ToggleDockedChatCommand}">
+                            <Path Classes="glyph" Data="{StaticResource CinemaClose}" />
+                        </Button>
+                    </Grid>
+                    <ScrollViewer x:Name="ChatScroll" Grid.Row="1" Margin="16,8" VerticalScrollBarVisibility="Auto">
+                        <ItemsControl ItemsSource="{Binding ChatMessages}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="watch:WatchRoomChatMessage">
+                                    <StackPanel Classes="chatMessage" Classes.self="{Binding IsSelf}" Spacing="6" Margin="0,0,0,16">
+                                        <TextBlock Classes="chatName" Text="{Binding Nickname}" FontSize="12" Foreground="{StaticResource CinemaMuted}" />
+                                        <Border Classes="chatBubble" MaxWidth="230" CornerRadius="8" Padding="10,8">
+                                            <TextBlock Text="{Binding Text}" TextWrapping="Wrap" Foreground="{StaticResource CinemaInk}" FontSize="14" />
+                                        </Border>
+                                    </StackPanel>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </ScrollViewer>
+                    <Grid Grid.Row="2" Margin="12" ColumnDefinitions="*,42" ColumnSpacing="6">
+                        <TextBox x:Name="ChatInput" Classes="cinemaChat" Text="{Binding ChatDraft, Mode=TwoWay}" MaxLength="500" PlaceholderText="发送消息" AutomationProperties.Name="聊天消息" Background="{StaticResource CinemaPanel}" Foreground="{StaticResource CinemaInk}" CaretBrush="{StaticResource CinemaInk}" SelectionBrush="#245C88" SelectionForegroundBrush="White" BorderBrush="{StaticResource CinemaLine}" CornerRadius="8" VerticalContentAlignment="Center">
+                            <TextBox.KeyBindings>
+                                <KeyBinding Gesture="Enter" Command="{Binding SendChatCommand}" />
+                            </TextBox.KeyBindings>
+                        </TextBox>
+                        <Button Classes="cinema icon viewer" ToolTip.Tip="发送消息" AutomationProperties.Name="发送消息" Grid.Column="1" Command="{Binding SendChatCommand}" Foreground="{StaticResource CinemaAccent}">
+                            <Path Classes="glyph" Data="{StaticResource CinemaSend}" />
+                        </Button>
+                    </Grid>
+                </Grid>
+            </Border>
+            <StackPanel x:Name="PlaybackToolbar" Grid.Row="2" Margin="16,10" Spacing="8">
+                <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="4">
+                    <TextBlock x:Name="PlaybackStatus" Text="{Binding PlaybackSummary}" Foreground="{StaticResource CinemaMuted}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" FontSize="13" ToolTip.Tip="{Binding Status}" />
+                    <Button Classes="cinema icon viewer" ToolTip.Tip="同步并检查播放器" AutomationProperties.Name="同步并检查播放器" x:Name="SyncPlaybackButton" Grid.Column="1" Command="{Binding SyncPlaybackCommand}">
+                        <Path Classes="glyph glyphFilled" Data="{StaticResource CinemaSync}" />
+                    </Button>
+                    <Button x:Name="ChangeMovieButton" Grid.Column="2" Classes="cinema viewer" IsEnabled="{Binding CanControl}" ToolTip.Tip="更换视频" AutomationProperties.Name="更换视频">
+                        <Path Classes="glyph" Data="{StaticResource CinemaFilm}" />
+                        <Button.Flyout>
+                            <Flyout Placement="TopEdgeAlignedRight" VerticalOffset="-8" FlyoutPresenterClasses="cinemaPopup">
+                                <StackPanel Width="360" Spacing="10">
+                                    <TextBlock Text="更换视频" FontSize="16" FontWeight="SemiBold" />
+                                    <Grid ColumnDefinitions="*,48" ColumnSpacing="8">
+                                        <TextBox x:Name="ChangeVideoInput" Classes="cinema cinemaChat" Padding="14,11,44,11" Text="{Binding RoomVideoInput, Mode=TwoWay}" PlaceholderText="视频链接、分享文字或 BV 号" AutomationProperties.Name="换片链接" />
+                                        <Button Classes="cinema icon viewer" ToolTip.Tip="清空换片链接" AutomationProperties.Name="清空换片链接" HorizontalAlignment="Right" Margin="2" Command="{Binding ClearVideoInputCommand}" IsVisible="{Binding RoomVideoInput.Length}">
+                                            <Path Classes="glyph" Data="{StaticResource CinemaClose}" />
+                                        </Button>
+                                        <Button Classes="cinema icon viewer" ToolTip.Tip="粘贴换片链接" AutomationProperties.Name="粘贴换片链接" Grid.Column="1" Click="OnPasteVideoClick">
+                                            <Path Classes="glyph" Data="{StaticResource CinemaPaste}" />
+                                        </Button>
+                                    </Grid>
+                                    <Button Classes="cinema primary" Content="播放" HorizontalAlignment="Stretch" Command="{Binding ParseCommand}" Click="OnDismissFlyoutClick" />
+                                </StackPanel>
+                            </Flyout>
+                        </Button.Flyout>
+                    </Button>
+                </Grid>
+                <StackPanel Spacing="5" IsVisible="{Binding ShowRoomCreationProgress}">
+                    <TextBlock Text="{Binding RoomCreationSummary}" Foreground="{StaticResource CinemaMuted}" FontSize="12" />
+                    <ProgressBar Maximum="100" Value="{Binding RoomCreationPercentage}" Height="3" />
+                    <TextBlock Text="{Binding RoomCreationStep}" Foreground="{StaticResource CinemaMuted}" FontSize="12" />
+                </StackPanel>
+                <TextBlock Text="{Binding RoomState}" IsVisible="{Binding IsInRoom}" Foreground="{StaticResource CinemaMuted}" FontSize="12" TextWrapping="Wrap" />
+            </StackPanel>
+        </Grid>
+        <ScrollViewer Grid.Column="1" IsVisible="{Binding ShowLogin}" VerticalScrollBarVisibility="Auto">
+            <StackPanel MaxWidth="540" Margin="40,48" Spacing="24">
+                <TextBlock Text="账号" FontSize="28" FontWeight="SemiBold" />
+                <Grid ColumnDefinitions="72,*" ColumnSpacing="20">
+                    <Border Width="72" Height="72" CornerRadius="36" Background="{DynamicResource BrushSurfaceSunken}" ClipToBounds="True">
+                        <Image images:ImageLoader.Source="{Binding AccountAvatar}" />
+                    </Border>
+                    <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="8">
+                        <TextBlock Text="{Binding AccountName}" FontSize="20" FontWeight="SemiBold" />
+                        <StackPanel Orientation="Horizontal" Spacing="8" IsVisible="{Binding IsLoggedIn}">
+                            <TextBlock Text="{Binding AccountUid, StringFormat='UID {0}'}" Foreground="{DynamicResource BrushTextSecondary}" VerticalAlignment="Center" />
+                            <Button Classes="cinema icon " ToolTip.Tip="复制 UID" AutomationProperties.Name="复制 UID" Command="{Binding CopyUidCommand}">
+                                <Path Classes="glyph glyphFilled" Data="{StaticResource CinemaCopy}" />
+                            </Button>
+                        </StackPanel>
+                    </StackPanel>
+                </Grid>
+                <TextBlock Text="{Binding AccountStatus}" TextWrapping="Wrap" Foreground="{DynamicResource BrushTextSecondary}" />
+                <StackPanel Orientation="Horizontal" Spacing="12">
+                    <Button Classes="cinema primary" Content="扫码登录 / 切换账号" Command="{Binding LoginCommand}" />
+                    <Button Classes="cinema outline" Content="退出登录" Command="{Binding LogoutCommand}" IsVisible="{Binding IsLoggedIn}" />
+                </StackPanel>
+                <Border Padding="16" Background="White" CornerRadius="10" HorizontalAlignment="Left" IsVisible="{Binding HasLoginQrCode}">
+                    <Image Source="{Binding LoginQrCode}" Width="200" Height="200" />
+                </Border>
+                <Button Classes="cinema outline" Content="复制二维码" Command="{Binding CopyLoginQrCommand}" HorizontalAlignment="Left" IsVisible="{Binding HasLoginQrCode}" />
+                <TextBlock Text="{Binding LoginStatus}" TextWrapping="Wrap" Foreground="{DynamicResource BrushTextSecondary}" />
+                <Border Height="1" Background="{DynamicResource BrushBorderSubtle}" />
+                <Button Classes="cinema" Content="设置与检查更新" Command="{Binding ShowSettingsCommand}" HorizontalAlignment="Left" />
+                <TextBlock Text="{Binding VersionDisplay}" Foreground="{DynamicResource BrushTextSecondary}" FontSize="12" />
+            </StackPanel>
+        </ScrollViewer>
+        <Grid Grid.Column="1" RowDefinitions="Auto,Auto,*" IsVisible="{Binding ShowUtility}">
+            <Grid Margin="16,12">
+                <StackPanel Orientation="Horizontal" Spacing="4" IsVisible="{Binding ShowDownload}">
+                    <TextBlock Text="下载功能来自" FontSize="12" Foreground="{DynamicResource BrushTextSecondary}" VerticalAlignment="Center" />
+                    <Image Source="/Resources/downkyi-mark.png" Width="16" Height="16" Stretch="Uniform" />
+                    <TextBlock Text="Downkyi" FontSize="12" Foreground="{DynamicResource BrushTextSecondary}" VerticalAlignment="Center" />
+                </StackPanel>
+                <TextBlock Text="{Binding UtilityTitle}" FontSize="28" FontWeight="SemiBold" IsVisible="{Binding ShowSettings}" />
+            </Grid>
+            <TextBlock Grid.Row="1" Margin="24,0,24,12" Text="{Binding UtilityError}" IsVisible="{Binding UtilityError.Length}" Foreground="{DynamicResource BrushTextPrimary}" TextWrapping="Wrap" />
+            <ContentControl Grid.Row="2" Content="{Binding DownloadContent.MainContent}" />
+            <Border Grid.Row="2" VerticalAlignment="Bottom" HorizontalAlignment="Center" Padding="16,10" Background="{DynamicResource BrushSurfaceRaised}" CornerRadius="8" IsVisible="{Binding DownloadContent.MessageVisibility}">
+                <TextBlock Text="{Binding DownloadContent.Message}" TextWrapping="Wrap" />
+            </Border>
+        </Grid>
+        <ProgressBar Grid.Column="1" VerticalAlignment="Top" Height="3" IsVisible="{Binding ShowPreparationProgress}" IsIndeterminate="True" />
     </Grid>
 </Window>

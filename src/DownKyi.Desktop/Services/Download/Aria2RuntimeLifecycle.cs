@@ -3,6 +3,7 @@ using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Net;
 using System.Net.Http;
 using System.Net.WebSockets;
 using System.Text;
@@ -587,11 +588,32 @@ internal interface IAria2NotificationSocket : IDisposable
 internal sealed class ClientWebSocketAria2NotificationSocket : IAria2NotificationSocket
 {
     private readonly ClientWebSocket _socket = new();
+    private readonly IWebProxy? _proxy;
+
+    public ClientWebSocketAria2NotificationSocket()
+    {
+    }
+
+    internal ClientWebSocketAria2NotificationSocket(IWebProxy? proxy)
+    {
+        _proxy = proxy;
+    }
 
     public WebSocketState State => _socket.State;
 
-    public Task ConnectAsync(Uri uri, CancellationToken cancellationToken) =>
-        _socket.ConnectAsync(uri, cancellationToken);
+    public Task ConnectAsync(Uri uri, CancellationToken cancellationToken)
+    {
+        if (uri.IsLoopback)
+        {
+            _socket.Options.Proxy = DirectWebProxy.Instance;
+        }
+        else if (_proxy != null)
+        {
+            _socket.Options.Proxy = _proxy;
+        }
+
+        return _socket.ConnectAsync(uri, cancellationToken);
+    }
 
     public ValueTask<ValueWebSocketReceiveResult> ReceiveAsync(
         Memory<byte> buffer,
@@ -605,4 +627,15 @@ internal sealed class ClientWebSocketAria2NotificationSocket : IAria2Notificatio
         _socket.CloseOutputAsync(closeStatus, statusDescription, cancellationToken);
 
     public void Dispose() => _socket.Dispose();
+
+    private sealed class DirectWebProxy : IWebProxy
+    {
+        public static DirectWebProxy Instance { get; } = new();
+
+        public ICredentials? Credentials { get; set; }
+
+        public Uri GetProxy(Uri destination) => destination;
+
+        public bool IsBypassed(Uri host) => true;
+    }
 }

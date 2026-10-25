@@ -1,3 +1,4 @@
+using System.Net;
 using System.Text;
 using DownKyi.Core.Aria2cNet.Client.Entity;
 using Newtonsoft.Json;
@@ -10,10 +11,7 @@ namespace DownKyi.Core.Aria2cNet.Client;
 public sealed partial class AriaClient
 {
     private const string JSONRPC = "2.0";
-    private static readonly HttpClient HttpClient = new(new SocketsHttpHandler
-    {
-        AllowAutoRedirect = false
-    });
+    private static readonly AriaRpcHttpTransport HttpTransport = new();
     private readonly Func<Uri, string, CancellationToken, Task<string?>> _requestAsync;
     private readonly Uri _rpcUri;
     private readonly string _token;
@@ -34,7 +32,7 @@ public sealed partial class AriaClient
             listenPort,
             token,
             static (url, parameters, cancellationToken) =>
-                RequestAsync(url, parameters, cancellationToken))
+                HttpTransport.RequestAsync(url, parameters, cancellationToken))
     {
     }
 
@@ -154,30 +152,59 @@ public sealed partial class AriaClient
         return aria ?? throw new JsonSerializationException("aria2 RPC returned an empty JSON value.");
     }
 
-    /// <summary>
-    /// http请求
-    /// </summary>
-    /// <param name="url"></param>
-    /// <param name="parameters"></param>
-    /// <param name="retry"></param>
-    /// <returns></returns>
-    private static async Task<string?> RequestAsync(
+}
+
+internal sealed class AriaRpcHttpTransport : IDisposable
+{
+    private readonly SocketsHttpHandler _directHandler = new() { AllowAutoRedirect = false, UseProxy = false };
+    private readonly SocketsHttpHandler _proxiedHandler = new() { AllowAutoRedirect = false, UseProxy = true };
+    private readonly HttpMessageInvoker _directClient;
+    private readonly HttpMessageInvoker _proxiedClient;
+
+    public AriaRpcHttpTransport(IWebProxy? proxy = null)
+    {
+        _proxiedHandler.Proxy = proxy;
+        _directClient = new HttpMessageInvoker(_directHandler, disposeHandler: false);
+        try
+        {
+            _proxiedClient = new HttpMessageInvoker(_proxiedHandler, disposeHandler: false);
+        }
+        catch
+        {
+            _directClient.Dispose();
+            _directHandler.Dispose();
+            _proxiedHandler.Dispose();
+            throw;
+        }
+    }
+
+    public async Task<string?> RequestAsync(
         Uri url,
         string parameters,
         CancellationToken cancellationToken)
     {
+        // Keep the existing RPC deadline while owning separate local/remote connection pools.
+        using var deadline = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        deadline.CancelAfter(TimeSpan.FromSeconds(100));
         using var request = new HttpRequestMessage(HttpMethod.Post, url)
         {
             Content = new StringContent(parameters, Encoding.UTF8, "application/json")
         };
-        using var response = await HttpClient.SendAsync(
+        var client = url.IsLoopback ? _directClient : _proxiedClient;
+        using var response = await client.SendAsync(
             request,
-            HttpCompletionOption.ResponseHeadersRead,
-            cancellationToken).ConfigureAwait(false);
+            deadline.Token).ConfigureAwait(false);
         response.EnsureSuccessStatusCode();
         return await response.Content
-            .ReadAsStringAsync(cancellationToken)
+            .ReadAsStringAsync(deadline.Token)
             .ConfigureAwait(false);
     }
 
+    public void Dispose()
+    {
+        _directClient.Dispose();
+        _proxiedClient.Dispose();
+        _directHandler.Dispose();
+        _proxiedHandler.Dispose();
+    }
 }

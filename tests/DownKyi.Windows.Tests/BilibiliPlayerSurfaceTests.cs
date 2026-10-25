@@ -3,6 +3,7 @@ using System.Globalization;
 using System.Net.WebSockets;
 using System.Runtime.Versioning;
 using System.Text.Json;
+using DownKyi.CentralTestRunner;
 using DownKyi.ProcessSupervision;
 using DownKyi.Services.Watch;
 
@@ -22,7 +23,11 @@ public sealed class BilibiliPlayerSurfaceTests
                 toastRemainingMilliseconds: 0, hostActionNotices: [], hostActionToastSequence: 0),
             ["/* WINDOWED_OVERLAY */"] = RoomChatOverlayScript.Build([], null, null, fullscreen: false,
                 inRoom: true, memberCount: 2, revision: 0, toastSequence: 0,
-                toastRemainingMilliseconds: 0, hostActionNotices: [], hostActionToastSequence: 0)
+                toastRemainingMilliseconds: 0, hostActionNotices: [], hostActionToastSequence: 0),
+            ["/* DOCKED_OVERLAY */"] = RoomChatOverlayScript.Build([], null, null, fullscreen: false,
+                inRoom: true, memberCount: 2, revision: 0, toastSequence: 0,
+                toastRemainingMilliseconds: 0, hostActionNotices: [], hostActionToastSequence: 0,
+                dockedChat: true)
         });
     }
 
@@ -166,6 +171,17 @@ public sealed class BilibiliPlayerSurfaceTests
         }
         finally
         {
+            // Job emptiness does not guarantee that Chromium's profile file
+            // handles have completed rundown. Probe every child before removal;
+            // a persistent lock still fails the test with its exact resource.
+            var cleanup = new CleanupDeadline(TimeSpan.FromSeconds(5));
+            foreach (var entry in Directory.EnumerateFileSystemEntries(directory, "*", SearchOption.AllDirectories))
+            {
+                await WindowsDirectoryResourceRundown.WaitForDeleteAccessAsync(entry, cleanup.Remaining)
+                    .ConfigureAwait(false);
+            }
+            await WindowsDirectoryResourceRundown.WaitForDeleteAccessAsync(directory, cleanup.Remaining)
+                .ConfigureAwait(false);
             Directory.Delete(directory, recursive: true);
         }
     }

@@ -85,6 +85,23 @@ public sealed class DesktopInteractionServiceTests
     }
 
     [Fact]
+    public void SearchNormalizesShareTextAndPreservesClipboardMarker()
+    {
+        using var settings = new TestSettingsStore();
+        var navigation = new RecordingNavigationService();
+        var search = new SearchService(settings.Store, navigation);
+
+        Assert.True(search.BiliInput(
+            "【猫鼠游戏】 https://www.bilibili.com/bangumi/play/ep251429/?share_source=copy_web&" + AppConstant.ClipboardId,
+            AppRoute.Index));
+
+        var request = Assert.Single(navigation.Requests);
+        Assert.Equal(
+            "https://www.bilibili.com/bangumi/play/ep251429/?share_source=copy_web&" + AppConstant.ClipboardId,
+            request.Parameter);
+    }
+
+    [Fact]
     public void NumericListUrlUsesTypedPublicationPayload()
     {
         using var settings = new TestSettingsStore();

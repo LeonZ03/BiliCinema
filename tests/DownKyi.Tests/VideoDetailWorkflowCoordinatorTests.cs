@@ -28,6 +28,18 @@ public sealed class VideoDetailWorkflowCoordinatorTests
     }
 
     [Fact]
+    public void SetInputNormalizesShareTextBeforeCaching()
+    {
+        var parseCoordinator = new VideoParseCoordinator((_, _) => new StubInfoService());
+        using var coordinator = new VideoDetailWorkflowCoordinator(parseCoordinator, new VideoSearchState());
+
+        var normalized = coordinator.SetInput("【猫鼠游戏】 https://www.bilibili.com/bangumi/play/ep251429/?share_source=copy_web&");
+
+        Assert.Equal("https://www.bilibili.com/bangumi/play/ep251429/?share_source=copy_web&", normalized);
+        Assert.Equal(normalized, coordinator.CurrentInput);
+    }
+
+    [Fact]
     public async Task DetailLoadAndSearchReuseOriginalPageObjects()
     {
         var alpha = new VideoPage { Cid = 1, Name = "Alpha" };

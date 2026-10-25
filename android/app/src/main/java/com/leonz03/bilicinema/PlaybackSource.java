@@ -5,10 +5,17 @@ import java.net.URI;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.List;
+import java.util.ArrayList;
 
 /** Device-local, immutable playback description. Never serialize this into a room message. */
 final class PlaybackSource {
-    enum Kind { DASH, PROGRESSIVE }
+    enum Kind { DASH, PROGRESSIVE, OFFICIAL }
+    static final class Quality {
+        final int id;
+        final String label;
+        Quality(int id, String label) { this.id = id; this.label = label; }
+    }
     private final String identityJson;
     final String title;
     final double durationSeconds;
@@ -16,15 +23,24 @@ final class PlaybackSource {
     final URI videoUri;
     final URI audioUri;
     final Map<String, String> headers;
+    final int quality;
+    final List<Quality> qualities;
 
     PlaybackSource(JSONObject media, String title, double durationSeconds, Kind kind,
                    URI videoUri, URI audioUri, Map<String, String> headers) throws PlaybackFailure {
+        this(media, title, durationSeconds, kind, videoUri, audioUri, headers, 0, Collections.emptyList());
+    }
+
+    PlaybackSource(JSONObject media, String title, double durationSeconds, Kind kind,
+                   URI videoUri, URI audioUri, Map<String, String> headers, int quality, List<Quality> qualities) throws PlaybackFailure {
         if (media == null || media.optLong("aid") <= 0 || media.optLong("cid") <= 0
                 || !media.optString("bvid").matches("BV[0-9A-Za-z]{10}")
                 || (media.has("episodeId") && media.optLong("episodeId") <= 0)
                 || kind == null || !Double.isFinite(durationSeconds) || durationSeconds <= 0
                 || !validUri(videoUri) || (audioUri != null && !validUri(audioUri))
-                || (kind == Kind.PROGRESSIVE && audioUri != null)) {
+                || (kind != Kind.DASH && audioUri != null)
+                || (kind == Kind.OFFICIAL && (!"www.bilibili.com".equals(videoUri.getHost())
+                    || videoUri.getPort() != -1 || !videoUri.getPath().matches("/(bangumi/play/ep[0-9]+|video/BV[0-9A-Za-z]{10})/?")))) {
             throw new PlaybackFailure(PlaybackFailure.Reason.INVALID_MEDIA);
         }
         try {
@@ -51,6 +67,17 @@ final class PlaybackSource {
             safeHeaders.put(name, value);
         }
         this.headers = Collections.unmodifiableMap(safeHeaders);
+        this.quality = quality;
+        this.qualities = Collections.unmodifiableList(new ArrayList<>(qualities));
+    }
+
+    String qualityLabel() {
+        for (Quality option : qualities) if (option.id == quality) return option.label;
+        return "默认画质";
+    }
+
+    PlaybackSource withQuality(int value) throws PlaybackFailure {
+        return new PlaybackSource(media(), title, durationSeconds, kind, videoUri, audioUri, headers, value, qualities);
     }
 
     JSONObject media() {

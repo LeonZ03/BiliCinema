@@ -10,6 +10,7 @@ import java.util.function.Consumer;
 final class LoginCookieCommit {
     interface Destination extends AutoCloseable {
         void write(String cookie, Consumer<Boolean> acknowledged);
+        default void clear(Consumer<Boolean> removedAny) { throw new UnsupportedOperationException("clear is not supported"); }
         boolean flushAndVerify() throws Exception;
         @Override void close();
     }
@@ -26,12 +27,14 @@ final class LoginCookieCommit {
         final List<String> cookies;
         final Destination destination;
         final Ticket ticket;
+        final boolean clearing;
         final boolean[] acknowledged;
         int remaining;
         boolean accepted = true;
-        Batch(List<String> cookies, Destination destination, Ticket ticket) {
+        Batch(List<String> cookies, Destination destination, Ticket ticket, boolean clearing) {
             this.cookies = new ArrayList<>(cookies); this.destination = destination; this.ticket = ticket;
-            remaining = cookies.size(); acknowledged = new boolean[remaining];
+            this.clearing = clearing;
+            remaining = clearing ? 1 : cookies.size(); acknowledged = new boolean[remaining];
         }
     }
     private final Executor serial, io;
@@ -43,7 +46,14 @@ final class LoginCookieCommit {
 
     Ticket submit(List<String> cookies, Destination destination, Consumer<Boolean> completed) {
         Ticket ticket = new Ticket(completed);
-        Batch batch = new Batch(cookies, destination, ticket);
+        Batch batch = new Batch(cookies, destination, ticket, false);
+        serial.execute(() -> { waiting.addLast(batch); startNext(); });
+        return ticket;
+    }
+
+    Ticket clear(Destination destination, Consumer<Boolean> completed) {
+        Ticket ticket = new Ticket(completed);
+        Batch batch = new Batch(new ArrayList<>(), destination, ticket, true);
         serial.execute(() -> { waiting.addLast(batch); startNext(); });
         return ticket;
     }
@@ -65,6 +75,16 @@ final class LoginCookieCommit {
             return;
         }
         Batch batch = active;
+        if (batch.clearing) {
+            try {
+                batch.destination.clear(removedAny -> {
+                    // Android reports false when there were no entries to remove; verification decides success.
+                    serial.execute(() -> acknowledge(batch, 0, true));
+                });
+            }
+            catch (RuntimeException rejected) { serial.execute(() -> acknowledge(batch, 0, false)); }
+            return;
+        }
         if (batch.remaining == 0) { batch.accepted = false; flush(batch); return; }
         for (int index = 0; index < batch.cookies.size(); index++) {
             final int slot = index;

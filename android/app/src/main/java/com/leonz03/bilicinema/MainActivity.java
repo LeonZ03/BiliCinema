@@ -5,6 +5,7 @@ import android.app.AlertDialog;
 import android.content.ClipData;
 import android.content.ClipboardManager;
 import android.content.Intent;
+import android.content.pm.ActivityInfo;
 import android.content.SharedPreferences;
 import android.content.res.Configuration;
 import android.graphics.Color;
@@ -12,6 +13,7 @@ import android.net.Uri;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
+import android.os.SystemClock;
 import android.view.View;
 import android.view.WindowManager;
 import android.webkit.CookieManager;
@@ -27,23 +29,37 @@ import java.util.concurrent.CancellationException;
 
 /** Composition and lifecycle for the native cinema; media and room state retain their existing owners. */
 @UnstableApi
-public final class MainActivity extends Activity implements RoomClient.Listener, CinemaUi.Actions, NativePlaybackAdapter.Listener {
+public final class MainActivity extends Activity implements RoomClient.Listener, CinemaUi.Actions, PlaybackAdapter.Listener {
     private static final int LOGIN_REQUEST = 41;
     private final Handler main = new Handler(Looper.getMainLooper());
     private final ExecutorService mediaWork = Executors.newSingleThreadExecutor();
     private final BilibiliMediaResolver resolver = new BilibiliMediaResolver();
     private final MediaSession media = new MediaSession();
+    private final MediaOverlayTracks overlayTracks = new MediaOverlayTracks();
     private final Map<String, String> nicknames = new LinkedHashMap<>();
     private CinemaUi ui;
     private RoomClient rooms;
-    private NativePlaybackAdapter playback;
+    private PlaybackAdapter playback;
     private UpdateManager updates;
     private Future<?> pendingWork;
     private JSONObject snapshot, pendingRoomMedia;
+    private java.util.List<BilibiliMediaResolver.Resolved.CatalogItem> mediaCatalog = java.util.Collections.emptyList();
     private PlaybackFailure failure;
     private String room = "", role = "", memberId = "", title = "尚未选择影片", pendingInput = "", notice = "";
     private long version = -1, syncRevision = -1, roomEpoch, clockOffset;
+    private long lastRoomCorrectionAt = -1;
+    private boolean correctingRoomPlayback;
     private double position, duration, currentRate = 1;
+    private int preferredQuality;
+    private int subtitleIndex = -1;
+    private boolean danmakuEnabled = true;
+    private boolean danmakuAvailable;
+    private String danmakuStatus = "弹幕加载中";
+    private String overlayCookie = "";
+    private java.util.List<MediaOverlayTracks.Subtitle> subtitles = java.util.Collections.emptyList();
+    private boolean subtitleCatalogLoaded;
+    private String subtitleLoadError = "";
+    private float videoAspectRatio;
     private double pendingRoomPosition, pendingRoomRate = 1;
     private boolean hostRestorePending, pendingRoomPlaying;
     private boolean connected, connecting, busy, foreground = true, actuallyPlaying, soloIntent, loggedIn;
@@ -52,12 +68,11 @@ public final class MainActivity extends Activity implements RoomClient.Listener,
 
     @Override public void onCreate(Bundle saved) {
         super.onCreate(saved);
-        int background = Color.rgb(16, 18, 22);
-        getWindow().setStatusBarColor(background);
-        getWindow().setNavigationBarColor(background);
+        CinemaTheme.applySystemBars(this, false);
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
         getWindow().setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_NOTHING);
         loggedIn = preferences().getBoolean("loggedIn", false);
+        preferredQuality = Math.max(0, preferences().getInt("playbackQuality", 0));
         rooms = new RoomClient(this);
         ui = new CinemaUi(this, this);
         setContentView(ui.root());
@@ -76,6 +91,20 @@ public final class MainActivity extends Activity implements RoomClient.Listener,
             if (media.selected() != null && saved.getBoolean("fullscreen", false)) ui.setFullscreen(true);
         }
         updates.recoverAndCheck();
+        if (saved == null) receiveShare(getIntent());
+    }
+
+    @Override protected void onNewIntent(Intent intent) {
+        super.onNewIntent(intent); setIntent(intent); receiveShare(intent);
+    }
+
+    private void receiveShare(Intent intent) {
+        if (intent == null || !Intent.ACTION_SEND.equals(intent.getAction()) || !"text/plain".equals(intent.getType())) return;
+        CharSequence shared = intent.getCharSequenceExtra(Intent.EXTRA_TEXT);
+        if (shared == null || shared.length() == 0 || shared.length() > 16_384) { status("分享内容为空或过长，请重新复制影片链接"); return; }
+        if (!canControl() || connectionUnresolved()) { status("请先完成房间连接；房间内由房主选片"); return; }
+        ui.receiveSharedMedia(shared.toString());
+        status("已填入分享内容，选择打开影片或创建房间即可");
     }
 
     private SharedPreferences preferences() { return getPreferences(MODE_PRIVATE); }
@@ -83,10 +112,11 @@ public final class MainActivity extends Activity implements RoomClient.Listener,
     private boolean host() { return inRoom() && "host".equals(role); }
     private boolean canControl() { return !inRoom() || (host() && connected); }
 
-    private void createPlayback() {
+    private void createPlayback() { createPlayback(false); }
+    private void createPlayback(boolean official) {
         if (destroyed) return;
         try {
-            playback = new NativePlaybackAdapter(this, this);
+            playback = official ? new OfficialPlaybackAdapter(this, this) : new NativePlaybackAdapter(this, this);
             ui.setPlayerView(playback.view());
         } catch (RuntimeException error) {
             playback = null;
@@ -94,6 +124,11 @@ public final class MainActivity extends Activity implements RoomClient.Listener,
         }
     }
 
+    private void releasePlayback() {
+        PlaybackAdapter previous = playback; playback = null;
+        if (ui != null) ui.setPlayerView(null);
+        if (previous != null) previous.close();
+    }
     @Override public void createRoom(String input) {
         if (inRoom() || connectionUnresolved()) { status("请先完成或取消当前连接"); return; }
         pendingInput = input == null ? "" : input.trim();
@@ -104,10 +139,9 @@ public final class MainActivity extends Activity implements RoomClient.Listener,
     }
     @Override public void joinRoom(String input) {
         if (inRoom() || connectionUnresolved()) { status("请先完成或取消当前连接"); return; }
-        String value = input == null ? "" : input.trim();
+        String value = RoomInvitation.code(input);
         try {
-            if (value.contains("?")) value = Uri.parse(value).getQueryParameter("room");
-            if (value == null || !value.matches("[A-Za-z0-9_-]{22}")) { status("请输入完整邀请链接或22位房间码"); return; }
+            if (value == null) { status("请输入完整邀请链接或22位房间码"); return; }
             pendingInput = ""; pendingRoomMedia = null;
             String credential = value.equals(preferences().getString("room", "")) ? preferences().getString("client", "") : "";
             connect(value, credential, RoomConnectionProgress.Operation.JOIN);
@@ -189,6 +223,35 @@ public final class MainActivity extends Activity implements RoomClient.Listener,
             }
         });
     }
+    @Override public void previewMedia(String input) {
+        if (destroyed || inRoom() || connecting || busy || media.selected() != null) return;
+        long request = media.requestSelection(), epoch = roomEpoch;
+        cancelWork();
+        if (input.trim().isEmpty()) return;
+        String cookie = apiCookie();
+        pendingWork = mediaWork.submit(() -> {
+            try {
+                BilibiliMediaResolver.Resolved resolved = resolver.input(input, cookie);
+                main.post(() -> {
+                    if (!destroyed && media.currentSelectionRequest(request) && epoch == roomEpoch) ui.showMediaPreview(input, resolved.title, resolved.duration, null);
+                });
+                if (resolved.cover.isEmpty()) return;
+                byte[] bytes = resolver.cover(resolved);
+                android.graphics.BitmapFactory.Options bounds = new android.graphics.BitmapFactory.Options(); bounds.inJustDecodeBounds = true;
+                android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.length, bounds);
+                android.graphics.BitmapFactory.Options options = new android.graphics.BitmapFactory.Options(); options.inSampleSize = 1;
+                while (bounds.outWidth / options.inSampleSize > 320 || bounds.outHeight / options.inSampleSize > 320) options.inSampleSize *= 2;
+                android.graphics.Bitmap image = android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.length, options);
+                main.post(() -> {
+                    if (!destroyed && media.currentSelectionRequest(request) && epoch == roomEpoch) ui.showMediaPreview(input, resolved.title, resolved.duration, image);
+                });
+            } catch (Exception error) {
+                if (error instanceof CancellationException || Thread.currentThread().isInterrupted()) return;
+                // Preview is optional; playback performs the authoritative resolution and reports actionable failures.
+                main.post(() -> { if (!destroyed && media.currentSelectionRequest(request) && epoch == roomEpoch) ui.previewUnavailable(input); });
+            }
+        });
+    }
     private void sendMediaSelection(JSONObject identity) {
         try {
             if (!rooms.send(new JSONObject().put("type", "select").put("media", identity))) status("影片尚未选择，请连接房间后重试");
@@ -196,8 +259,7 @@ public final class MainActivity extends Activity implements RoomClient.Listener,
     }
     private void openResolved(BilibiliMediaResolver.Resolved resolved) {
         long token = beginMedia(resolved.media);
-        if (!media.resolved(token, resolved)) { fail(token, new PlaybackFailure(PlaybackFailure.Reason.INVALID_MEDIA)); return; }
-        loadSource(token, resolved, apiCookie());
+        acceptResolved(token, resolved, apiCookie());
     }
     private void openMedia(JSONObject identity, boolean resetPosition) {
         if (resetPosition) position = 0;
@@ -206,25 +268,42 @@ public final class MainActivity extends Activity implements RoomClient.Listener,
         pendingWork = mediaWork.submit(() -> {
             try {
                 BilibiliMediaResolver.Resolved resolved = resolver.room(identity, cookie);
-                PlaybackSource source = resolver.playable(resolved, cookie);
-                main.post(() -> acceptSource(token, resolved, source));
+                main.post(() -> acceptResolved(token, resolved, cookie));
             } catch (Exception error) { reportLoadFailure(token, error); }
         });
     }
     private long beginMedia(JSONObject identity) {
         cancelWork();
+        boolean sameMedia = media.key().equals(MediaIdentity.key(identity));
         long token = media.begin(identity, position, currentRate, !inRoom());
         syncRevision = -1;
-        if (playback != null) { playback.close(); playback = null; }
+        lastRoomCorrectionAt = -1;
+        releasePlayback();
+        mediaCatalog = java.util.Collections.emptyList();
+        overlayTracks.cancel(); subtitleIndex = -1; subtitles = java.util.Collections.emptyList(); danmakuAvailable = false;
+        subtitleCatalogLoaded = false; subtitleLoadError = "";
+        if (ui != null) ui.updateTracks(subtitles, java.util.Collections.emptyList());
         busy = true; actuallyPlaying = false; failure = null;
-        notice = ""; title = "正在加载影片…";
+        notice = "";
+        if (!sameMedia) { title = "正在加载影片…"; duration = 0; videoAspectRatio = 0; applyOrientation(); }
         publishPreparation(true); render();
         return token;
     }
+    private void acceptResolved(long token, BilibiliMediaResolver.Resolved resolved, String cookie) {
+        if (destroyed || token != media.generation()) return;
+        if (!media.resolved(token, resolved)) { fail(token, new PlaybackFailure(PlaybackFailure.Reason.INVALID_MEDIA)); return; }
+        title = resolved.title.isEmpty() ? "房间影片" : resolved.title;
+        mediaCatalog = resolved.catalog;
+        overlayCookie = cookie;
+        overlayTracks.load(resolved.media, cookie, token, this::overlayTracksLoaded);
+        render();
+        loadSource(token, resolved, cookie);
+    }
     private void loadSource(long token, BilibiliMediaResolver.Resolved resolved, String cookie) {
+        int quality = preferredQuality;
         pendingWork = mediaWork.submit(() -> {
             try {
-                PlaybackSource source = resolver.playable(resolved, cookie);
+                PlaybackSource source = resolver.playable(resolved, cookie, quality);
                 main.post(() -> acceptSource(token, resolved, source));
             } catch (Exception error) { reportLoadFailure(token, error); }
         });
@@ -234,14 +313,17 @@ public final class MainActivity extends Activity implements RoomClient.Listener,
         if (media.state() == MediaSession.State.RESOLVING && !media.resolved(token, resolved)) {
             fail(token, new PlaybackFailure(PlaybackFailure.Reason.INVALID_MEDIA)); return;
         }
-        if (!media.bind(token, source.media())) { fail(token, new PlaybackFailure(PlaybackFailure.Reason.INVALID_MEDIA)); return; }
+        if (!media.bind(token, source)) { fail(token, new PlaybackFailure(PlaybackFailure.Reason.INVALID_MEDIA)); return; }
         busy = false; title = source.title.isEmpty() ? "房间影片" : source.title;
         duration = source.durationSeconds; failure = null;
-        if (playback == null) createPlayback();
+        if (source.kind != PlaybackSource.Kind.OFFICIAL && preferredQuality > 0 && source.quality != preferredQuality) notice = "本片当前可用画质为 " + source.qualityLabel();
+        if (playback == null) createPlayback(source.kind == PlaybackSource.Kind.OFFICIAL);
         if (playback == null) { fail(token, new PlaybackFailure(PlaybackFailure.Reason.UNSUPPORTED)); return; }
         try {
             playback.prepare(source, token);
             playback.setForeground(foreground);
+            if (inRoom()) applyCurrent(true);
+            else playback.requestPlayback(soloIntent);
         } catch (RuntimeException error) { fail(token, new PlaybackFailure(PlaybackFailure.Reason.UNSUPPORTED)); }
         render();
     }
@@ -253,7 +335,10 @@ public final class MainActivity extends Activity implements RoomClient.Listener,
     }
     private void fail(long token, PlaybackFailure error) {
         if (!media.fail(token)) return;
+        overlayTracks.cancel(); subtitles = java.util.Collections.emptyList(); danmakuAvailable = false;
+        ui.updateTracks(subtitles, java.util.Collections.emptyList());
         busy = false; actuallyPlaying = false; failure = error;
+        if ("正在加载影片…".equals(title)) title = "影片加载未完成";
         if (error.reason == PlaybackFailure.Reason.NEEDS_LOGIN) {
             loggedIn = false; preferences().edit().putBoolean("loggedIn", false).apply();
         }
@@ -266,7 +351,40 @@ public final class MainActivity extends Activity implements RoomClient.Listener,
     @Override public void retryPlayback() {
         JSONObject selected = media.selected();
         if (selected == null) { status("请先选择影片"); return; }
+        if (failure != null && failure.reason == PlaybackFailure.Reason.PLAYBACK_BLOCKED
+                && playback != null && media.bound() && foreground && (!inRoom() || connected)) {
+            // An explicit local gesture can release a system block without controlling the room.
+            boolean requested = inRoom() ? snapshot != null && snapshot.optBoolean("playing") : soloIntent;
+            if (requested) playback.play(); else playback.pause();
+            return;
+        }
         openMedia(selected, false);
+    }
+
+    @Override public void quality(int value) {
+        PlaybackSource source = media.source();
+        if (busy || source == null || (inRoom() && !connected)) return;
+        if (value != 0 && source.qualities.stream().noneMatch(option -> option.id == value)) return;
+        if (preferredQuality == value) return;
+        preferredQuality = value;
+        preferences().edit().putInt("playbackQuality", value).apply();
+        // Quality is device-local. Readiness still follows the existing host/guest rules.
+        openMedia(media.selected(), false);
+    }
+    @Override public void toggleDanmaku() {
+        if (!danmakuAvailable) { if ("弹幕重试".equals(danmakuStatus)) retryOverlayTracks(); return; }
+        danmakuEnabled = !danmakuEnabled; render();
+    }
+    @Override public void subtitle(int index) {
+        if (index < -1 || index >= subtitles.size()) return;
+        subtitleIndex = index; render();
+        JSONObject selected = media.selected();
+        if (index >= 0 && selected != null) overlayTracks.loadSubtitle(selected, overlayCookie, media.generation(), index, this::overlayTracksLoaded);
+    }
+    @Override public void retryOverlayTracks() {
+        JSONObject selected = media.selected(); if (selected == null) return;
+        subtitleCatalogLoaded = false; subtitleLoadError = ""; danmakuAvailable = false;
+        overlayTracks.load(selected, overlayCookie, media.generation(), this::overlayTracksLoaded); render();
     }
 
     @Override public void togglePlayback() {
@@ -291,6 +409,7 @@ public final class MainActivity extends Activity implements RoomClient.Listener,
         else if (media.selected() != null) {
             media.queueInitialSeek(media.generation(), seconds);
             position = seconds;
+            overlayTracks.seek(media.selected(), overlayCookie, media.generation(), seconds, this::overlayTracksLoaded);
             if (playback != null && media.bound()) playback.seek(seconds);
             render();
         }
@@ -305,7 +424,7 @@ public final class MainActivity extends Activity implements RoomClient.Listener,
             render();
         }
     }
-    @Override public void onState(long token, NativePlaybackAdapter.State state) {
+    @Override public void onState(long token, PlaybackAdapter.State state) {
         if (destroyed || token != media.generation()) return;
         switch (state) {
             case READY:
@@ -325,7 +444,7 @@ public final class MainActivity extends Activity implements RoomClient.Listener,
                 return;
             default: return;
         }
-        boolean restoringHost = state == NativePlaybackAdapter.State.READY && hostRestorePending && host() && connected;
+        boolean restoringHost = state == PlaybackAdapter.State.READY && hostRestorePending && host() && connected;
         if (restoringHost) {
             hostRestorePending = false;
             try {
@@ -334,7 +453,7 @@ public final class MainActivity extends Activity implements RoomClient.Listener,
             } catch (Exception error) { status("房间已创建，进度恢复未完成，可手动同步播放"); }
         }
         publishPreparation(false);
-        if (state == NativePlaybackAdapter.State.READY && foreground) {
+        if (state == PlaybackAdapter.State.READY && foreground) {
             // The sync response owns the restored room target; do not seek to the pre-sync snapshot.
             if (inRoom()) { if (!restoringHost) applyCurrent(false); }
             else if (playback != null) {
@@ -349,12 +468,50 @@ public final class MainActivity extends Activity implements RoomClient.Listener,
     }
     @Override public void onProgress(long token, double sample, double total, boolean playing) {
         if (destroyed || token != media.generation() || !Double.isFinite(sample) || sample < 0) return;
+        double previousPosition = position;
         if (!media.awaitingInitialAlignment() || inRoom()) position = sample;
         if (Double.isFinite(total) && total > 0) duration = total;
+        JSONObject selectedMedia = media.selected();
+        if (selectedMedia != null) {
+            if (Math.abs(sample - previousPosition) > 3) overlayTracks.seek(selectedMedia, overlayCookie, token, sample, this::overlayTracksLoaded);
+            else overlayTracks.loadSegment(selectedMedia, overlayCookie, token, (int) (sample / 360.0) + 1, this::overlayTracksLoaded);
+        }
         boolean changed = actuallyPlaying != playing;
         actuallyPlaying = playing;
         ui.updatePosition(position, duration);
+        ui.setOverlayPlayback(position, currentRate, actuallyPlaying && foreground);
+        // Observation drives recovery even when the cloud timeline has not changed. A received
+        // command is not proof that the native/site player applied it successfully.
+        if (inRoom() && connected && foreground) {
+            long now = SystemClock.elapsedRealtime();
+            MediaSession.SyncState previous = media.syncState();
+            observeRoomPlayback(now);
+            if (!correctingRoomPlayback && (lastRoomCorrectionAt < 0 || now - lastRoomCorrectionAt >= 1000))
+                applyCurrent(false);
+            changed |= previous != media.syncState();
+        }
         if (changed) render();
+    }
+    private void overlayTracksLoaded(long generation, java.util.List<MediaOverlayTracks.Subtitle> tracks,
+                                     java.util.List<MediaOverlayTracks.Danmaku> comments, int segment, int state) {
+        main.post(() -> {
+            if (!destroyed && foreground && generation == media.generation() && overlayTracks.isCurrent(generation, tracks)) {
+                subtitles = tracks;
+                danmakuAvailable = !comments.isEmpty();
+                subtitleCatalogLoaded = (state & MediaOverlayTracks.SUBTITLES_READY) != 0;
+                subtitleLoadError = (state & MediaOverlayTracks.SUBTITLE_ERROR) != 0 ? "字幕加载失败，选择语言可重试" : "";
+                danmakuStatus = (state & MediaOverlayTracks.DANMAKU_ERROR) != 0 ? "弹幕重试"
+                        : (state & MediaOverlayTracks.DANMAKU_READY) != 0 ? "无弹幕" : "弹幕加载中";
+                ui.updateTracks(tracks, comments); render();
+                if (subtitleIndex >= 0 && subtitleIndex < tracks.size()) {
+                    MediaOverlayTracks.Subtitle selected = tracks.get(subtitleIndex);
+                    if (!selected.loaded && !selected.failed) overlayTracks.loadSubtitle(media.selected(), overlayCookie, generation, subtitleIndex, this::overlayTracksLoaded);
+                }
+            }
+        });
+    }
+    @Override public void onQuality(long token, int quality) {
+        if (!destroyed && media.updateQuality(token, quality)) render();
     }
     @Override public void onUserIntent(long token, double sample, double speed, boolean playing) {
         if (destroyed || token != media.generation()) return;
@@ -451,7 +608,7 @@ public final class MainActivity extends Activity implements RoomClient.Listener,
         render();
     }
     private void applyCurrent(boolean force) {
-        if (snapshot == null || playback == null || !media.bound() || !connected || !foreground) return;
+        if (correctingRoomPlayback || snapshot == null || playback == null || !media.bound() || !connected || !foreground) return;
         if (!MediaIdentity.key(snapshot.optJSONObject("media")).equals(media.key())) return;
         double target = MediaIdentity.targetPosition(snapshot, System.currentTimeMillis(), clockOffset);
         double speed = snapshot.optDouble("rate", 1);
@@ -459,12 +616,19 @@ public final class MainActivity extends Activity implements RoomClient.Listener,
         long nextSync = snapshot.optLong("syncRevision", 0);
         boolean align = force || nextSync != syncRevision;
         currentRate = speed;
-        if (media.ready()) {
-            syncRevision = nextSync;
-            playback.apply(target, speed, snapshot.optBoolean("playing"), align);
-        } else if (media.acceptsPausedTimeline(snapshot.optBoolean("playing"))) {
-            playback.apply(target, speed, false, false);
+        lastRoomCorrectionAt = SystemClock.elapsedRealtime();
+        observeRoomPlayback(lastRoomCorrectionAt);
+        correctingRoomPlayback = true;
+        try {
+            if (media.followRoom(playback, target, speed, snapshot.optBoolean("playing"), align)) syncRevision = nextSync;
+        } finally { correctingRoomPlayback = false; }
+    }
+    private void observeRoomPlayback(long now) {
+        if (snapshot == null || !MediaIdentity.key(snapshot.optJSONObject("media")).equals(media.key())) {
+            media.clearRoomSync(); return;
         }
+        media.observeRoomPlayback(snapshot.optBoolean("playing"), actuallyPlaying,
+            MediaIdentity.targetPosition(snapshot, System.currentTimeMillis(), clockOffset), position, now);
     }
 
     @Override public void invite() {
@@ -480,6 +644,7 @@ public final class MainActivity extends Activity implements RoomClient.Listener,
         } else clearMedia();
     }
     private void clearRoom(String message, boolean forget) {
+        media.clearRoomSync(); lastRoomCorrectionAt = -1;
         roomEpoch++; room = ""; role = ""; memberId = ""; connected = false; connecting = false;
         snapshot = null; version = -1; syncRevision = -1;
         pendingInput = ""; pendingRoomMedia = null; publishedReady = null; publishedBuffering = null; nicknames.clear();
@@ -491,8 +656,12 @@ public final class MainActivity extends Activity implements RoomClient.Listener,
     }
     private void clearMedia() {
         cancelWork(); media.reset(); busy = false; failure = null; actuallyPlaying = false; soloIntent = false;
-        position = 0; duration = 0; currentRate = 1; title = "尚未选择影片";
-        if (playback != null) { playback.close(); playback = null; }
+        overlayTracks.cancel(); subtitles = java.util.Collections.emptyList(); mediaCatalog = java.util.Collections.emptyList();
+        subtitleIndex = -1; subtitleCatalogLoaded = false; subtitleLoadError = ""; danmakuAvailable = false;
+        ui.updateTracks(subtitles, java.util.Collections.emptyList());
+        position = 0; duration = 0; currentRate = 1; videoAspectRatio = 0; title = "尚未选择影片";
+        ui.setFullscreen(false);
+        releasePlayback();
         createPlayback(); render();
     }
     @Override public void setNickname(String name) {
@@ -509,6 +678,15 @@ public final class MainActivity extends Activity implements RoomClient.Listener,
         } catch (Exception error) { status("消息尚未发送，请重试"); }
     }
     @Override public void login() { startActivityForResult(new Intent(this, LoginActivity.class), LOGIN_REQUEST); }
+    @Override public void openOfficial() {
+        JSONObject selected = media.selected();
+        if (selected == null) return;
+        String url = selected.optLong("episodeId") > 0
+                ? "https://www.bilibili.com/bangumi/play/ep" + selected.optLong("episodeId")
+                : "https://www.bilibili.com/video/" + selected.optString("bvid");
+        try { startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(url))); }
+        catch (android.content.ActivityNotFoundException error) { status("未找到可打开B站的应用，请安装B站或浏览器后重试"); }
+    }
     @Override protected void onActivityResult(int request, int result, Intent data) {
         super.onActivityResult(request, result, data);
         if (request == LOGIN_REQUEST && result == RESULT_OK) {
@@ -532,9 +710,32 @@ public final class MainActivity extends Activity implements RoomClient.Listener,
     }
     @Override public void checkUpdate() { updates.check(true); }
     @Override public void fullscreenChanged(boolean fullscreen) {
+        applyOrientation();
+        applyFullscreenWindow(fullscreen);
+    }
+    @Override public void onVideoAspectRatio(long token, float ratio) {
+        if (destroyed || token != media.generation() || !Float.isFinite(ratio) || ratio <= 0) return;
+        if (Math.abs(videoAspectRatio - ratio) < .001f) return;
+        videoAspectRatio = ratio;
+        applyOrientation();
+    }
+    private void applyOrientation() {
+        boolean fullscreen = ui != null && ui.isFullscreen();
+        // Keep the current direction while metadata is loading instead of briefly
+        // rotating a portrait film into landscape before its dimensions arrive.
+        if (fullscreen && videoAspectRatio <= 0) return;
+        int orientation = !fullscreen ? ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
+                : CinemaInteraction.fullscreenLandscape(true, videoAspectRatio)
+                ? ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+                : ActivityInfo.SCREEN_ORIENTATION_SENSOR_PORTRAIT;
+        if (getRequestedOrientation() != orientation) setRequestedOrientation(orientation);
+    }
+    private void applyFullscreenWindow(boolean fullscreen) {
         getWindow().getDecorView().setSystemUiVisibility(fullscreen
             ? View.SYSTEM_UI_FLAG_FULLSCREEN | View.SYSTEM_UI_FLAG_HIDE_NAVIGATION | View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
+                | View.SYSTEM_UI_FLAG_LAYOUT_STABLE | View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN | View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
             : View.SYSTEM_UI_FLAG_VISIBLE);
+        if (!fullscreen) CinemaTheme.applySystemBars(this, inRoom() || displayState() != CinemaUi.PlaybackState.EMPTY);
     }
     private void command(String type) {
         try { rooms.send(new JSONObject().put("type", type)); }
@@ -563,29 +764,48 @@ public final class MainActivity extends Activity implements RoomClient.Listener,
         model.canRestore = !preferences().getString("room", "").isEmpty();
         model.loggedIn = loggedIn; model.accountLabel = loggedIn ? "本机登录已保存" : "B站登录";
         model.nickname = preferences().getString("nickname", "影友");
-        model.roomTitle = host() ? "我的放映室" : "一起看放映室";
+        model.roomTitle = "观影房间";
         model.mediaTitle = title; model.rate = currentRate; model.notice = notice;
+        model.catalog = mediaCatalog;
+        model.subtitles = subtitles;
+        model.subtitleStatus = !subtitleLoadError.isEmpty() ? subtitleLoadError
+                : subtitleCatalogLoaded && subtitles.isEmpty() ? "此视频没有可选字幕" : "字幕列表加载中，请稍后重试";
+        model.subtitleIndex = subtitleIndex; model.danmakuEnabled = danmakuEnabled;
+        model.danmakuAvailable = danmakuAvailable;
+        model.danmakuStatus = danmakuStatus;
+        PlaybackSource source = media.source();
+        if (source != null) {
+            model.qualities = source.qualities;
+            model.qualityLabel = source.qualityLabel();
+        }
+        model.preferredQuality = preferredQuality;
         model.playing = inRoom() ? hostRestorePending ? pendingRoomPlaying
             : snapshot != null && (snapshot.optBoolean("playing") || snapshot.optBoolean("waitingForReady")) : soloIntent;
         model.playbackState = displayState();
         model.status = failure != null ? failure.safeMessage() : playbackStatus(model.playbackState);
-        model.detail = inRoom() ? (host() ? "你控制房间播放，访客独立追赶" : "跟随房主时间轴，本机加载不影响其他成员") : "视频在本机播放，登录信息仅留在本机";
         if (snapshot != null) {
             addMember(model, snapshot.optJSONObject("host"), "房主", true);
             JSONArray guests = snapshot.optJSONArray("guests");
             if (guests != null) for (int i = 0; i < guests.length(); i++) addMember(model, guests.optJSONObject(i), "影友" + (i + 1), false);
         }
         ui.render(model); ui.updatePosition(position, duration);
+        ui.setOverlayPlayback(position, currentRate, actuallyPlaying && foreground);
     }
     private CinemaUi.PlaybackState displayState() {
         if (inRoom() && !connected) return CinemaUi.PlaybackState.RECONNECTING;
         if (failure != null) {
             switch (failure.reason) {
                 case NEEDS_LOGIN: return CinemaUi.PlaybackState.NEEDS_LOGIN;
-                case PERMISSION_DENIED: case UNSUPPORTED: return CinemaUi.PlaybackState.UNSUPPORTED;
+                case PERMISSION_DENIED: return CinemaUi.PlaybackState.NO_PERMISSION;
+                case DRM_PROTECTED: return CinemaUi.PlaybackState.DRM_PROTECTED;
+                case UNSUPPORTED: return CinemaUi.PlaybackState.UNSUPPORTED;
                 case PLAYBACK_BLOCKED: return CinemaUi.PlaybackState.NEEDS_GESTURE;
                 default: return CinemaUi.PlaybackState.RETRYABLE_ERROR;
             }
+        }
+        if (inRoom() && media.ready()) {
+            if (media.syncState() == MediaSession.SyncState.STALLED) return CinemaUi.PlaybackState.SYNC_FAILED;
+            if (media.syncState() == MediaSession.SyncState.CATCHING_UP) return CinemaUi.PlaybackState.SYNCING;
         }
         switch (media.state()) {
             case EMPTY: return CinemaUi.PlaybackState.EMPTY;
@@ -602,10 +822,12 @@ public final class MainActivity extends Activity implements RoomClient.Listener,
             case EMPTY: return "选择影片，和朋友一起看";
             case LOADING: return "正在准备本机影片…";
             case CATCHING_UP: return "本机正在加载，准备后追上房主";
+            case SYNCING: return "正在同步房主的播放状态…";
+            case SYNC_FAILED: return "暂未跟上房主，正在自动重试，也可点击重新同步";
             case BUFFERING: return "房主正在缓冲，准备后继续";
             case PLAYING: return inRoom() ? (host() ? "已同步 · 房主正在播放" : "已同步 · 跟随房主播放") : "正在播放";
             case RECONNECTING: return "房间连接已断开，正在重连";
-            case PAUSED: return inRoom() && !host() ? "已就绪 · 跟随房主" : "已就绪";
+            case PAUSED: return inRoom() && !host() ? "房主已暂停" : "已就绪";
             default: return "请重试播放";
         }
     }
@@ -637,14 +859,28 @@ public final class MainActivity extends Activity implements RoomClient.Listener,
     }
     @Override public void onConfigurationChanged(Configuration configuration) {
         super.onConfigurationChanged(configuration); ui.onConfigurationChanged(configuration);
+        applyFullscreenWindow(ui.isFullscreen());
+    }
+    @Override public void onWindowFocusChanged(boolean hasFocus) {
+        super.onWindowFocusChanged(hasFocus);
+        if (hasFocus && ui != null && ui.isFullscreen()) applyFullscreenWindow(true);
     }
     @Override protected void onPause() {
         super.onPause(); foreground = false; media.setForeground(false); publishPreparation(false);
         if (playback != null) playback.setForeground(false);
+        if (ui != null) { ui.setOverlayPlayback(position, currentRate, false); ui.setOverlayForeground(false); }
+        overlayTracks.cancel(); subtitles = java.util.Collections.emptyList(); danmakuAvailable = false;
+        if (ui != null) ui.updateTracks(subtitles, java.util.Collections.emptyList());
     }
     @Override protected void onResume() {
         super.onResume(); foreground = true; media.setForeground(true);
         if (playback != null) playback.setForeground(true);
+        if (ui != null) ui.setOverlayForeground(true);
+        JSONObject selected = media.selected();
+        if (selected != null) {
+            long token = media.generation(); overlayTracks.load(selected, overlayCookie, token, this::overlayTracksLoaded);
+            subtitleCatalogLoaded = false; subtitleLoadError = "";
+        }
         if (updates != null) updates.installPending();
         render();
     }
@@ -655,8 +891,9 @@ public final class MainActivity extends Activity implements RoomClient.Listener,
     }
     @Override protected void onDestroy() {
         destroyed = true; cancelWork(); main.removeCallbacksAndMessages(null); mediaWork.shutdownNow(); resolver.close();
+        overlayTracks.close();
         if (rooms != null) rooms.destroy();
-        if (playback != null) playback.close();
+        releasePlayback();
         if (updates != null) updates.close();
         if (ui != null) ui.dispose();
         super.onDestroy();

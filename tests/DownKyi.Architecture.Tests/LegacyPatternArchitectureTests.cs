@@ -79,8 +79,10 @@ public sealed class LegacyPatternArchitectureTests
     [Fact]
     public void ViewModelsOnlyOffloadBundledToolExtraction()
     {
+        // The extraction task may be cached and awaited by later navigation requests.
+        // Keep the allowed operation and lifetime token exact, independent of assignment.
         const string allowedExtraction =
-            @"\bawait\s+Task\.Run\s*\(\s*BundledTools\.EnsureDownloadTools\s*,\s*_lifetime\.Token\s*\)";
+            @"\bTask\.Run\s*\(\s*BundledTools\.EnsureDownloadTools\s*,\s*_lifetime\.Token\s*\)";
         var violations = EnumerateSourceFiles(Path.Combine(RepositoryRoot, "src", "DownKyi.Desktop", "ViewModels"))
             .Where(path => Regex.Replace(
                     File.ReadAllText(path),

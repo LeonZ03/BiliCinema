@@ -15,7 +15,7 @@
                             Width="{Binding RelativeSource={RelativeSource FindAncestor, AncestorType={x:Type ListBox}}, Path=Bounds.Width}"
                             Height="86"
                             Padding="14,0"
-                            Background="{TemplateBinding Background}"
+                            Background="{TemplateBinding Background}" BorderThickness="0,0,0,1" BorderBrush="{DynamicResource BrushBorderSubtle}"
                             CornerRadius="{DynamicResource DownKyiRadiusSmall}">
                             <Grid ColumnDefinitions="52,*,140,136">
 
@@ -110,6 +110,7 @@
                                         Command="{Binding ElementName=DownloadedList,Path=((vmdm:ViewDownloadFinishedViewModel)DataContext).OpenFolderCommand}"
                                         CommandParameter="{Binding}"
                                         Theme="{StaticResource BtnStyle}"
+                                        AutomationProperties.Name="打开下载文件夹"
                                         ToolTip.Tip="{DynamicResource OpenFolder}">
                                         <ContentControl Width="18" Height="18">
                                             <Path
@@ -131,6 +132,7 @@
                                         Command="{Binding ElementName=DownloadedList,Path=((vmdm:ViewDownloadFinishedViewModel)DataContext).OpenVideoCommand}"
                                         CommandParameter="{Binding}"
                                         Theme="{StaticResource BtnStyle}"
+                                        AutomationProperties.Name="打开视频文件"
                                         ToolTip.Tip="{DynamicResource OpenVideo}">
                                         <ContentControl Width="18" Height="18">
                                             <Path
@@ -153,6 +155,7 @@
                                         CommandParameter="{Binding}"
                                         Foreground="{DynamicResource BrushWarning}"
                                         Theme="{StaticResource BtnStyle}"
+                                        AutomationProperties.Name="从列表移除下载记录"
                                         ToolTip.Tip="{DynamicResource DeleteDownload}">
                                         <ContentControl Width="18" Height="18">
                                             <Path
@@ -287,6 +290,8 @@
                             Background="{DynamicResource BrushControlFill}"
                             Command="{Binding ClearAllDownloadedCommand}"
                             FontSize="12"
+                            AutomationProperties.Name="清空已完成下载列表"
+                            ToolTip.Tip="清空已完成下载列表"
                             Foreground="{DynamicResource BrushWarning}"
                             Theme="{StaticResource BtnStyle}">
                             <StackPanel Orientation="Horizontal" Spacing="8">

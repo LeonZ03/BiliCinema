@@ -18,16 +18,18 @@ public class LoginCookieCommitTest {
     }
     private static final class Destination implements LoginCookieCommit.Destination {
         final List<Consumer<Boolean>> callbacks = new ArrayList<>();
+        final List<Consumer<Boolean>> clearCallbacks = new ArrayList<>();
         int flushed, closed;
-        boolean verified = true, rejectWrite, failFlush;
+        boolean verified = true, rejectWrite, failFlush, clearing, cookiesPresent = true;
         @Override public void write(String value, Consumer<Boolean> callback) {
             if (rejectWrite) throw new IllegalStateException("write rejected");
             callbacks.add(callback);
         }
+        @Override public void clear(Consumer<Boolean> callback) { clearing = true; clearCallbacks.add(callback); }
         @Override public boolean flushAndVerify() throws Exception {
             flushed++;
             if (failFlush) throw new Exception("unavailable");
-            return verified;
+            return verified && (!clearing || !cookiesPresent);
         }
         @Override public void close() { closed++; }
     }
@@ -89,5 +91,39 @@ public class LoginCookieCommitTest {
         target.callbacks.get(0).accept(true); ui.drain();
         assertEquals(1, target.closed); assertEquals(Collections.singletonList(false), results);
         boolean[] idle = {false}; owner.whenIdle(() -> idle[0] = true); ui.drain(); assertTrue(idle[0]);
+    }
+
+    @Test public void queuedClearKeepsOwnershipAndFlushesAfterTicketDetaches() {
+        Queue ui = new Queue(), io = new Queue();
+        LoginCookieCommit owner = new LoginCookieCommit(ui, io);
+        Destination login = new Destination(), clear = new Destination(); clear.cookiesPresent = false;
+        List<Boolean> results = new ArrayList<>();
+        owner.submit(Collections.singletonList("verified-login"), login, ignored -> { }); ui.drain();
+        LoginCookieCommit.Ticket screen = owner.clear(clear, results::add); ui.drain();
+        assertEquals(0, clear.clearCallbacks.size());
+
+        login.callbacks.get(0).accept(true); ui.drain();
+        assertEquals(1, io.tasks.size()); assertEquals(0, clear.clearCallbacks.size());
+        screen.detach();
+        io.drain(); ui.drain();
+        assertEquals(1, login.flushed); assertEquals(1, login.closed);
+        assertEquals(1, clear.clearCallbacks.size());
+
+        clear.clearCallbacks.get(0).accept(false); ui.drain();
+        assertEquals(1, io.tasks.size());
+        io.drain(); ui.drain();
+        assertEquals(1, clear.flushed); assertEquals(1, clear.closed); assertTrue(results.isEmpty());
+    }
+
+    @Test public void clearingAnAlreadyEmptyCookieStoreSucceedsAfterFlushVerification() {
+        Queue ui = new Queue(), io = new Queue();
+        LoginCookieCommit owner = new LoginCookieCommit(ui, io);
+        Destination empty = new Destination(); empty.cookiesPresent = false;
+        List<Boolean> results = new ArrayList<>();
+        owner.clear(empty, results::add); ui.drain();
+        empty.clearCallbacks.get(0).accept(false); ui.drain();
+        io.drain(); ui.drain();
+        assertEquals(Collections.singletonList(true), results);
+        assertEquals(1, empty.flushed); assertEquals(1, empty.closed);
     }
 }

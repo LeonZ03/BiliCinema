@@ -16,6 +16,28 @@ npx wrangler login
 npx wrangler deploy
 ```
 
+Android APK 使用同一 Worker 的 `/downloads/` 静态资源，清单为
+`/downloads/android-manifest.json`。Cloudflare 的单个静态文件上限为 25 MiB。
+签名构建后，在仓库根目录执行：
+
+```powershell
+pwsh -File script/prepare-android-cloud-update.ps1 -ApkPath artifacts/releases/<version>/android/BiliCinema-<version>-android-universal.apk
+cd cloud
+npm test
+npx wrangler deploy --dry-run
+npx wrangler deploy
+```
+
+准备脚本先从正式域名恢复并校验旧清单及 APK，再把新签名 APK、实际字节数、
+SHA-256 与版本码写入静态资源；清单保留当前及两个历史版本。不得用不同字节
+覆盖同一版本文件名。正式部署后检查清单、APK 响应与哈希，并在已安装旧版的
+设备上确认更新。APK 和生成的清单留在本地暂存目录，不提交 Git。
+
+CI 保留自动部署。每次自动部署前先从正式域名读回当前清单及其中的全部 APK，
+逐个验证大小和 SHA-256 后恢复到 assets 目录，任何异常阻止部署。首次尚无
+清单时仅在现有 Worker `/health` 正常时允许空资源部署。若从另一台机器发版，
+同样先运行准备脚本；不要直接以空 assets 目录执行 Wrangler 部署。
+
 检查 `/health` 返回 `ok: true`、`version: "2"`；再做真实 WSS 建房、加入、
 结束及旧邀请失效检查。HTTP health 不代表 WebSocket 协议已通过。
 SQLite Durable Objects 可用免费方案；实际可用性受账户共享额度限制。
@@ -50,8 +72,9 @@ owner，避免两条流水线并发部署。若采用 Workers Builds，应停用
 
 ## 客户端发布身份
 
-Windows 和 Android 从同一 `bilicinema-v<version>` Release 更新。发版工作流先验证
-.NET、CodeQL、Windows 单文件和 Android 单测/lint/签名，再上传 EXE、APK 与统一
-SHA256SUMS.txt。Android CI 使用 `ANDROID_KEYSTORE_BASE64`、`ANDROID_KEY_ALIAS`、
+Windows 继续使用 `bilicinema-v<version>` Release；Android 使用上述 Cloudflare
+同域静态 APK 和 manifest 更新。发版工作流先验证 .NET、CodeQL、Windows 单文件和
+Android 单测/lint/签名；APK 的 Cloudflare 发布按上述本地步骤单独完成。
+Android CI 使用 `ANDROID_KEYSTORE_BASE64`、`ANDROID_KEY_ALIAS`、
 `ANDROID_KEYSTORE_PASSWORD`、`ANDROID_KEY_PASSWORD`；必须导入首次发布所用的同一个
 签名身份，不能每次重新生成。密钥仅在 runner 临时目录解码，打包后删除。

@@ -40,7 +40,7 @@ if ($provided.Count -eq 0) {
 $localGradle = Join-Path $androidRoot '.tools/gradle-8.9/bin/gradle.bat'
 $wrapper = if (Test-Path -LiteralPath $localGradle) { $localGradle } else { Join-Path $androidRoot 'gradlew.bat' }
 if (-not (Test-Path -LiteralPath $wrapper)) { throw 'Gradle wrapper is missing.' }
-$tasks = if ($SkipChecks) { @(':app:assembleRelease') } else { @(':app:testReleaseUnitTest', ':app:lintRelease', ':app:assembleRelease') }
+[string[]]$tasks = if ($SkipChecks) { @(':app:assembleRelease') } else { @(':app:testReleaseUnitTest', ':app:lintRelease', ':app:assembleRelease') }
 & $wrapper -p $androidRoot --no-daemon @tasks
 if ($LASTEXITCODE -ne 0) { throw 'Android build or verification failed.' }
 $outputPath = if ($OutputDirectory) { [IO.Path]::GetFullPath($OutputDirectory, $repoRoot) }

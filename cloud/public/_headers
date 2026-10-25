@@ -1,0 +1,7 @@
+/downloads/android-manifest.json
+  Cache-Control: no-cache, must-revalidate
+  X-Content-Type-Options: nosniff
+
+/downloads/*.apk
+  Cache-Control: public, max-age=31536000, immutable
+  X-Content-Type-Options: nosniff

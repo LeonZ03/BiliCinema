@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Collections.ObjectModel;
 using System.Diagnostics;
 using System.Globalization;
 using System.Linq;
@@ -14,6 +15,7 @@ using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using DownKyi.Application.Desktop;
+using DownKyi.Application.Media;
 using DownKyi.Core.BiliApi.BiliUtils;
 using DownKyi.Core.BiliApi.Login;
 using DownKyi.Core.Settings;
@@ -36,7 +38,7 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
     private readonly VideoParseCoordinator _parser;
     private readonly MainWindowViewModel _downloadContent;
     private readonly WatchRoomClient _room = new();
-    private readonly List<WatchRoomChatMessage> _chatMessages = [];
+    private readonly ObservableCollection<WatchRoomChatMessage> _chatMessages = [];
     private readonly CancellationTokenSource _lifetime = new();
     private readonly SemaphoreSlim _snapshotGate = new(1, 1);
     private readonly SemaphoreSlim _roomOperationGate = new(1, 1);
@@ -62,11 +64,23 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
     private bool _lastBuffering;
     private bool _guestNeedsAlignment = true;
     private bool _startWhenReady;
+    private bool _resumeSoloPlaybackOnRoomReturn;
     private bool _playerLoading;
+    private CancellationTokenSource _mediaCancellation = new();
+    private CancellationTokenSource? _previewCancellation;
+    private int _previewGeneration;
+    private string? _previewResolvedInput;
+    private Task _playerPreparation = Task.CompletedTask;
     private int _recoveries;
     private bool _disposed;
     private bool _isPreparing;
-    public bool IsPreparing { get => _isPreparing; private set => SetProperty(ref _isPreparing, value); }
+    public bool IsPreparing
+    {
+        get => _isPreparing;
+        private set { if (SetProperty(ref _isPreparing, value)) OnPropertyChanged(nameof(ShowPreparationProgress)); }
+    }
+    public bool ShowPreparationProgress => IsPreparing
+        || ShowDownload && _downloadToolsPreparation is { IsCompleted: false };
     private readonly Stopwatch _roomCreationClock = new();
     private bool _isCreatingRoom;
     private bool _showRoomCreationProgress;
@@ -94,6 +108,9 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
     }
     public string RoomCreationSummary => $"创建房间 {RoomCreationPercentage}% · 已用 {_roomCreationElapsedSeconds} 秒";
     private bool _downloadLoaded;
+    private Task? _downloadToolsPreparation;
+    private AppRoute? _utilityRoute;
+    private int _sectionRevision;
     private bool _updateChecked;
     private string _connectAddress = CloudRoomAddress;
     private string? _roomParsedInput;
@@ -109,24 +126,80 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
     private bool _chatPanelOpen;
 
     public MainWindowViewModel DownloadContent => _downloadContent;
-    private string _selectedSection = "Room";
+    private string _selectedSection = "Home";
+    public bool ShowHome => _selectedSection == "Home";
+    public bool ShowSidebar => !ShowRoom;
     public bool ShowLogin => _selectedSection == "Login";
     public bool ShowRoom => _selectedSection == "Room";
     public bool ShowDownload => _selectedSection == "Download";
+    public bool ShowSettings => _selectedSection == "Settings";
+    public bool ShowUtility => ShowDownload || ShowSettings;
     public bool ShowPlayer => ShowRoom;
 
     public IRelayCommand ShowLoginCommand { get; }
-    public IRelayCommand ShowRoomCommand { get; }
-    public IRelayCommand ShowDownloadCommand { get; }
+    public IAsyncRelayCommand ShowHomeCommand { get; }
+    public IAsyncRelayCommand ShowRoomCommand { get; }
+    public IAsyncRelayCommand ShowDownloadCommand { get; }
+    public IAsyncRelayCommand ShowSettingsCommand { get; }
+    public IRelayCommand ClearVideoInputCommand { get; }
+    public IRelayCommand ClearInviteCommand { get; }
+    public IRelayCommand ToggleDockedChatCommand { get; }
+    public IAsyncRelayCommand SendChatCommand { get; }
+    public IAsyncRelayCommand CopyUidCommand { get; }
+    private bool _dockedChatOpen = true;
+    public bool DockedChatOpen { get => _dockedChatOpen; set => SetProperty(ref _dockedChatOpen, value); }
+    private string _chatDraft = string.Empty;
+    public string ChatDraft { get => _chatDraft; set => SetProperty(ref _chatDraft, value); }
+    private string _utilityTitle = "下载";
+    public string UtilityTitle { get => _utilityTitle; private set => SetProperty(ref _utilityTitle, value); }
+    private string _utilityError = string.Empty;
+    public string UtilityError { get => _utilityError; private set => SetProperty(ref _utilityError, value); }
+    public bool HasFilm => !string.IsNullOrEmpty(RoomFilmTitle);
+    public bool HasPreviewFilm => !string.IsNullOrEmpty(PreviewFilmTitle);
+    private string _previewFilmTitle = string.Empty;
+    public string PreviewFilmTitle
+    {
+        get => _previewFilmTitle;
+        private set { if (SetProperty(ref _previewFilmTitle, value)) OnPropertyChanged(nameof(HasPreviewFilm)); }
+    }
+    private string? _previewFilmCover;
+    public string? PreviewFilmCover { get => _previewFilmCover; private set => SetProperty(ref _previewFilmCover, value); }
+    private string _previewFilmDuration = string.Empty;
+    public string PreviewFilmDuration { get => _previewFilmDuration; private set => SetProperty(ref _previewFilmDuration, value); }
+    private string _previewStatus = string.Empty;
+    public string PreviewStatus { get => _previewStatus; private set => SetProperty(ref _previewStatus, value); }
+    public string ViewerTitle => HasFilm ? RoomFilmTitle : "观影房间";
+    public string MemberCountDisplay => $"{RoomMemberCount}/5";
+    public bool IsHost => _room.Connected && _room.IsHost;
+    public bool CanJoinOrCreate => !_room.Connected;
+    public string PlaybackSummary => Status;
+    private string _accountName = "未登录";
+    public string AccountName { get => _accountName; private set => SetProperty(ref _accountName, value); }
+    private string _accountUid = string.Empty;
+    public string AccountUid { get => _accountUid; private set => SetProperty(ref _accountUid, value); }
+    private string? _accountAvatar;
+    public string? AccountAvatar { get => _accountAvatar; private set => SetProperty(ref _accountAvatar, value); }
+    private string? _filmCover;
+    public string? FilmCover { get => _filmCover; private set => SetProperty(ref _filmCover, value); }
+    private string _filmDuration = string.Empty;
+    public string FilmDuration { get => _filmDuration; private set => SetProperty(ref _filmDuration, value); }
 
     private string _status = "未登录。请扫码登录。";
-    public string Status { get => _status; private set => SetProperty(ref _status, value); }
+    public string Status
+    {
+        get => _status;
+        private set { if (SetProperty(ref _status, value)) OnPropertyChanged(nameof(PlaybackSummary)); }
+    }
 
     private double _playerOpacity;
     public double PlayerOpacity { get => _playerOpacity; private set => SetProperty(ref _playerOpacity, value); }
 
     private bool _playerReady;
-    public bool PlayerReady { get => _playerReady; private set => SetProperty(ref _playerReady, value); }
+    public bool PlayerReady
+    {
+        get => _playerReady;
+        private set { if (SetProperty(ref _playerReady, value)) OnPropertyChanged(nameof(PlaybackSummary)); }
+    }
 
     private string _loginStatus = "未登录。请扫码登录。";
     public string LoginStatus { get => _loginStatus; private set => SetProperty(ref _loginStatus, value); }
@@ -153,10 +226,35 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
     public bool HasLoginQrCode => LoginQrCode != null;
 
     private string _roomVideoInput = string.Empty;
-    public string RoomVideoInput { get => _roomVideoInput; set => SetProperty(ref _roomVideoInput, value); }
+    public string RoomVideoInput
+    {
+        get => _roomVideoInput;
+        set
+        {
+            if (!SetProperty(ref _roomVideoInput, value)) return;
+            Interlocked.Increment(ref _previewGeneration);
+            Interlocked.Exchange(ref _previewCancellation, null)?.Cancel();
+            if (string.Equals(VideoInputResolver.Normalize(value), _previewResolvedInput,
+                    StringComparison.Ordinal)) return;
+            _previewResolvedInput = null;
+            PreviewFilmTitle = string.Empty;
+            PreviewFilmCover = null;
+            PreviewFilmDuration = string.Empty;
+            PreviewStatus = string.Empty;
+        }
+    }
 
     private string _roomFilmTitle = string.Empty;
-    public string RoomFilmTitle { get => _roomFilmTitle; private set => SetProperty(ref _roomFilmTitle, value); }
+    public string RoomFilmTitle
+    {
+        get => _roomFilmTitle;
+        private set
+        {
+            if (!SetProperty(ref _roomFilmTitle, value)) return;
+            OnPropertyChanged(nameof(HasFilm));
+            OnPropertyChanged(nameof(ViewerTitle));
+        }
+    }
 
     private string _positionText = "00:00:00";
     public string PositionText { get => _positionText; private set => SetProperty(ref _positionText, value); }
@@ -244,6 +342,7 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
     public IAsyncRelayCommand CopyLoginQrCommand { get; }
     public IAsyncRelayCommand LogoutCommand { get; }
     public IAsyncRelayCommand ParseCommand { get; }
+    public IAsyncRelayCommand PreviewVideoInputCommand { get; }
     public IAsyncRelayCommand SeekCommand { get; }
     public IAsyncRelayCommand RateCommand { get; }
     public IAsyncRelayCommand CreateRoomCommand { get; }
@@ -282,12 +381,31 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
         _room.Disconnected += OnRoomDisconnected;
         _room.Closed += OnRoomClosed;
         ShowLoginCommand = new RelayCommand(() => SelectSection("Login"));
-        ShowRoomCommand = new RelayCommand(() => SelectSection("Room"));
-        ShowDownloadCommand = new RelayCommand(() => _ = OpenDownloadAsync());
+        ShowHomeCommand = new AsyncRelayCommand(() => RunControlSafelyAsync(() => SelectPlaybackSectionAsync("Home")),
+            AsyncRelayCommandOptions.AllowConcurrentExecutions);
+        ShowRoomCommand = new AsyncRelayCommand(() => RunControlSafelyAsync(() =>
+            SelectPlaybackSectionAsync(HasFilm || IsInRoom ? "Room" : "Home")), AsyncRelayCommandOptions.AllowConcurrentExecutions);
+        ShowDownloadCommand = new AsyncRelayCommand(() => OpenUtilityAsync(AppRoute.Index, "下载"),
+            AsyncRelayCommandOptions.AllowConcurrentExecutions);
+        ShowSettingsCommand = new AsyncRelayCommand(() => OpenUtilityAsync(AppRoute.Settings, "设置"),
+            AsyncRelayCommandOptions.AllowConcurrentExecutions);
+        ClearVideoInputCommand = new RelayCommand(() => RoomVideoInput = string.Empty);
+        ClearInviteCommand = new RelayCommand(() => InviteText = string.Empty);
+        ToggleDockedChatCommand = new RelayCommand(() => DockedChatOpen = !DockedChatOpen);
+        SendChatCommand = new AsyncRelayCommand(async () =>
+        {
+            var draft = ChatDraft;
+            if (await SendRoomChatSafelyAsync(draft).ConfigureAwait(true) && ChatDraft == draft)
+                ChatDraft = string.Empty;
+        });
+        CopyUidCommand = new AsyncRelayCommand(() => RunControlSafelyAsync(
+            () => _clipboard.SetTextAsync(AccountUid, _lifetime.Token)));
         LoginCommand = new AsyncRelayCommand(StartLoginAsync);
         CopyLoginQrCommand = new AsyncRelayCommand(CopyLoginQrAsync);
         LogoutCommand = new AsyncRelayCommand(LogoutAsync);
-        ParseCommand = new AsyncRelayCommand(ParseAsync);
+        ParseCommand = new AsyncRelayCommand(() => RunControlSafelyAsync(ParseAsync));
+        PreviewVideoInputCommand = new AsyncRelayCommand(PreviewVideoInputAsync,
+            AsyncRelayCommandOptions.AllowConcurrentExecutions);
         SeekCommand = new AsyncRelayCommand(() => RunControlSafelyAsync(SeekAsync));
         RateCommand = new AsyncRelayCommand(() => RunControlSafelyAsync(SetRateAsync));
         CreateRoomCommand = new AsyncRelayCommand(() => RunRoomOperationAsync(CreateRoomAsync, creating: true));
@@ -308,14 +426,16 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
         {
             var snapshot = await _session.RefreshAsync(_lifetime.Token).ConfigureAwait(true);
             IsLoggedIn = snapshot.UserInfo?.IsLogin == true;
+            AccountName = IsLoggedIn ? snapshot.UserInfo!.Name : "未登录";
+            AccountUid = IsLoggedIn ? snapshot.UserInfo!.Mid.ToString(CultureInfo.InvariantCulture) : string.Empty;
+            AccountAvatar = IsLoggedIn ? snapshot.UserInfo!.Face : null;
             AccountStatus = IsLoggedIn
-                ? $"已登录：{snapshot.UserInfo!.Name} · UID {snapshot.UserInfo.Mid}"
-                  + (snapshot.UserInfo.VipStatus == 1 ? " · 大会员" : string.Empty)
-                : "未登录 B 站账号";
-            LoginStatus = IsLoggedIn ? "已登录，可以开始观影或下载。" : "未登录。请扫码登录。";
+                ? (snapshot.UserInfo!.VipStatus == 1 ? "已登录 · 大会员" : "已登录")
+                : "未登录";
+            LoginStatus = IsLoggedIn ? string.Empty : "请用哔哩哔哩 App 扫码登录。";
             if (_player == null)
             {
-                Status = IsLoggedIn ? "已登录。粘贴影片链接并解析后即可播放。" : "未登录。请扫码登录。";
+                Status = IsLoggedIn ? "粘贴链接开始播放。" : "请先登录账号。";
             }
         }
         catch (OperationCanceledException) when (_lifetime.IsCancellationRequested)
@@ -348,38 +468,110 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
         roomBrowser.WebMessageReceived += OnWebMessageReceived;
     }
 
+    internal void ReportInteractionError(string message) => Status = message;
+
     private void SelectSection(string section)
     {
+        _sectionRevision++;
         _selectedSection = section;
+        OnPropertyChanged(nameof(ShowHome));
+        OnPropertyChanged(nameof(ShowSidebar));
         OnPropertyChanged(nameof(ShowLogin));
         OnPropertyChanged(nameof(ShowRoom));
         OnPropertyChanged(nameof(ShowDownload));
+        OnPropertyChanged(nameof(ShowSettings));
+        OnPropertyChanged(nameof(ShowUtility));
         OnPropertyChanged(nameof(ShowPlayer));
+        OnPropertyChanged(nameof(ShowPreparationProgress));
     }
 
-    private async Task OpenDownloadAsync()
+    private async Task SelectPlaybackSectionAsync(string section)
     {
-        SelectSection("Download");
-        if (_downloadLoaded)
+        var pauseRoom = section == "Home" && ShowRoom && _room.Connected && _room.IsHost;
+        var player = _roomPlayer;
+        var rememberSoloPlayback = section != "Room" && ShowRoom && !_room.Connected
+            && player != null && !_playerLoading;
+        SelectSection(section);
+        var revision = _sectionRevision;
+        if (rememberSoloPlayback)
+        {
+            var wasPlaying = !await player!.GetPausedAsync(_lifetime.Token).ConfigureAwait(true);
+            if (revision != _sectionRevision) return;
+            _resumeSoloPlaybackOnRoomReturn = wasPlaying;
+        }
+        if (pauseRoom) _startWhenReady = false;
+        var roomPause = pauseRoom ? SendHostControlAsync(new { type = "pause" })
+            : Task.CompletedTask;
+        try
+        {
+            if (!ShowRoom && player != null && !_playerLoading)
+                await player.SetLocalPlaybackSuppressedAsync(true, _lifetime.Token).ConfigureAwait(true);
+        }
+        finally { await roomPause.ConfigureAwait(true); }
+        // Preparation already applies the latest visible section when it completes.
+        // Navigation must not await a hidden WebView's readiness or hold its button disabled.
+        if (revision != _sectionRevision || _playerLoading) return;
+        player = _roomPlayer;
+        if (player == null) return;
+        await player.SetLocalPlaybackSuppressedAsync(!ShowRoom, _lifetime.Token).ConfigureAwait(true);
+        if (revision != _sectionRevision) return;
+        if (ShowRoom && _room.Connected)
+            await CorrectLatestPlaybackAsync(_lifetime.Token, forceSync: true).ConfigureAwait(true);
+        else if (ShowRoom && _resumeSoloPlaybackOnRoomReturn)
+        {
+            _resumeSoloPlaybackOnRoomReturn = false;
+            await player.SetPausedAsync(false, _lifetime.Token).ConfigureAwait(true);
+        }
+    }
+
+    private void NotifyRoomMembershipChanged()
+    {
+        OnPropertyChanged(nameof(IsInRoom));
+        OnPropertyChanged(nameof(IsHost));
+        OnPropertyChanged(nameof(CanJoinOrCreate));
+        OnPropertyChanged(nameof(PlaybackSummary));
+    }
+
+    private async Task OpenUtilityAsync(AppRoute route, string title)
+    {
+        UtilityTitle = title;
+        UtilityError = string.Empty;
+        SelectSection(route == AppRoute.Settings ? "Settings" : "Download");
+        var revision = _sectionRevision;
+        try
+        {
+            if (route != AppRoute.Settings)
+            {
+                if (_downloadToolsPreparation is null or { IsFaulted: true } or { IsCanceled: true })
+                    _downloadToolsPreparation = Task.Run(BundledTools.EnsureDownloadTools, _lifetime.Token);
+                OnPropertyChanged(nameof(ShowPreparationProgress));
+                await _downloadToolsPreparation.ConfigureAwait(true);
+            }
+            if (revision != _sectionRevision || _lifetime.IsCancellationRequested) return;
+            if (!_downloadLoaded)
+            {
+                _downloadContent.LoadedCommand?.Execute(null);
+                _downloadLoaded = true;
+                _utilityRoute = AppRoute.Index;
+            }
+            if (_utilityRoute != route)
+            {
+                _downloadContent.OpenPage(route);
+                _utilityRoute = route;
+            }
+        }
+        catch (OperationCanceledException) when (_lifetime.IsCancellationRequested)
         {
             return;
         }
-
-        _downloadLoaded = true;
-        IsPreparing = true;
-        try
-        {
-            await Task.Run(BundledTools.EnsureDownloadTools, _lifetime.Token).ConfigureAwait(true);
-            _downloadContent.LoadedCommand?.Execute(null);
-        }
         catch (Exception error) when (IsRoutineError(error))
         {
-            Status = "下载工具准备失败，请检查本机存储空间或重新构建程序。";
-            _downloadLoaded = false;
+            if (revision == _sectionRevision)
+                UtilityError = "页面准备失败，请检查本机存储空间后重试。";
         }
         finally
         {
-            IsPreparing = false;
+            OnPropertyChanged(nameof(ShowPreparationProgress));
         }
     }
 
@@ -409,7 +601,8 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
                 return;
             }
 
-            if (source.GetString() != "biliCinemaPlayer" || _roomPlayer == null || _playerLoading)
+            if (source.GetString() != "biliCinemaPlayer" || _roomPlayer == null || _playerLoading
+                || !ShowRoom)
             {
                 return;
             }
@@ -489,12 +682,12 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
         RoomNicknameStatus = $"已保存我的昵称：{nickname}";
     }
 
-    private async Task SendRoomChatSafelyAsync(string text)
+    private async Task<bool> SendRoomChatSafelyAsync(string text)
     {
         if (!_room.Connected || string.IsNullOrWhiteSpace(text)
             || text.Length > 500 || text.Any(character => char.IsControl(character) && character != '\n'))
         {
-            return;
+            return false;
         }
 
         try
@@ -506,6 +699,7 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
                     ? (_room.IsHost ? "房主" : "访客") : _savedRoomNickname,
                 text = text.Trim()
             }, _lifetime.Token).ConfigureAwait(true);
+            return true;
         }
         catch (OperationCanceledException) when (_lifetime.IsCancellationRequested)
         {
@@ -515,6 +709,7 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
         {
             RoomState = "消息发送失败，请检查房间连接。";
         }
+        return false;
     }
 
     private void OnRoomChatReceived(WatchRoomChatMessage message)
@@ -527,12 +722,16 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
                 return;
             }
 
-            _chatMessages.Add(message);
+            _chatMessages.Add(message with
+            {
+                IsSelf = string.Equals(message.MemberId, _room.MemberId, StringComparison.Ordinal)
+            });
             if (_chatMessages.Count > 80)
             {
                 _chatMessages.RemoveAt(0);
             }
             _chatRevision++;
+            OnPropertyChanged(nameof(ChatRevision));
             if (message.MemberId != _room.MemberId)
             {
                 _latestChatToast = message;
@@ -580,12 +779,14 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
     private void ClearRoomChat()
     {
         _chatPanelOpen = false;
+        ChatDraft = string.Empty;
         _pendingHostMediaKey = null;
         _chatMessages.Clear();
         _latestChatToast = null;
         _hostActionNotices.Clear();
         _latestChatToastReceivedAtUnixMs = 0;
         _chatRevision++;
+        OnPropertyChanged(nameof(ChatRevision));
         _chatToastSequence++;
         _hostActionToastSequence++;
     }
@@ -709,6 +910,9 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
             await _loginCancellation.CancelAsync().ConfigureAwait(true);
         }
         IsLoggedIn = false;
+        AccountName = "未登录";
+        AccountUid = string.Empty;
+        AccountAvatar = null;
         AccountStatus = "未登录 B 站账号";
         if (!LoginHelper.DeleteLoginInfoCookies())
         {
@@ -730,8 +934,15 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
             return;
         }
 
-        var input = RoomVideoInput.Trim();
-        await ParseInputAsync(input, _lifetime.Token)
+        var input = VideoInputResolver.Normalize(RoomVideoInput);
+        if (input.Length == 0)
+        {
+            Status = "请输入视频链接或 BV 号。";
+            return;
+        }
+        SelectSection("Room");
+        var mediaToken = await BeginMediaChangeAsync().ConfigureAwait(true);
+        await ParseInputAsync(input, mediaToken)
             .ConfigureAwait(true);
         if (!IsLoggedIn || _roomPage == null || _roomParsedInput != input)
         {
@@ -748,11 +959,112 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
             }).ConfigureAwait(true);
         }
 
-        await StartPlaybackAsync(startPaused: true, _lifetime.Token).ConfigureAwait(true);
+        if (mediaToken.IsCancellationRequested) return;
+        await StartPlaybackAsync(startPaused: true, mediaToken).ConfigureAwait(true);
+    }
+
+    private async Task PreviewVideoInputAsync()
+    {
+        var input = VideoInputResolver.Normalize(RoomVideoInput);
+        var generation = Interlocked.Increment(ref _previewGeneration);
+        var request = CancellationTokenSource.CreateLinkedTokenSource(_lifetime.Token);
+        var previous = Interlocked.Exchange(ref _previewCancellation, request);
+        try
+        {
+            if (previous != null) await previous.CancelAsync().ConfigureAwait(true);
+            await ResolvePreviewAsync(input, generation, request.Token).ConfigureAwait(true);
+        }
+        finally
+        {
+            Interlocked.CompareExchange(ref _previewCancellation, null, request);
+            request.Dispose();
+        }
+    }
+
+    private async Task ResolvePreviewAsync(string input, int generation, CancellationToken cancellationToken)
+    {
+        if (string.Equals(input, _previewResolvedInput, StringComparison.Ordinal)) return;
+        PreviewFilmTitle = string.Empty;
+        PreviewFilmCover = null;
+        PreviewFilmDuration = string.Empty;
+        if (input.Length == 0)
+        {
+            PreviewStatus = string.Empty;
+            return;
+        }
+        if (!IsLoggedIn)
+        {
+            PreviewStatus = "请先扫码登录。";
+            return;
+        }
+
+        PreviewStatus = "正在解析影片…";
+        try
+        {
+            var detail = await _parser.LoadDetailAsync(input, refresh: true, cancellationToken)
+                .ConfigureAwait(true);
+            if (cancellationToken.IsCancellationRequested || generation != _previewGeneration
+                || !string.Equals(input, VideoInputResolver.Normalize(RoomVideoInput), StringComparison.Ordinal))
+                return;
+            var page = SelectPage(detail.VideoSections.SelectMany(section => section.VideoPages).ToArray(),
+                input, selectedCid: 0);
+            if (page == null || !IsPlayablePage(page))
+            {
+                PreviewStatus = "没有找到可播放的影片，请检查链接。";
+                return;
+            }
+            PreviewFilmTitle = $"{detail.VideoInfoView?.Title ?? string.Empty} · {page.Name}";
+            PreviewFilmCover = detail.VideoInfoView?.CoverUrl;
+            PreviewFilmDuration = page.Duration;
+            PreviewStatus = "影片已解析";
+            _previewResolvedInput = input;
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            return;
+        }
+        catch (Exception error) when (IsRoutineError(error))
+        {
+            if (generation == _previewGeneration)
+                PreviewStatus = "解析失败。请检查链接、账号及网络。";
+        }
+    }
+
+    private async Task<CancellationToken> BeginMediaChangeAsync()
+    {
+        var previous = _mediaCancellation;
+        _mediaCancellation = CancellationTokenSource.CreateLinkedTokenSource(_lifetime.Token);
+        var token = _mediaCancellation.Token;
+        try
+        {
+            await previous.CancelAsync().ConfigureAwait(true);
+            // The old preparation owns the same native browser. Let its cancellation
+            // and disposal finish before a new selection can navigate that browser.
+            await _playerPreparation.ConfigureAwait(true);
+        }
+        finally { previous.Dispose(); }
+        token.ThrowIfCancellationRequested();
+        StopPlayback();
+        _roomPage = null;
+        _roomPages = [];
+        _roomParsedInput = null;
+        _roomVideoTitle = string.Empty;
+        _resumeMediaKey = null;
+        _resumeAtSeconds = 0;
+        RoomFilmTitle = string.Empty;
+        FilmCover = null;
+        FilmDuration = string.Empty;
+        DurationSeconds = 1;
+        SeekPositionSeconds = 0;
+        return token;
     }
 
     private async Task ParseInputAsync(string input, CancellationToken cancellationToken, long selectedCid = 0)
     {
+        using var parsing = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken,
+            _mediaCancellation.Token);
+        cancellationToken = parsing.Token;
+        input = VideoInputResolver.Normalize(input);
         if (!IsLoggedIn)
         {
             Status = "请先扫码登录。";
@@ -795,6 +1107,8 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
             _roomVideoTitle = detail.VideoInfoView?.Title ?? string.Empty;
             _roomParsedInput = input.Trim();
             RoomFilmTitle = $"{_roomVideoTitle} · {page.Name}";
+            FilmCover = detail.VideoInfoView?.CoverUrl;
+            FilmDuration = page.Duration;
             if (_room.Connected && !_room.IsHost)
             {
                 RoomVideoInput = input.Trim();
@@ -813,15 +1127,15 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
         }
     }
 
-    private static VideoPage? SelectPage(VideoPage[] pages, string input, long selectedCid)
+    internal static VideoPage? SelectPage(VideoPage[] pages, string input, long selectedCid)
     {
         var episodeId = ParseEntrance.GetBangumiEpisodeId(input);
         var bvid = ParseEntrance.GetBvId(input);
         var avid = ParseEntrance.GetAvId(input);
         var requestedPage = Uri.TryCreate(input, UriKind.Absolute, out var inputUri)
             ? ParsePageNumber(inputUri.Query) : 0;
-        if (selectedCid > 0) return pages.FirstOrDefault(candidate => candidate.Cid == selectedCid);
         if (episodeId > 0) return pages.FirstOrDefault(candidate => candidate.EpisodeId == episodeId);
+        if (selectedCid > 0) return pages.FirstOrDefault(candidate => candidate.Cid == selectedCid);
         if (!string.IsNullOrEmpty(bvid))
         {
             return pages.FirstOrDefault(candidate => candidate.Bvid == bvid
@@ -854,6 +1168,9 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
     private async Task<bool> RefreshPlayerSelectionAsync(
         BilibiliWebPlaybackSession player, CancellationToken cancellationToken)
     {
+        using var refreshing = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken,
+            _mediaCancellation.Token);
+        cancellationToken = refreshing.Token;
         var current = _roomPage;
         if (current == null || !ReferenceEquals(player, _player)) return false;
 
@@ -881,6 +1198,7 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
             if (!IsPlayerPageUri(uri)) return false;
             var detail = await _parser.LoadDetailAsync(uri.AbsoluteUri, refresh: true, cancellationToken)
                 .ConfigureAwait(true);
+            cancellationToken.ThrowIfCancellationRequested();
             var pages = detail.VideoSections.SelectMany(section => section.VideoPages).ToArray();
             selected = SelectPlayerPage(pages, uri, identity.Cid, current);
             if (selected == null || !IsPlayablePage(selected)) return false;
@@ -992,8 +1310,19 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
     {
         if (_playerLoading)
         {
+            await _playerPreparation.WaitAsync(cancellationToken).ConfigureAwait(true);
             return;
         }
+
+        _playerPreparation = PreparePlaybackAsync(startPaused, cancellationToken);
+        await _playerPreparation.ConfigureAwait(true);
+    }
+
+    private async Task PreparePlaybackAsync(bool startPaused, CancellationToken cancellationToken)
+    {
+        using var preparing = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken,
+            _mediaCancellation.Token);
+        cancellationToken = preparing.Token;
 
         var page = _roomPage;
         var browser = _roomBrowser;
@@ -1016,6 +1345,8 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
             var player = await BilibiliWebPlaybackSession.StartAsync(browser, page,
                 startPaused, cancellationToken).ConfigureAwait(true);
             _roomPlayer = player;
+            if (!ShowRoom)
+                await player.SetLocalPlaybackSuppressedAsync(true, cancellationToken).ConfigureAwait(true);
             if (_resumeMediaKey == MediaKey(page) && _resumeAtSeconds > 0)
             {
                 await player.SeekAsync(_resumeAtSeconds, cancellationToken).ConfigureAwait(true);
@@ -1024,9 +1355,15 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
             }
             PlayerReady = true;
             PlayerOpacity = 1;
-            Status = startPaused ? "画面已就绪，可在视频内播放和调整画质。" : "B 站网页在线播放中。";
+            Status = startPaused ? "已就绪" : "正在播放";
             _recoveries = 0;
             await AnnouncePlayerReadyAsync(player, cancellationToken).ConfigureAwait(true);
+            await player.SetLocalPlaybackSuppressedAsync(!ShowRoom, cancellationToken)
+                .ConfigureAwait(true);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            // A new media selection owns the browser and its user-facing status.
         }
         catch (Exception error) when (IsRoutineError(error))
         {
@@ -1041,11 +1378,12 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
     private async Task AnnouncePlayerReadyAsync(BilibiliWebPlaybackSession player,
         CancellationToken cancellationToken)
     {
-        if (!_room.Connected) return;
+        if (!_room.Connected || !ReferenceEquals(player, _roomPlayer)
+            || !_room.IsHost && !SameMedia(_roomPage, _lastSnapshot?.Media)) return;
         _lastBuffering = await player.GetBufferingAsync(cancellationToken).ConfigureAwait(true);
         await _room.SendAsync(new { type = "buffering", buffering = _lastBuffering }, cancellationToken)
             .ConfigureAwait(true);
-        if (_room.IsHost)
+        if (_room.IsHost && ShowRoom)
         {
             await PublishHostPlaybackAsync(player, cancellationToken).ConfigureAwait(true);
             _startWhenReady = false;
@@ -1076,6 +1414,13 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
 
     private async Task SynchronizePlaybackAsync()
     {
+        if (_room.Connected && !_room.IsHost && _lastSnapshot is { } snapshot)
+        {
+            // Retry the room's selection, including a failed initial parse. A stale
+            // local player must never be repaired or reported as synchronized.
+            await ApplySnapshotAsync(snapshot, retryMedia: true).ConfigureAwait(true);
+            return;
+        }
         var player = _roomPlayer;
         if (player == null || _playerLoading)
         {
@@ -1181,6 +1526,10 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
         {
             await action().ConfigureAwait(true);
         }
+        catch (OperationCanceledException)
+        {
+            // Superseded selections and shutdown are cancellation, not playback errors.
+        }
         catch (Exception error) when (IsRoutineError(error))
         {
             Status = error is InvalidOperationException
@@ -1257,6 +1606,13 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
             await previous.CancelAsync().ConfigureAwait(true);
             previous.Dispose();
         }
+        // Snapshot versions belong to one room. A newly joined room can begin
+        // below the version of the room whose connection was lost.
+        _lastSnapshot = null;
+        _lastVersion = -1;
+        _lastAppliedSyncRevision = -1;
+        _pendingHostMediaKey = null;
+        _startWhenReady = false;
     }
 
     private async Task CreateRoomAsync()
@@ -1268,12 +1624,14 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
         }
 
         await BeginRoomSessionAsync().ConfigureAwait(true);
+        SelectSection("Room");
         _hostInviteUrl = null;
         ReportRoomCreationProgress(new(5, "准备影片与房间状态"));
-        var input = RoomVideoInput.Trim();
+        var input = VideoInputResolver.Normalize(RoomVideoInput);
         if (input.Length > 0 && !string.Equals(_roomParsedInput, input, StringComparison.Ordinal))
         {
-            await ParseInputAsync(input, _lifetime.Token).ConfigureAwait(true);
+            var mediaToken = await BeginMediaChangeAsync().ConfigureAwait(true);
+            await ParseInputAsync(input, mediaToken).ConfigureAwait(true);
         }
         if (input.Length > 0 && (_roomPage == null
             || !string.Equals(_roomParsedInput, input, StringComparison.Ordinal)))
@@ -1308,7 +1666,7 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
                 ? "空房间已创建，等待房主选择影片。"
                 : "房间已创建，可邀请最多 4 位好友加入。";
             OnPropertyChanged(nameof(CanControl));
-            OnPropertyChanged(nameof(IsInRoom));
+            NotifyRoomMembershipChanged();
             OnPropertyChanged(nameof(RoomRoleText));
             if (selectedPage != null)
             {
@@ -1371,10 +1729,11 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
             var snapshot = await _room.ConnectAsync(address, create: false, code,
                 _lifetime.Token).ConfigureAwait(true);
             ClearRoomChat();
+            SelectSection("Room");
             _lastVersion = -1;
             UpdateRoomMemberCount(snapshot);
             OnPropertyChanged(nameof(CanControl));
-            OnPropertyChanged(nameof(IsInRoom));
+            NotifyRoomMembershipChanged();
             OnPropertyChanged(nameof(RoomRoleText));
             await ApplySnapshotAsync(snapshot).ConfigureAwait(true);
         }
@@ -1465,8 +1824,9 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
         RoomState = "未加入房间，可继续单人播放。";
         _roomMemberCount = 0;
         OnPropertyChanged(nameof(RoomParticipantText));
+        OnPropertyChanged(nameof(MemberCountDisplay));
         OnPropertyChanged(nameof(CanControl));
-        OnPropertyChanged(nameof(IsInRoom));
+        NotifyRoomMembershipChanged();
         OnPropertyChanged(nameof(RoomRoleText));
     }
 
@@ -1515,7 +1875,7 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
     }
 
     private async Task ApplySnapshotAsync(WatchRoomSnapshot snapshot, CancellationToken? sessionToken = null,
-        CancellationToken? connectionToken = null)
+        CancellationToken? connectionToken = null, bool retryMedia = false)
     {
         using var applying = CancellationTokenSource.CreateLinkedTokenSource(
             sessionToken ?? _roomSessionCancellation?.Token ?? _lifetime.Token,
@@ -1526,18 +1886,22 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
         {
             cancellationToken.ThrowIfCancellationRequested();
             if (!_room.Connected) return;
-            if (snapshot.Version <= _lastVersion)
+            if (snapshot.Version < (_lastSnapshot?.Version ?? -1)
+                || !retryMedia && snapshot.Version <= _lastVersion)
             {
                 return;
             }
 
-            _lastVersion = snapshot.Version;
             _lastSnapshot = snapshot;
             _lastSnapshotReceivedAtUnixMs = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
             UpdateRoomMemberCount(snapshot);
             RoomState = DescribeRoom(snapshot, _room.Connected);
             if (snapshot.Media is not { } media)
             {
+                if (!_room.IsHost && (_roomPage != null || _playerLoading || ParseCommand.IsRunning))
+                    await BeginMediaChangeAsync().ConfigureAwait(true);
+                if (!_room.IsHost) RoomVideoInput = string.Empty;
+                _lastVersion = snapshot.Version;
                 return;
             }
 
@@ -1553,7 +1917,8 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
             }
 
             cancellationToken.ThrowIfCancellationRequested();
-            await CorrectPlaybackAsync(snapshot, cancellationToken).ConfigureAwait(true);
+            _lastVersion = snapshot.Version;
+            await CorrectPlaybackAsync(snapshot, cancellationToken, forceSync: retryMedia).ConfigureAwait(true);
         }
         finally
         {
@@ -1580,18 +1945,22 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
     private async Task<bool> EnsureSnapshotPlayerAsync(WatchRoomMedia media, WatchRoomSnapshot snapshot,
         CancellationToken cancellationToken)
     {
-        if (_playerLoading) return false;
-
         if (!SameMedia(_roomPage, media))
         {
+            await BeginMediaChangeAsync().ConfigureAwait(true);
+            if (!_room.IsHost) RoomVideoInput = MediaUrl(media);
             await ParseInputAsync(MediaUrl(media), cancellationToken, media.Cid).ConfigureAwait(true);
             cancellationToken.ThrowIfCancellationRequested();
             if (!SameMedia(_roomPage, media))
             {
-                RoomState = "本机未能打开此视频，请检查账号权限。";
+                RoomState = "房间影片加载失败，可点击同步按钮重试。";
                 return false;
             }
         }
+
+        // Do not consume a room selection merely because a solo preparation was
+        // already running. Await it, then reconcile this accepted snapshot.
+        await _playerPreparation.WaitAsync(cancellationToken).ConfigureAwait(true);
 
         if (_player == null)
         {
@@ -1634,7 +2003,7 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
         if (!localAvailable) _guestNeedsAlignment = true;
         var correction = CreatePlaybackCorrection(_room.IsHost, snapshot, drift, currentRate,
             forceSync || snapshot.SyncRevision > _lastAppliedSyncRevision || _guestNeedsAlignment,
-            localAvailable);
+            localAvailable, ShowRoom);
         if (correction.Seek)
         {
             await player.SeekAsync(expected, cancellationToken).ConfigureAwait(true);
@@ -1659,10 +2028,11 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
         double drift,
         double currentRate,
         bool forceSync = false,
-        bool localAvailable = true)
+        bool localAvailable = true,
+        bool roomVisible = true)
     {
         var shouldPause = !snapshot.Playing || snapshot.WaitingForReady
-            || snapshot.Host?.Online != true || !localAvailable;
+            || snapshot.Host?.Online != true || !localAvailable || !roomVisible;
         var targetRate = snapshot.Rate;
         if (!isHost && !forceSync && !shouldPause && Math.Abs(drift) is > 0.45 and <= 1.5)
         {
@@ -1697,7 +2067,8 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
             _pendingHostMediaKey = null;
             _roomMemberCount = 0;
             OnPropertyChanged(nameof(RoomParticipantText));
-            OnPropertyChanged(nameof(IsInRoom));
+            OnPropertyChanged(nameof(MemberCountDisplay));
+            NotifyRoomMembershipChanged();
             OnPropertyChanged(nameof(CanControl));
             _ = ReconnectSafelyAsync();
         });
@@ -1729,6 +2100,7 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
         {
             _roomMemberCount = count;
             OnPropertyChanged(nameof(RoomParticipantText));
+            OnPropertyChanged(nameof(MemberCountDisplay));
         }
     }
 
@@ -1764,7 +2136,7 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
                             reconnect.Token)
                             .ConfigureAwait(true);
                         _lastVersion = -1;
-                        OnPropertyChanged(nameof(IsInRoom));
+                        NotifyRoomMembershipChanged();
                         OnPropertyChanged(nameof(RoomRoleText));
                         OnPropertyChanged(nameof(CanControl));
                         await ApplySnapshotAsync(snapshot, reconnect.Token).ConfigureAwait(true);
@@ -1825,6 +2197,7 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
                     continue;
                 }
 
+                var mediaToken = _mediaCancellation.Token;
                 try
                 {
                     await player.MaintainSurfaceAsync(cancellationToken).ConfigureAwait(true);
@@ -1866,6 +2239,11 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
                     {
                         await _room.PingAsync(cancellationToken).ConfigureAwait(true);
                     }
+                }
+                catch (OperationCanceledException) when (mediaToken.IsCancellationRequested
+                    && !cancellationToken.IsCancellationRequested)
+                {
+                    // A new selection owns status; its cancellation is not a network failure.
                 }
                 catch (Exception error) when (IsRoutineError(error))
                 {
@@ -1910,24 +2288,38 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
 
     private async Task RecoverPlaybackAsync(CancellationToken cancellationToken)
     {
+        _playerPreparation = RecoverPlayerAsync(cancellationToken);
+        await _playerPreparation.ConfigureAwait(true);
+        if (_lastSnapshot != null && _room.Connected && _player != null)
+            await CorrectLatestPlaybackAsync(cancellationToken).ConfigureAwait(true);
+    }
+
+    private async Task RecoverPlayerAsync(CancellationToken cancellationToken)
+    {
+        using var recovery = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken,
+            _mediaCancellation.Token);
+        cancellationToken = recovery.Token;
         var page = _roomPage;
         var browser = _roomBrowser;
-        if (page == null || _recoveries >= 2)
+        if (page == null)
         {
-            if (_room.Connected)
-            {
-                await _room.SendAsync(new { type = "ready", ready = false }, cancellationToken)
-                    .ConfigureAwait(true);
-            }
-            Status = "播放已结束，或网页播放器恢复失败。可重新播放。";
             StopPlayback();
             return;
         }
 
-        _recoveries++;
-        Status = "网页播放器连接中断，正在重新打开并恢复进度…";
         try
         {
+            if (_recoveries >= 2)
+            {
+                if (_room.Connected)
+                    await _room.SendAsync(new { type = "ready", ready = false }, cancellationToken)
+                        .ConfigureAwait(true);
+                Status = "播放已结束，或网页播放器恢复失败。可重新播放。";
+                StopPlayback();
+                return;
+            }
+            _recoveries++;
+            Status = "网页播放器连接中断，正在重新打开并恢复进度…";
             _playerLoading = true;
             if (_room.Connected)
             {
@@ -1947,17 +2339,17 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
             var player = await BilibiliWebPlaybackSession.StartAsync(browser, page,
                 startPaused: true, cancellationToken).ConfigureAwait(true);
             _roomPlayer = player;
+            if (!ShowRoom)
+                await player.SetLocalPlaybackSuppressedAsync(true, cancellationToken).ConfigureAwait(true);
             if (!_room.Connected || _room.IsHost)
             {
                 await player.SeekAsync(_lastPosition, cancellationToken).ConfigureAwait(true);
             }
             await AnnouncePlayerReadyAsync(player, cancellationToken).ConfigureAwait(true);
+            await player.SetLocalPlaybackSuppressedAsync(!ShowRoom, cancellationToken)
+                .ConfigureAwait(true);
             _playerLoading = false;
-            if (_lastSnapshot != null && _room.Connected)
-            {
-                await CorrectLatestPlaybackAsync(cancellationToken).ConfigureAwait(true);
-            }
-            else
+            if (!_room.Connected && ShowRoom)
             {
                 await player.SetPausedAsync(false, cancellationToken).ConfigureAwait(true);
             }
@@ -1965,6 +2357,10 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
             PlayerReady = true;
             PlayerOpacity = 1;
             Status = "已恢复播放。";
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            // A superseding selection must not restore this media's resume state.
         }
         catch (Exception error) when (IsRoutineError(error))
         {
@@ -2013,6 +2409,8 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
         try
         {
             await _lifetime.CancelAsync().ConfigureAwait(true);
+            await _mediaCancellation.CancelAsync().ConfigureAwait(true);
+            await _playerPreparation.ConfigureAwait(true);
             await _monitorTask.ConfigureAwait(true);
             if (_loginCancellation != null)
             {
@@ -2049,6 +2447,7 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
                 _roomSessionCancellation = null;
                 _roomOperationGate.Dispose();
                 _lifetime.Dispose();
+                _mediaCancellation.Dispose();
             }
         }
     }

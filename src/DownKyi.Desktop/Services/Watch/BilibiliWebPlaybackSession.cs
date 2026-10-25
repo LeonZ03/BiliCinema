@@ -30,9 +30,8 @@ internal sealed class BilibiliWebPlaybackSession : IDisposable
                     [data-bili-cinema-player] .bpx-player-primary-area {
                         flex: 1 1 0 !important; min-height: 0 !important; height: auto !important;
                     }
-                    [data-bili-cinema-player] .bpx-player-sending-area { flex: 0 0 auto !important; }
-                    html[data-bili-cinema-fullscreen] .bpx-player-sending-area,
-                    html[data-bili-cinema-fullscreen] .bilibili-player-video-sendbar {
+                    [data-bili-cinema-player] .bpx-player-sending-area,
+                    [data-bili-cinema-player] .bilibili-player-video-sendbar {
                         display: none !important;
                     }
                     html[data-bili-cinema-fullscreen], html[data-bili-cinema-fullscreen] body {
@@ -694,6 +693,20 @@ internal sealed class BilibiliWebPlaybackSession : IDisposable
         await InvokeAsync(BuildPausedScript(paused), cancellationToken).ConfigureAwait(true);
     }
 
+    public async Task SetLocalPlaybackSuppressedAsync(bool suppressed, CancellationToken cancellationToken)
+    {
+        await InvokeAsync(BuildLocalPlaybackSuppressedScript(suppressed), cancellationToken)
+            .ConfigureAwait(true);
+    }
+
+    internal static string BuildLocalPlaybackSuppressedScript(bool suppressed)
+        => $"(() => {{ const v = {Video}; if (!v) return; "
+           + (suppressed
+               ? "if (v.__biliCinemaPreviousMuted === undefined) v.__biliCinemaPreviousMuted = v.muted; v.muted = true; "
+                 + "v.__biliCinemaRemoteEvents ||= {}; if (!v.paused) { v.__biliCinemaRemoteEvents.pause = {}; v.pause(); }"
+               : "if (v.__biliCinemaPreviousMuted !== undefined) { v.muted = v.__biliCinemaPreviousMuted; delete v.__biliCinemaPreviousMuted; }")
+           + " }})()";
+
     // The native WebView can deliver the resulting event after an arbitrarily
     // delayed initialization/readiness snapshot. Consume that exact event on
     // its video element instead of expiring the marker by wall-clock time.
@@ -738,7 +751,9 @@ internal sealed class BilibiliWebPlaybackSession : IDisposable
             throw new InvalidOperationException("网页播放器已经关闭。");
         }
 
-        return await _browser.InvokeScript(script).ConfigureAwait(true) ?? string.Empty;
+        var result = await _browser.InvokeScript(script).ConfigureAwait(true);
+        cancellationToken.ThrowIfCancellationRequested();
+        return result ?? string.Empty;
     }
 
     private static bool IsBilibiliDomain(string? domain)
