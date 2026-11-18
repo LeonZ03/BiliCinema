@@ -187,7 +187,7 @@ internal static class RoomChatOverlayScript
             input.maxLength = 500; input.placeholder = '说点什么…';
             input.setAttribute('aria-label', '聊天消息');
             const actions = make('div', 'bc-actions');
-            const hint = make('span', 'bc-hint'); hint.textContent = 'Enter 发送 · Esc 收起';
+            const hint = make('span', 'bc-hint'); hint.textContent = 'Enter 发送 · Alt 开关聊天 · Esc 收起';
             const sendButton = make('button', 'bc-send');
             sendButton.type = 'button'; sendButton.setAttribute('aria-label', '发送');
             sendButton.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 11.5 21 3l-6.5 18-3-7.5L3 11.5Zm8.5 2L21 3" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
@@ -203,7 +203,7 @@ internal static class RoomChatOverlayScript
             ui = { host, edge, panel, list, input, count, toast, toastName, toastBody,
                 actionToasts, closeButton, fullscreenOpen, revision:-1, toastSequence:-1, actionSequence:-1,
                 fullscreen:false, inRoom:false, toastTimer:null, actionTimers:[],
-                closeTimer:null, editing:false, composing:false, altDismissed:false,
+                closeTimer:null, editing:false, composing:false, altChatPending:false,
                 escapeDismissed:false, dismissClickPending:false, edgeObserver:null,
                 listenerAbort:new AbortController() };
             window.__biliCinemaChatUi = ui;
@@ -246,6 +246,13 @@ internal static class RoomChatOverlayScript
             const close = () => setOpen(false, false);
             ui.closePanel = close;
             ui.openPanel = () => setOpen(true, true);
+            ui.togglePanel = () => {
+                if (!ui.inRoom) return;
+                if (ui.dockedChat) {
+                    if (typeof invokeCSharpAction === 'function')
+                        invokeCSharpAction(JSON.stringify({source:'biliCinemaChat',type:'toggleDockedPanel'}));
+                } else setOpen(!ui.host.classList.contains('bc-open'), true);
+            };
             edge.addEventListener('click', () => setOpen(true, true));
             fullscreenOpen.addEventListener('click', () => setOpen(true, true));
             closeButton.addEventListener('click', close);
@@ -316,24 +323,26 @@ internal static class RoomChatOverlayScript
                 if (event.isComposing || ui.composing || event.keyCode === 229) return;
                 beginEditing();
             });
-            // Alt is independent of playback/fullscreen. Capture both halves so
-            // dismissing chat cannot trigger the player's keyboard handling.
+            // Capture both halves and toggle on release: held Alt must not
+            // repeat, and Alt+another key must retain its normal meaning.
             window.addEventListener('keydown', event => {
                 if (event.key === 'Alt' && !event.ctrlKey && !event.shiftKey && !event.metaKey
-                    && ui.host.classList.contains('bc-open')) {
+                    && ui.inRoom) {
                     event.preventDefault();
                     event.stopImmediatePropagation();
-                    ui.altDismissed = true;
-                    close();
-                }
+                    if (!event.repeat) ui.altChatPending = true;
+                } else ui.altChatPending = false;
             }, {capture:true, signal:ui.listenerAbort.signal});
             window.addEventListener('keyup', event => {
-                if (event.key === 'Alt' && ui.altDismissed) {
+                if (event.key === 'Alt' && ui.altChatPending) {
                     event.preventDefault();
                     event.stopImmediatePropagation();
-                    ui.altDismissed = false;
+                    ui.altChatPending = false;
+                    ui.togglePanel();
                 }
             }, {capture:true, signal:ui.listenerAbort.signal});
+            window.addEventListener('blur', () => { ui.altChatPending = false; },
+                {signal:ui.listenerAbort.signal});
             document.addEventListener('pointerdown', event => {
                 if (ui.host.classList.contains('bc-open') && !ui.panel.contains(event.target)
                     && !ui.edge.contains(event.target)) {

@@ -88,6 +88,7 @@ internal sealed partial class WatchWindow : Window
     private bool _windowClosing;
     private bool _closeConfirmed;
     private bool _closeInProgress;
+    private bool _altChatPending;
     private readonly IBrush? _normalBackground;
     private readonly Avalonia.CornerRadius _normalCornerRadius;
 
@@ -125,6 +126,7 @@ internal sealed partial class WatchWindow : Window
         _fullscreenTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(500) };
         _fullscreenTimer.Tick += OnFullscreenTimerTick;
         Opened += OnOpened;
+        Deactivated += (_, _) => _altChatPending = false;
     }
 
     protected override void OnClosing(WindowClosingEventArgs e)
@@ -252,6 +254,14 @@ internal sealed partial class WatchWindow : Window
 
     protected override async void OnKeyDown(KeyEventArgs args)
     {
+        if (IsChatAltKey(args))
+        {
+            // Toggle after release so key repeat and Alt+another key never flip the panel.
+            _altChatPending = true;
+            args.Handled = true;
+            return;
+        }
+        _altChatPending = false;
         if (!_isFullscreen && _viewModel.ShowRoom && _viewModel.DockedChatOpen
             && args.Key == Key.Escape)
         {
@@ -259,23 +269,6 @@ internal sealed partial class WatchWindow : Window
             args.Handled = true;
             return;
         }
-        if (_viewModel.ChatPanelOpen && args.Key is Key.LeftAlt or Key.RightAlt
-            && (args.KeyModifiers & (KeyModifiers.Control | KeyModifiers.Shift | KeyModifiers.Meta)) == 0)
-        {
-            args.Handled = true;
-            try
-            {
-                await CurrentBrowser.InvokeScript("window.__biliCinemaChatUi?.closePanel?.()")
-                    .ConfigureAwait(true);
-            }
-            catch (Exception error) when (error is InvalidOperationException
-                or ObjectDisposedException or System.Runtime.InteropServices.COMException)
-            {
-                // Navigation can replace the old chat overlay before key delivery.
-            }
-            return;
-        }
-
         var shortcutAvailable = _viewModel.ShowRoom && _viewModel.PlayerReady
             && args.KeyModifiers == KeyModifiers.None
             && FocusManager?.GetFocusedElement() is not TextBox
@@ -319,6 +312,39 @@ internal sealed partial class WatchWindow : Window
         }
 
         base.OnKeyDown(args);
+    }
+
+    private bool IsChatAltKey(KeyEventArgs args) => _viewModel.ShowRoom && _viewModel.IsInRoom
+        && args.Key is Key.LeftAlt or Key.RightAlt
+        && (args.KeyModifiers & (KeyModifiers.Control | KeyModifiers.Shift | KeyModifiers.Meta)) == 0;
+
+    protected override async void OnKeyUp(KeyEventArgs args)
+    {
+        if (_altChatPending && args.Key is Key.LeftAlt or Key.RightAlt)
+        {
+            _altChatPending = false;
+            args.Handled = true;
+            if (!_viewModel.ShowRoom || !_viewModel.IsInRoom) return;
+            if (!_isFullscreen)
+            {
+                _viewModel.ToggleDockedChatCommand.Execute(null);
+            }
+            else
+            {
+                try
+                {
+                    await CurrentBrowser.InvokeScript("window.__biliCinemaChatUi?.togglePanel?.()")
+                        .ConfigureAwait(true);
+                }
+                catch (Exception error) when (error is InvalidOperationException
+                    or ObjectDisposedException or System.Runtime.InteropServices.COMException)
+                {
+                    // Navigation can replace the old chat overlay before key delivery.
+                }
+            }
+            return;
+        }
+        base.OnKeyUp(args);
     }
 
     private async void OnFullscreenTimerTick(object? sender, EventArgs args)
@@ -534,6 +560,9 @@ internal sealed partial class WatchWindow : Window
         if (args.PropertyName is nameof(WatchWindowViewModel.ShowRoom)
             or nameof(WatchWindowViewModel.IsInRoom) or nameof(WatchWindowViewModel.DockedChatOpen))
             ApplyViewerLayout();
+        if (args.PropertyName == nameof(WatchWindowViewModel.DockedChatOpen)
+            && !_isFullscreen && _viewModel.ShowRoom && _viewModel.IsInRoom && _viewModel.DockedChatOpen)
+            Dispatcher.UIThread.Post(() => this.FindControl<TextBox>("ChatInput")?.Focus());
         if (args.PropertyName == nameof(WatchWindowViewModel.ChatRevision))
             Dispatcher.UIThread.Post(() => this.FindControl<ScrollViewer>("ChatScroll")?.ScrollToEnd());
     }

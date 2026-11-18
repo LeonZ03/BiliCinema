@@ -5,6 +5,8 @@ import android.app.AlertDialog;
 import android.content.ClipData;
 import android.content.ClipboardManager;
 import android.content.Intent;
+import android.content.ComponentName;
+import android.content.ServiceConnection;
 import android.content.pm.ActivityInfo;
 import android.content.SharedPreferences;
 import android.content.res.Configuration;
@@ -13,6 +15,7 @@ import android.net.Uri;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
+import android.os.IBinder;
 import android.os.SystemClock;
 import android.view.View;
 import android.view.WindowManager;
@@ -39,6 +42,25 @@ public final class MainActivity extends Activity implements RoomClient.Listener,
     private final Map<String, String> nicknames = new LinkedHashMap<>();
     private CinemaUi ui;
     private RoomClient rooms;
+    private RoomSessionService roomService;
+    private boolean roomServiceBound;
+    private Runnable pendingRoomConnect;
+    private final ServiceConnection roomServiceConnection = new ServiceConnection() {
+        @Override public void onServiceConnected(ComponentName name, IBinder binder) {
+            if (destroyed) return;
+            roomService = ((RoomSessionService.LocalBinder) binder).service();
+            rooms = roomService.client();
+            roomService.attach(MainActivity.this);
+            Runnable pending = pendingRoomConnect; pendingRoomConnect = null;
+            if (pending != null && !inRoom()) pending.run();
+            render();
+        }
+        @Override public void onServiceDisconnected(ComponentName name) {
+            rooms = null; roomService = null;
+            connected = false; connecting = false;
+            if (!destroyed) status("房间后台连接已停止，请重新加入");
+        }
+    };
     private PlaybackAdapter playback;
     private UpdateManager updates;
     private Future<?> pendingWork;
@@ -73,10 +95,12 @@ public final class MainActivity extends Activity implements RoomClient.Listener,
         getWindow().setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_NOTHING);
         loggedIn = preferences().getBoolean("loggedIn", false);
         preferredQuality = Math.max(0, preferences().getInt("playbackQuality", 0));
-        rooms = new RoomClient(this);
+        danmakuEnabled = preferences().getBoolean("danmakuEnabled", true);
         ui = new CinemaUi(this, this);
         setContentView(ui.root());
         createPlayback();
+        roomServiceBound = bindService(new Intent(this, RoomSessionService.class), roomServiceConnection, BIND_AUTO_CREATE);
+        if (!roomServiceBound) status("房间服务暂不可用，请重启应用后重试");
         updates = new UpdateManager(this, this::status);
         render();
         if (saved != null) {
@@ -161,8 +185,22 @@ public final class MainActivity extends Activity implements RoomClient.Listener,
         roomEpoch++; version = -1; syncRevision = -1; connected = false; connecting = true;
         publishedReady = null; publishedBuffering = null;
         notice = "正在连接云端房间…";
-        rooms.connect(code, credential, operation);
+        if (android.os.Build.VERSION.SDK_INT >= 33 && checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS)
+                != android.content.pm.PackageManager.PERMISSION_GRANTED
+                && !preferences().getBoolean("roomNotificationRequested", false)) {
+            preferences().edit().putBoolean("roomNotificationRequested", true).apply();
+            requestPermissions(new String[]{android.Manifest.permission.POST_NOTIFICATIONS}, 42);
+        }
+        if (roomService == null) {
+            pendingRoomConnect = () -> startRoomConnection(code, credential, operation);
+        } else startRoomConnection(code, credential, operation);
         render();
+    }
+    private void startRoomConnection(String code, String credential, RoomConnectionProgress.Operation operation) {
+        if (roomService == null || !roomService.connect(code, credential, operation)) {
+            connecting = false; connected = false;
+            status("房间后台连接无法启动，请重试");
+        }
     }
     @Override public void connectionProgress(RoomConnectionProgress progress) {
         if (destroyed) return;
@@ -173,14 +211,16 @@ public final class MainActivity extends Activity implements RoomClient.Listener,
         render();
     }
     @Override public void retryRoomConnection() {
-        if (rooms.progress() == null || rooms.progress().outcome != RoomConnectionProgress.Outcome.FAILED) return;
+        if (rooms == null || rooms.progress() == null || rooms.progress().outcome != RoomConnectionProgress.Outcome.FAILED) return;
         roomEpoch++; version = -1; syncRevision = -1; connected = false; connecting = true;
         publishedReady = null; publishedBuffering = null; notice = "正在重试房间连接…";
-        rooms.retry(); render();
+        if (roomService == null || !roomService.retry()) connecting = false;
+        render();
     }
     @Override public void cancelRoomConnection() {
         boolean established = !memberId.isEmpty();
-        rooms.stop(true);
+        pendingRoomConnect = null;
+        if (roomService != null) roomService.stopRoom(true);
         if (established) { clearRoom("已取消连接，可在本机继续观看", false); return; }
         roomEpoch++; room = ""; role = ""; memberId = ""; connected = false; connecting = false;
         snapshot = null; version = -1; syncRevision = -1;
@@ -373,7 +413,9 @@ public final class MainActivity extends Activity implements RoomClient.Listener,
     }
     @Override public void toggleDanmaku() {
         if (!danmakuAvailable) { if ("弹幕重试".equals(danmakuStatus)) retryOverlayTracks(); return; }
-        danmakuEnabled = !danmakuEnabled; render();
+        danmakuEnabled = !danmakuEnabled;
+        preferences().edit().putBoolean("danmakuEnabled", danmakuEnabled).apply();
+        render();
     }
     @Override public void subtitle(int index) {
         if (index < -1 || index >= subtitles.size()) return;
@@ -545,7 +587,6 @@ public final class MainActivity extends Activity implements RoomClient.Listener,
             pendingRoomPosition = position; pendingRoomRate = currentRate; pendingRoomPlaying = soloIntent;
         }
         room = code;
-        preferences().edit().putString("room", code).putString("client", client).apply();
     }
     @Override public void message(JSONObject message) {
         if (destroyed) return;
@@ -640,17 +681,23 @@ public final class MainActivity extends Activity implements RoomClient.Listener,
     }
     @Override public void leaveRoom() {
         if (inRoom() || connecting) {
-            rooms.stop(true); clearRoom("已退出房间，可在本机继续观看", true);
+            pendingRoomConnect = null;
+            if (roomService != null) roomService.stopRoom(true);
+            clearRoom("已退出房间，可在本机继续观看", true);
         } else clearMedia();
     }
     private void clearRoom(String message, boolean forget) {
+        if (roomService != null) roomService.stopRoom(false);
         media.clearRoomSync(); lastRoomCorrectionAt = -1;
         roomEpoch++; room = ""; role = ""; memberId = ""; connected = false; connecting = false;
         snapshot = null; version = -1; syncRevision = -1;
         pendingInput = ""; pendingRoomMedia = null; publishedReady = null; publishedBuffering = null; nicknames.clear();
         hostRestorePending = false;
         soloIntent = false; notice = message;
-        if (forget) preferences().edit().remove("room").remove("client").apply();
+        if (forget) {
+            if (roomService != null) roomService.forgetSavedRoom();
+            else preferences().edit().remove("room").remove("client").apply();
+        }
         if (playback != null) playback.apply(position, currentRate, false, false);
         render();
     }
@@ -760,7 +807,7 @@ public final class MainActivity extends Activity implements RoomClient.Listener,
         CinemaUi.Model model = new CinemaUi.Model();
         model.inRoom = inRoom(); model.isHost = host(); model.connected = !inRoom() || connected;
         model.canControl = canControl(); model.busy = busy || connecting;
-        model.roomConnection = rooms.progress();
+        model.roomConnection = rooms == null ? null : rooms.progress();
         model.canRestore = !preferences().getString("room", "").isEmpty();
         model.loggedIn = loggedIn; model.accountLabel = loggedIn ? "本机登录已保存" : "B站登录";
         model.nickname = preferences().getString("nickname", "影友");
@@ -892,7 +939,10 @@ public final class MainActivity extends Activity implements RoomClient.Listener,
     @Override protected void onDestroy() {
         destroyed = true; cancelWork(); main.removeCallbacksAndMessages(null); mediaWork.shutdownNow(); resolver.close();
         overlayTracks.close();
-        if (rooms != null) rooms.destroy();
+        pendingRoomConnect = null;
+        if (roomService != null) roomService.detach(this);
+        if (roomServiceBound) { unbindService(roomServiceConnection); roomServiceBound = false; }
+        rooms = null; roomService = null;
         releasePlayback();
         if (updates != null) updates.close();
         if (ui != null) ui.dispose();

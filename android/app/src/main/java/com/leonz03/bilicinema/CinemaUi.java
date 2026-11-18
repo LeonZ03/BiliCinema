@@ -274,7 +274,9 @@ public final class CinemaUi {
 
     /** Called only after the transport accepted the pending message. */
     public void chatSent() {
-        if (composer != null && composer.getText().toString().equals(pendingChat)) composer.setText("");
+        if (composer != null && composer.getText().toString().equals(pendingChat)) {
+            composer.setText(""); composer.setError(null);
+        }
         if (draft.equals(pendingChat)) draft = "";
         pendingChat = "";
     }
@@ -436,7 +438,7 @@ public final class CinemaUi {
         } else if (fullscreen && model.inRoom) {
             drawerLayer = new FrameLayout(context); drawerLayer.setVisibility(View.GONE);
             root.addView(drawerLayer, new FrameLayout.LayoutParams(-1, -1));
-            drawerScrim = new View(context); drawerScrim.setBackgroundColor(0x77000000);
+            drawerScrim = new View(context); drawerScrim.setBackgroundColor(Color.TRANSPARENT);
             drawerScrim.setOnTouchListener((view, event) -> {
                 if (event.getActionMasked() == MotionEvent.ACTION_UP) view.performClick();
                 return true;
@@ -565,7 +567,7 @@ public final class CinemaUi {
     }
 
     private void buildChatPanel() {
-        chatPanel = column(); chatPanel.setBackgroundColor(fullscreen ? SURFACE : BG); chatPanel.setPadding(dp(16), 0, dp(16), dp(8));
+        chatPanel = column(); chatPanel.setBackgroundColor(fullscreen ? 0xA6101216 : BG); chatPanel.setPadding(dp(16), 0, dp(16), dp(8));
         if (Build.VERSION.SDK_INT >= 28) chatPanel.setAccessibilityPaneTitle(context.getString(R.string.chat_pane_title));
         else chatPanel.setContentDescription(context.getString(R.string.chat_pane_title));
         if (fullscreen) {
@@ -583,6 +585,11 @@ public final class CinemaUi {
         composer = input("发送消息", "聊天内容，最多 500 字"); composer.setSingleLine(false); composer.setMaxLines(3);
         composer.setFilters(new InputFilter[]{new InputFilter.LengthFilter(500)}); composer.setText(draft);
         composer.setImeOptions(android.view.inputmethod.EditorInfo.IME_FLAG_NO_EXTRACT_UI);
+        composer.addTextChangedListener(new android.text.TextWatcher() {
+            public void beforeTextChanged(CharSequence text, int start, int count, int after) { }
+            public void onTextChanged(CharSequence text, int start, int before, int count) { composer.setError(null); }
+            public void afterTextChanged(android.text.Editable text) { }
+        });
         compose.addView(composer, weight());
         send = icon(R.drawable.ic_send, "发送消息", this::sendDraft); send.setImageTintList(ColorStateList.valueOf(CYAN));
         LinearLayout.LayoutParams sendParams = new LinearLayout.LayoutParams(dp(48), dp(52)); sendParams.setMarginStart(dp(8)); compose.addView(send, sendParams);
@@ -652,7 +659,7 @@ public final class CinemaUi {
         overlayAction.setEnabled(!model.busy && (model.playbackState != PlaybackState.UNSUPPORTED || controlsAllowed()));
         composer.setEnabled(model.inRoom); send.setEnabled(model.inRoom && model.connected);
         updateMembers(); updatePosition(position, duration);
-        if (!model.playing || !lastRenderedPlaying) showControls(true);
+        if (model.playing != lastRenderedPlaying) showControls(true);
         lastRenderedPlaying = model.playing;
     }
 
@@ -762,7 +769,8 @@ public final class CinemaUi {
 
     private void sendDraft() {
         String value = composer.getText().toString();
-        if (value.trim().isEmpty()) { composer.setError("写点内容再发送"); return; }
+        composer.requestFocus(); composer.setError(null);
+        if (value.trim().isEmpty()) return;
         pendingChat = value; draft = value; actions.sendChat(value);
     }
 
@@ -779,13 +787,13 @@ public final class CinemaUi {
         draft = composer == null ? draft : composer.getText().toString();
         hideKeyboard(); drawerOpen = false;
         if (drawerLayer != null) drawerLayer.setVisibility(View.GONE);
-        screen.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_AUTO); showControls(true);
+        screen.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_AUTO); showControls(false);
     }
 
     private void showControls(boolean value) {
         if (bottomControls == null) return;
         AccessibilityManager accessibility = (AccessibilityManager) context.getSystemService(Context.ACCESSIBILITY_SERVICE);
-        controlsVisible = !drawerOpen && (value || !model.playing || (accessibility != null && accessibility.isTouchExplorationEnabled()));
+        controlsVisible = !drawerOpen && (value || (accessibility != null && accessibility.isTouchExplorationEnabled()));
         bottomControls.setVisibility(controlsVisible ? View.VISIBLE : View.GONE);
         if (topControls != null) topControls.setVisibility(controlsVisible ? View.VISIBLE : View.GONE);
         if (mediaOverlay != null) mediaOverlay.setControlsInset(controlsVisible
@@ -840,11 +848,16 @@ public final class CinemaUi {
             if (videoChrome != null) videoChrome.setPadding(safeLeft, safeTop, safeRight, safeBottom);
             if (drawerLayer != null) drawerLayer.setPadding(safeLeft, safeTop, safeRight, Math.max(safeBottom, imeBottom));
             if (connectionLayer != null) connectionLayer.setPadding(safeLeft, safeTop, safeRight, Math.max(safeBottom, imeBottom));
-        } else root.setPadding(safeLeft, safeTop, safeRight, Math.max(safeBottom, imeBottom));
+        } else {
+            // Keep the video/header in their original coordinates. Only the chat
+            // pane gives space to the IME; resizing the root also resizes video.
+            root.setPadding(safeLeft, safeTop, safeRight, safeBottom);
+            if (chatPanel != null) chatPanel.setPadding(dp(16), 0, dp(16),
+                    dp(8) + Math.max(0, imeBottom - safeBottom));
+        }
         if (composer != null) composer.setMaxLines(keyboardVisible ? 1 : 3);
         if (chatTabs != null) chatTabs.getChildAt(1).setVisibility(keyboardVisible ? View.GONE : View.VISIBLE);
         if (!fullscreen && video instanceof VideoFrame) {
-            ((VideoFrame) video).limitHeight = keyboardVisible ? dp(120) : Integer.MAX_VALUE;
             video.requestLayout();
             if (metadataScroll != null) metadataScroll.setVisibility(keyboardVisible ? View.GONE : View.VISIBLE);
         }
@@ -1113,7 +1126,14 @@ public final class CinemaUi {
         memberRows = rows; memberSignature = ""; updateMembers();
         dialog.setOnDismissListener(ignored -> { memberRows = null; if (activeSheet == dialog) activeSheet = null; });
     }
-    private void scrollChat() { if (chatScroll != null) chatScroll.post(() -> chatScroll.fullScroll(View.FOCUS_DOWN)); }
+    private void scrollChat() {
+        if (chatScroll == null) return;
+        ScrollView scroll = chatScroll;
+        scroll.post(() -> {
+            if (!disposed && scroll == chatScroll && scroll.getChildCount() > 0)
+                scroll.scrollTo(0, scroll.getChildAt(0).getHeight());
+        });
+    }
     private View dialogContent(EditText input) { LinearLayout wrap = column(); wrap.setPadding(dp(24), dp(8), dp(24), dp(8)); wrap.addView(clearableInput(input, "清除" + input.getContentDescription())); return wrap; }
     private LinearLayout column() { LinearLayout value = new LinearLayout(context); value.setOrientation(LinearLayout.VERTICAL); return value; }
     private LinearLayout row() { LinearLayout value = new LinearLayout(context); value.setOrientation(LinearLayout.HORIZONTAL); value.setGravity(Gravity.CENTER_VERTICAL); return value; }
@@ -1203,20 +1223,14 @@ public final class CinemaUi {
                     metadataScroll.limitHeight = Math.max(0, available - dp(160));
                 } else if (video instanceof VideoFrame) {
                     int width = View.MeasureSpec.getSize(widthSpec);
-                    int fixedChat = chatPanel.getPaddingTop() + chatPanel.getPaddingBottom();
-                    int contentWidth = Math.max(0, width - chatPanel.getPaddingLeft() - chatPanel.getPaddingRight());
-                    for (int index = 0; index < chatPanel.getChildCount(); index++) {
-                        View child = chatPanel.getChildAt(index);
-                        if (child == chatScroll || child.getVisibility() == View.GONE) continue;
-                        child.measure(View.MeasureSpec.makeMeasureSpec(contentWidth, View.MeasureSpec.EXACTLY),
-                                View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED));
-                        fixedChat += child.getMeasuredHeight();
-                    }
-                    int minimumVideo = Math.min(dp(keyboardVisible ? 64 : 96), Math.max(0, available - fixedChat));
-                    int metadataMinimum = keyboardVisible ? 0 : Math.min(dp(48), Math.max(0, available - fixedChat - minimumVideo));
+                    // Budget the stable composer slot, independently of its IME
+                    // inset or line count. Those may only consume the chat pane.
+                    int fixedChat = dp(61);
+                    int minimumVideo = Math.min(dp(96), Math.max(0, available - fixedChat));
+                    int metadataMinimum = Math.min(dp(48), Math.max(0, available - fixedChat - minimumVideo));
                     int chatBudget = Math.min(Math.max(0, available - minimumVideo - metadataMinimum),
-                            fixedChat + (keyboardVisible ? dp(32) : dp(96)));
-                    int desiredVideo = keyboardVisible ? dp(120) : Math.round(width * 9f / 16f);
+                            fixedChat + dp(96));
+                    int desiredVideo = Math.round(width * 9f / 16f);
                     int videoBudget = Math.min(desiredVideo, Math.max(minimumVideo, available - chatBudget - metadataMinimum));
                     ((VideoFrame) video).limitHeight = videoBudget;
                     metadataScroll.limitHeight = Math.min(dp(240), Math.max(0, available - chatBudget - videoBudget));

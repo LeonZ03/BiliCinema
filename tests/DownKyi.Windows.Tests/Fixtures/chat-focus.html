@@ -114,7 +114,15 @@
         await key('Alt', 18);
         check(!isOpen() && ui.input.value === '一起看电影你', 'Explicit dismissal lost draft');
         check(playerKeys === 0 && playerClicks === 0, 'Alt dismissal triggered player controls');
-        await click(innerWidth - 2);
+        await key('Alt', 18);
+        check(isOpen() && document.activeElement === ui.input && ui.input.value === '一起看电影你',
+            'Alt did not reopen chat with the draft focused');
+        await input('Input.dispatchKeyEvent', {type:'keyDown', key:'Alt', windowsVirtualKeyCode:18});
+        await input('Input.dispatchKeyEvent', {type:'keyDown', key:'Alt', windowsVirtualKeyCode:18, autoRepeat:true});
+        check(isOpen(), 'Held Alt toggled before release');
+        await input('Input.dispatchKeyEvent', {type:'keyUp', key:'Alt', windowsVirtualKeyCode:18});
+        check(!isOpen(), 'Held Alt did not toggle once');
+        await key('Alt', 18);
         await key('Enter', 13);
         check(events.some(event => event.type === 'send' && event.text === '一起看电影你'), 'Message not sent');
         check(isOpen() && ui.input.value === '' && document.activeElement === ui.input, 'Send lost focus');
@@ -127,7 +135,7 @@
             'Escape did not close chat without reaching player');
         await waitFor(() => window.__biliCinemaCheckPlayerLayout(), 'Player checks did not resume');
         check(probes > probesAtOpen, 'Deferred player probe never resumed');
-        check(ui.host.querySelector('.bc-hint').textContent === 'Enter 发送 · Esc 收起',
+        check(ui.host.querySelector('.bc-hint').textContent === 'Enter 发送 · Alt 开关聊天 · Esc 收起',
             'Chat shortcut hint is outdated');
         renderWindowed();
         check(getComputedStyle(ui.fullscreenOpen).display === 'none',
@@ -136,9 +144,14 @@
         await move(innerWidth - 2);
         check(!isOpen(), 'Windowed hover opened chat');
         await click(innerWidth - 2);
-        const panelBox = ui.panel.getBoundingClientRect();
-        check(isOpen() && panelBox.right <= innerWidth && panelBox.left < innerWidth
-            && getComputedStyle(ui.panel).pointerEvents === 'auto', 'Windowed chat did not open visibly');
+        // Opening changes state immediately, but the panel slides into the
+        // viewport over a CSS transition. Observe its usable bounds instead of
+        // treating completion of the input dispatch as a rendered frame.
+        await waitFor(() => {
+            const panelBox = ui.panel.getBoundingClientRect();
+            return isOpen() && panelBox.right <= innerWidth && panelBox.left < innerWidth
+                && getComputedStyle(ui.panel).pointerEvents === 'auto';
+        }, 'Windowed chat did not open visibly');
         await input('Input.insertText', {text:'窗口聊天'});
         check(isOpen() && ui.input.value === '窗口聊天', 'Windowed typing was interrupted');
         const video = document.querySelector('video');
@@ -156,6 +169,10 @@
             && getComputedStyle(ui.panel).display === 'none'
             && !ui.host.contains(document.elementFromPoint(innerWidth - 2, 100)),
             'Docked mode kept a web chat hit target above the video');
+        const dockedToggles = events.filter(event => event.type === 'toggleDockedPanel').length;
+        await key('Alt', 18);
+        check(events.filter(event => event.type === 'toggleDockedPanel').length === dockedToggles + 1
+            && !isOpen(), 'Docked Alt did not request the native chat toggle');
         check(scrollX === 0 && scrollY === 0, 'Chat focus scrolled the player');
         document.querySelector('#result').textContent = 'PASS';
     })().catch(error => { document.querySelector('#result').textContent = `FAIL: ${error.message}`; });

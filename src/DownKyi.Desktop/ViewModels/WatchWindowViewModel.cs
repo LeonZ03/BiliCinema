@@ -634,6 +634,11 @@ internal sealed class WatchWindowViewModel : ObservableObject, IAsyncDisposable
 
     private void HandleChatWebMessage(JsonElement root, string? type)
     {
+        if (type == "toggleDockedPanel")
+        {
+            if (ShowRoom && IsInRoom) ToggleDockedChatCommand.Execute(null);
+            return;
+        }
         if (type == "panelState" && root.TryGetProperty("open", out var open)
             && open.ValueKind is JsonValueKind.True or JsonValueKind.False)
         {
